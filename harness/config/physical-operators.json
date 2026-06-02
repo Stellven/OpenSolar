@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-02T01:59:19Z",
+  "updated_at": "2026-06-02T03:53:03Z",
   "operators": {
     "mini-claude-opus-planner": {
       "display_name": "Mac mini Claude Opus planner",
@@ -78,7 +78,20 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/graph_node_idle_assigned:20260530-p0-将-5-条-ai-influence-算子固化为-solar-harness-... 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 ",
         "last_pruned_at": "2026-05-31T03:26:48Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "planner"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-opus-planner-2": {
       "display_name": "Mac mini Claude Opus planner (instance 2)",
@@ -138,7 +151,20 @@
       "latency_tier": "medium",
       "context_tier": "high",
       "max_concurrency": 1,
-      "fallback_profile": "planner"
+      "fallback_profile": "planner",
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "planner"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-opus-planner-3": {
       "display_name": "Mac mini Claude Opus planner (instance 3)",
@@ -198,7 +224,20 @@
       "latency_tier": "medium",
       "context_tier": "high",
       "max_concurrency": 1,
-      "fallback_profile": "planner"
+      "fallback_profile": "planner",
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "planner"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-sonnet-builder": {
       "display_name": "Mac mini Claude Sonnet builder",
@@ -281,7 +320,20 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/ready_for_builder:20260530-p0-修复单-从-pane-lease-升级到-actor-lease-并补齐生命周... ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ Interrupt· What should Claude do ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/spri",
         "last_pruned_at": "2026-05-31T01:57:10Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-opus-evaluator": {
       "display_name": "Mac mini Claude Opus evaluator",
@@ -358,7 +410,20 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/graph_node_idle_assigned:20260530-p0-将-5-条-ai-influence-算子固化为-solar-harness-... 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 ",
         "last_pruned_at": "2026-05-31T03:26:48Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "evaluator"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-thunderomlx-qwen36-knowledge": {
       "display_name": "Mac mini ThunderOMLX Qwen3.6 knowledge",
@@ -430,7 +495,18 @@
         "last_block_excerpt": "operatord: backend=command task=pm-sprint-20260530-需求单-apo-v2-lease-quota-cost-aware-agent-plan-optimizer-s01-requirements-N0-e0644add operatord: local-stub exit 0 [ERROR] missing pm_result: /Users/lisihao/.solar/harness/sprints/sprint-20260530-需求单-apo-v2-lease-quota-cost-aware-agent-plan-optimizer-s01-requirements.N0.pm-result.md",
         "last_pruned_at": "2026-05-31T03:07:42Z",
         "last_prune_reason": "expired_operator_block"
-      }
+      },
+      "compat_alias_for": "local_mlx_process",
+      "compat_maps_to": {
+        "host_type": "local_mlx_process",
+        "carrier_hint": {
+          "mlx_meta": {
+            "model_path": "/tmp/models/local-mlx",
+            "port": 11434
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-antigravity-gemini35-flash-high": {
       "display_name": "Mac mini Antigravity Gemini 3.5 Flash High",
@@ -484,7 +560,18 @@
       "latency_tier": "low",
       "context_tier": "high",
       "max_concurrency": 1,
-      "fallback_profile": "builder"
+      "fallback_profile": "builder",
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-antigravity-gemini35-flash-image": {
       "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
@@ -554,7 +641,18 @@
         "cooldown_until": null,
         "last_error": "failed_nonfinal_or_no_media_image_smoke",
         "last_error_at": "2026-05-31T04:15:00Z"
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-antigravity-gemini31-pro": {
       "display_name": "Mac mini Antigravity Gemini 3.1 Pro",
@@ -673,7 +771,18 @@
         "last_block_excerpt": "ERROR: Antigravity auth expired or not logged in; refusing handoff Recovery: run `agy login` and re-authenticate. o Antigravity. W0530 21:07:36.352887 58942 log_context.go:117] Cache(loadCodeAssistResponse): Singleflight refresh failed: error getting token source: You are not logged into Antigravity. W0530 21:07:36.352904 58942 log_context.go:117] Cache(availableModels): Singleflight refresh failed: failed to get load code assist response: error getting token source: You are not logged into Antigravity. E0530 21:07:36.352935 58942 log.go:398] Failed to poll FetchAvailableModels: failed to get load code assist response: error getting token source: You are not logged into Antigravity. I0530 21:07:36.354013 58942 server.go:2274] Auth succeeded, refreshing features and managers E0530 21:07:36.",
         "last_pruned_at": "2026-05-31T03:59:25Z",
         "last_prune_reason": "antigravity_auth_probe_success"
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-antigravity-gemini31-pro-image": {
       "display_name": "Mac mini Antigravity Gemini 3.1 Pro multimodal image",
@@ -797,7 +906,18 @@
           "Verifier"
         ]
       },
-      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\""
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-glm51-knowledge": {
       "display_name": "Mac mini GLM-5.1 knowledge",
@@ -875,7 +995,20 @@
         "fallback_operator_classes": [
           "LocalPrivacy"
         ]
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-local-scan": {
       "display_name": "Mac mini local scan",
@@ -949,7 +1082,18 @@
         "fallback_operator_classes": [
           "LocalPrivacy"
         ]
-      }
+      },
+      "compat_alias_for": "local_mlx_process",
+      "compat_maps_to": {
+        "host_type": "local_mlx_process",
+        "carrier_hint": {
+          "mlx_meta": {
+            "model_path": "/tmp/models/local-mlx",
+            "port": 11434
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-router": {
       "display_name": "Mac mini Router",
@@ -1022,7 +1166,18 @@
         "fallback_operator_classes": [
           "RouterMeta"
         ]
-      }
+      },
+      "compat_alias_for": "local_mlx_process",
+      "compat_maps_to": {
+        "host_type": "local_mlx_process",
+        "carrier_hint": {
+          "mlx_meta": {
+            "model_path": "/tmp/models/local-mlx",
+            "port": 11434
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-audit": {
       "display_name": "Mac mini Audit Ledger",
@@ -1094,7 +1249,18 @@
         "fallback_operator_classes": [
           "AuditLedger"
         ]
-      }
+      },
+      "compat_alias_for": "local_mlx_process",
+      "compat_maps_to": {
+        "host_type": "local_mlx_process",
+        "carrier_hint": {
+          "mlx_meta": {
+            "model_path": "/tmp/models/local-mlx",
+            "port": 11434
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-opus-planner-print": {
       "display_name": "Mac mini Claude Opus planner programmatic print (reserve)",
@@ -1120,7 +1286,7 @@
       "billing_surface": "anthropic_agent_sdk_credit",
       "billing_pool": "anthropic_agent_sdk_credit",
       "launch_cmd_kind": "print_once",
-      "compat_alias_for": "mini-claude-opus-planner",
+      "compat_alias_for": "tmux_pane",
       "quota_cycle": "monthly",
       "quota_refresh_at": null,
       "quota_guard_state": "ok",
@@ -1186,7 +1352,19 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/graph_node_idle_assigned:20260530-p0-将-5-条-ai-influence-算子固化为-solar-harness-... 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 ",
         "last_pruned_at": "2026-05-31T03:26:48Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "planner"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-sonnet-builder-print": {
       "display_name": "Mac mini Claude Sonnet builder programmatic print (reserve)",
@@ -1212,7 +1390,7 @@
       "billing_surface": "anthropic_agent_sdk_credit",
       "billing_pool": "anthropic_agent_sdk_credit",
       "launch_cmd_kind": "print_once",
-      "compat_alias_for": "mini-claude-sonnet-builder",
+      "compat_alias_for": "tmux_pane",
       "quota_cycle": "monthly",
       "quota_refresh_at": null,
       "quota_guard_state": "ok",
@@ -1282,7 +1460,19 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/ready_for_builder:20260530-p0-修复单-从-pane-lease-升级到-actor-lease-并补齐生命周... ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ Interrupt· What should Claude do ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/spri",
         "last_pruned_at": "2026-05-31T01:57:10Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-opus-evaluator-print": {
       "display_name": "Mac mini Claude Opus evaluator programmatic print (reserve)",
@@ -1308,7 +1498,7 @@
       "billing_surface": "anthropic_agent_sdk_credit",
       "billing_pool": "anthropic_agent_sdk_credit",
       "launch_cmd_kind": "print_once",
-      "compat_alias_for": "mini-claude-opus-evaluator",
+      "compat_alias_for": "tmux_pane",
       "quota_cycle": "monthly",
       "quota_refresh_at": null,
       "quota_guard_state": "ok",
@@ -1373,7 +1563,19 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/graph_node_idle_assigned:20260530-p0-将-5-条-ai-influence-算子固化为-solar-harness-... 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 ",
         "last_pruned_at": "2026-05-31T03:26:48Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "evaluator"
+          }
+        }
+      },
+      "deprecated": true
     },
     "webapp_research_operator": {
       "display_name": "Browser Agent Webapp Research Operator",
@@ -1456,7 +1658,18 @@
         "last_heartbeat_at": null,
         "last_success_at": null,
         "last_error": null
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-gemini-deep-research": {
       "display_name": "Gemini Deep Research Browser Agent",
@@ -1516,7 +1729,19 @@
         "last_heartbeat_at": null,
         "last_success_at": null,
         "last_error": null
-      }
+      },
+      "compat_alias_for": "codex_cloud",
+      "compat_maps_to": {
+        "host_type": "codex_cloud",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-gemini-deep-research",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-chatgpt-deep-research": {
       "display_name": "ChatGPT Thinking High Browser Agent",
@@ -1598,7 +1823,19 @@
         "last_heartbeat_at": null,
         "last_success_at": null,
         "last_error": null
-      }
+      },
+      "compat_alias_for": "ssh_devbox",
+      "compat_maps_to": {
+        "host_type": "ssh_devbox",
+        "carrier_hint": {
+          "ssh_meta": {
+            "hostname": "100.122.223.55",
+            "user": "lisihao",
+            "port": 22
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-youtube-transcript-extractor": {
       "display_name": "YouTube Transcript Extractor Browser Agent",
@@ -1659,7 +1896,20 @@
         "last_heartbeat_at": null,
         "last_success_at": null,
         "last_error": null
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "knowledge-extractor"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-reasonix-deepseek-v4-builder": {
       "display_name": "Mac mini Reasonix DeepSeek V4 advisory reviewer",
@@ -1682,7 +1932,7 @@
       "billing_pool": "deepseek_api_credit",
       "launch_cmd_kind": "print_once",
       "quota_cycle": "api_balance",
-      "quota_refresh_at": "unknown",
+      "quota_refresh_at": null,
       "quota_guard_state": "ok",
       "enabled": true,
       "enabled_at": "2026-05-30T22:40:00Z",
@@ -1815,8 +2065,10 @@
         "runtime_state": "idle",
         "last_heartbeat_at": null,
         "last_success_at": null,
-        "last_error": "disabled_for_code_edit_until_file_execution_verified",
-        "last_error_at": "2026-05-31T01:10:53Z"
+        "last_error": null,
+        "last_error_at": "2026-06-02T02:38:35Z",
+        "cooldown_until": null,
+        "last_pruned_at": "2026-06-02T02:54:09Z"
       },
       "command": "set -a; source \"$HOME/.solar/brain-router/.env\" 2>/dev/null || true; source \"$HARNESS_DIR/model-config.sh\" 2>/dev/null || true; set +a; PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/reasonix_operator.py\"",
       "launch_cmd": "REASONIX_MODEL=deepseek-v4-pro REASONIX_EFFORT=high PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/reasonix_operator.py\"",
@@ -1824,185 +2076,28 @@
         "enabled": false,
         "disabled_reason": "reasonix_no_verified_file_execution_surface",
         "disabled_at": "2026-05-31T01:10:53Z"
-      }
-    },
-    "mini-reasonix-deepseek-v4-pro-prd-evaluator": {
-      "display_name": "Mac mini Reasonix DeepSeek V4 Pro PRD/Eval reviewer",
-      "plane": "headless",
-      "owner_host": "lisihao@100.122.223.55",
-      "pane": "solar-harness-multi-task:*",
-      "profile": "deepseek-advisory",
-      "role": "evaluator",
-      "persona": "evaluator",
-      "provider": "deepseek",
-      "vendor": "DeepSeek",
-      "backend": "command",
-      "model": "deepseek-v4-pro",
-      "model_config": "Reasonix DeepSeek V4 Pro;effort=high;wrapper=reasonix_operator.py;prd-eval-advisory",
-      "base_url": "reasonix-cli",
-      "command_path": "/opt/homebrew/bin/reasonix",
-      "auth_mode": "api_key",
-      "key_ref": "deepseek_api_key",
-      "billing_surface": "usage_credit",
-      "billing_pool": "deepseek_api_credit",
-      "launch_cmd_kind": "print_once",
-      "quota_cycle": "api_balance",
-      "quota_refresh_at": "unknown",
-      "quota_guard_state": "ok",
-      "enabled": true,
-      "enabled_at": "2026-06-02T00:00:00Z",
-      "available": true,
-      "health_status": "ok",
-      "roles": [
-        "planner",
-        "evaluator"
-      ],
-      "task_classes": [
-        "analysis",
-        "review",
-        "advisory"
-      ],
-      "strengths": [
-        "requirements-review",
-        "prd-critique",
-        "acceptance-review",
-        "architecture-reasoning",
-        "counterargument"
-      ],
-      "preferred_for": [
-        "prd-review",
-        "requirements-review",
-        "acceptance-review",
-        "architecture-review",
-        "decision-review",
-        "counterargument",
-        "root-cause",
-        "evaluator",
-        "planner",
-        "deepseek",
-        "reasonix"
-      ],
-      "avoid_for": [
-        "final-quality-gate",
-        "critical-security-review",
-        "browser-research",
-        "multimodal",
-        "bulk-extraction",
-        "code-edit",
-        "repo-modification",
-        "implementation",
-        "tests",
-        "test-execution"
-      ],
-      "cost_tier": "low",
-      "latency_tier": "low",
-      "context_tier": "high",
-      "max_concurrency": 2,
-      "fallback_profile": "evaluator",
-      "operator_class": "AdvisoryReview",
-      "model_binding": {
-        "provider": "deepseek",
-        "model_id": "deepseek-v4-pro",
-        "alias": "deepseek",
-        "config": {
-          "reasonix_model": "deepseek-v4-pro",
-          "reasoning_effort": "high",
-          "cache_first": true
+      },
+      "flow_control": {
+        "last_block_state": "cooldown",
+        "last_block_reason": "contract_closeout_failed",
+        "last_block_source": "graph_node_dispatcher",
+        "last_block_detected_at": "2026-06-02T02:38:35Z",
+        "last_block_expires_at": "2026-06-02T02:53:35Z",
+        "last_block_excerpt": "{\"pane\": \"operator:mini-reasonix-deepseek-v4-builder\", \"dispatch_id\": \"graph-eval-sprint-20260530-032545-intent-rawintent-8f1b76d6-S4-20260602T023729Z-q1\", \"reason\": \"eval_failed_contract_closeout\", \"operator_status\": \"completed\", \"result_json\": \"/Users/lisihao/.solar/harness/run/operator-results/mini-reasonix-deepseek-v4-builder/pm-sprint-20260530-032545-intent-rawintent-8f1b76d6-S4-11c11314/result.json\"}",
+        "last_pruned_at": "2026-06-02T02:54:09Z",
+        "last_prune_reason": "expired_operator_block"
+      },
+      "compat_alias_for": "docker_sandbox",
+      "compat_maps_to": {
+        "host_type": "docker_sandbox",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "docker-fallback",
+            "region": "local"
+          }
         }
       },
-      "auth": {
-        "mode": "api_key",
-        "account_label": "deepseek_reasonix",
-        "secret_ref": "secret://deepseek_api_key",
-        "key_env": "DEEPSEEK_API_KEY",
-        "expose_raw_key_to_pane": false
-      },
-      "quota": {
-        "quota_type": "api_balance",
-        "period": "api_balance",
-        "reserve_for": [
-          "PRD_REVIEW",
-          "REQUIREMENTS_REVIEW",
-          "ACCEPTANCE_REVIEW",
-          "ARCHITECTURE_REVIEW",
-          "DECISION_REVIEW",
-          "ADVISORY"
-        ],
-        "on_exhausted": "disable_and_fallback"
-      },
-      "capability": {
-        "planning": 4,
-        "coding": 0,
-        "debugging": 2,
-        "testing": 1,
-        "research": 3,
-        "long_context": 4,
-        "speed": 4,
-        "cost_efficiency": 5,
-        "reliability": 4
-      },
-      "capability_profile": {
-        "architecture_reasoning": 4,
-        "code_impl": 0,
-        "root_cause_debug": 3,
-        "test_generation": 1,
-        "test_execution": 0,
-        "research_synthesis": 3,
-        "academic_critique": 3,
-        "browser_use": 0,
-        "gui_use": 0,
-        "long_context": 4,
-        "multi_agent_coordination": 2,
-        "speed": 4
-      },
-      "routing": {
-        "operator_class": "AdvisoryReview",
-        "primary_task_types": [
-          "PRD_REVIEW",
-          "REQUIREMENTS_REVIEW",
-          "ACCEPTANCE_REVIEW",
-          "ARCHITECTURE_REVIEW",
-          "DECISION_REVIEW",
-          "ADVISORY"
-        ],
-        "avoid_task_types": [
-          "implementation",
-          "debugging",
-          "fast-patch",
-          "tests",
-          "test-execution",
-          "refactor",
-          "final-quality-gate",
-          "critical-security-review",
-          "browser-research",
-          "bulk-extraction"
-        ],
-        "fallback_operator_classes": [
-          "Verifier",
-          "DeepArchitect"
-        ]
-      },
-      "policy": {
-        "write_files": "denied",
-        "run_shell": "denied",
-        "network": "allowed",
-        "secrets_access": "secret_ref_only",
-        "git_commit": "denied"
-      },
-      "state": {
-        "availability": "enabled",
-        "runtime_state": "idle",
-        "last_heartbeat_at": null,
-        "last_success_at": null,
-        "last_error": null
-      },
-      "command": "set -a; source \"$HOME/.solar/brain-router/.env\" 2>/dev/null || true; source \"$HARNESS_DIR/model-config.sh\" 2>/dev/null || true; set +a; PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/reasonix_operator.py\"",
-      "launch_cmd": "REASONIX_MODEL=deepseek-v4-pro REASONIX_EFFORT=high PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/reasonix_operator.py\"",
-      "builder_pool": {
-        "enabled": false,
-        "disabled_reason": "reasonix_no_verified_file_execution_surface",
-        "disabled_at": "2026-06-02T00:00:00Z"
-      }
+      "deprecated": true
     },
     "op.browser.webwright.playwright.01": {
       "display_name": "Webwright Playwright Task Operator",
@@ -2039,13 +2134,37 @@
       "cost_tier": "medium",
       "max_concurrency": 2,
       "fallback_profile": "builder",
+      "capabilities": [
+        "browser_long_horizon",
+        "browser_replayable_script",
+        "screenshot_evidence",
+        "task2ui_report",
+        "reusable_tool_craft"
+      ],
+      "policy": {
+        "allowlist_check": "enabled",
+        "payment_denied": "denied",
+        "credential_extraction_denied": "denied",
+        "cookie_extraction_denied": "denied"
+      },
       "state": {
         "availability": "enabled",
         "runtime_state": "idle",
         "last_heartbeat_at": null,
         "last_success_at": null,
         "last_error": null
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "op.browser.browser_use_mcp.quick.01": {
       "display_name": "Browser-use MCP Quick Tool Operator",
@@ -2086,7 +2205,18 @@
         "last_heartbeat_at": null,
         "last_success_at": null,
         "last_error": null
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-antigravity-gemini35-flash-builder-1": {
       "display_name": "Mac mini Antigravity Gemini 3.5 Flash builder pool slot 1",
@@ -2182,7 +2312,18 @@
         "last_block_excerpt": "ERROR: Antigravity auth expired or not logged in; refusing handoff Recovery: run `agy login` and re-authenticate. to get load code assist response: error getting token source: You are not logged into Antigravity. I0531 00:01:19.907900 91759 server.go:2274] Auth succeeded, refreshing features and managers E0531 00:01:19.907930 91759 log.go:398] Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity. W0531 00:01:19.908049 91759 log_context.go:117] Cache(loadCodeAssistResponse): Singleflight refresh failed: error getting token source: You are not logged into Antigravity. W0531 00:01:19.908058 91759 log_context.go:117] Cache(availableModels): Singleflight refresh failed: failed to get load code assist response: error getting token source: You are not lo",
         "last_pruned_at": "2026-05-31T04:02:57Z",
         "last_prune_reason": "antigravity_auth_probe_success"
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-antigravity-gemini35-flash-builder-2": {
       "display_name": "Mac mini Antigravity Gemini 3.5 Flash builder pool slot 2",
@@ -2278,7 +2419,18 @@
         "last_block_excerpt": "ERROR: Antigravity auth expired or not logged in; refusing handoff Recovery: run `agy login` and re-authenticate. avity. W0530 21:52:52.452931 34133 log_context.go:117] Cache(loadCodeAssistResponse): Singleflight refresh failed: error getting token source: You are not logged into Antigravity. W0530 21:52:52.452950 34133 log_context.go:117] Cache(availableModels): Singleflight refresh failed: failed to get load code assist response: error getting token source: You are not logged into Antigravity. E0530 21:52:52.452978 34133 log.go:398] Failed to poll FetchAvailableModels: failed to get load code assist response: error getting token source: You are not logged into Antigravity. I0530 21:52:52.454046 34133 server.go:2274] Auth succeeded, refreshing features and managers E0530 21:52:52.454081 3",
         "last_pruned_at": "2026-05-31T03:59:25Z",
         "last_prune_reason": "antigravity_auth_probe_success"
-      }
+      },
+      "compat_alias_for": "antigravity_managed_env",
+      "compat_maps_to": {
+        "host_type": "antigravity_managed_env",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "antigravity-managed",
+            "browser_profile": "default"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-sonnet-builder-2": {
       "display_name": "Mac mini Claude Sonnet builder pool slot 2",
@@ -2366,7 +2518,20 @@
         "last_block_excerpt": "You've hit your limit · resets 10:50pm (America/Toronto)",
         "last_pruned_at": "2026-05-31T02:50:02Z",
         "last_prune_reason": "expired_operator_block"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-claude-sonnet-builder-3": {
       "display_name": "Mac mini Claude Sonnet builder pool slot 3",
@@ -2454,7 +2619,20 @@
         "last_block_excerpt": "You've hit your limit · resets 10:50pm (America/Toronto)",
         "last_pruned_at": "2026-05-31T02:50:02Z",
         "last_prune_reason": "expired_operator_block"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt55-medium-builder-1": {
       "display_name": "Mac mini Codex GPT 5.5 medium builder pool slot 1",
@@ -2531,7 +2709,19 @@
         "group": "codex-gpt-5.5-medium",
         "slot": 1,
         "priority": 5
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt55-medium-builder-1",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt55-medium-builder-2": {
       "display_name": "Mac mini Codex GPT 5.5 medium builder pool slot 2",
@@ -2608,7 +2798,19 @@
         "group": "codex-gpt-5.5-medium",
         "slot": 2,
         "priority": 4
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt55-medium-builder-2",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt53-spark-builder-1": {
       "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 1",
@@ -2686,7 +2888,19 @@
         "group": "codex-gpt-5.3-spark",
         "slot": 1,
         "priority": 9
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt53-spark-builder-1",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt53-spark-builder-2": {
       "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 2",
@@ -2764,7 +2978,19 @@
         "group": "codex-gpt-5.3-spark",
         "slot": 2,
         "priority": 9
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt53-spark-builder-2",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt53-spark-builder-3": {
       "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 3",
@@ -2842,7 +3068,19 @@
         "group": "codex-gpt-5.3-spark",
         "slot": 3,
         "priority": 9
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt53-spark-builder-3",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt53-spark-builder-4": {
       "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 4",
@@ -2920,7 +3158,19 @@
         "group": "codex-gpt-5.3-spark",
         "slot": 4,
         "priority": 9
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt53-spark-builder-4",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt53-spark-builder-5": {
       "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 5",
@@ -2998,7 +3248,19 @@
         "group": "codex-gpt-5.3-spark",
         "slot": 5,
         "priority": 9
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt53-spark-builder-5",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt53-spark-builder-6": {
       "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 6",
@@ -3076,7 +3338,19 @@
         "group": "codex-gpt-5.3-spark",
         "slot": 6,
         "priority": 9
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt53-spark-builder-6",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-glm51-builder-1": {
       "display_name": "Mac mini GLM-5.1 builder pool slot 1",
@@ -3173,7 +3447,20 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/ready_for_builder:20260530-p0-修复单-从-pane-lease-升级到-actor-lease-并补齐生命周... ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ Interrupt· What should Claude do ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/spri",
         "last_pruned_at": "2026-05-31T01:57:10Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-glm51-builder-2": {
       "display_name": "Mac mini GLM-5.1 builder pool slot 2",
@@ -3270,7 +3557,20 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/ready_for_builder:20260530-p0-修复单-从-pane-lease-升级到-actor-lease-并补齐生命周... ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ Interrupt· What should Claude do ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/spri",
         "last_pruned_at": "2026-05-31T01:57:10Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-glm51-builder-3": {
       "display_name": "Mac mini GLM-5.1 builder pool slot 3",
@@ -3367,21 +3667,34 @@
         "last_block_excerpt": "Builder 主建设者 | 模型:Opus | 余:N/A | 已用:198.4M tok | 状态:working/ready_for_builder:20260530-p0-修复单-从-pane-lease-升级到-actor-lease-并补齐生命周... ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ Interrupt· What should Claude do ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/sprint-20 260530-p0-修复单-从-pane-lease-升 级到-actor-lease-并补齐生命周期状 态机-s01-requirements.dispatch.md 中的所有步骤 ⎿ You've hit your limit · resets 10:50pm (America/Toronto) ❯ 读取并执行指令文件 /Users/lisihao /.solar/harness/sprints/spri",
         "last_pruned_at": "2026-05-31T01:57:10Z",
         "last_prune_reason": "weak_pane_rate_limit_evidence"
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-reasonix-deepseek-v4-flash-builder-1": {
-      "display_name": "Mac mini Reasonix DeepSeek V4 Flash advisory reviewer slot 1",
+      "display_name": "Mac mini Reasonix DeepSeek V4 Flash builder pool slot 1",
       "plane": "headless",
       "owner_host": "lisihao@100.122.223.55",
       "pane": "solar-harness-multi-task:*",
-      "profile": "deepseek-advisory",
-      "role": "evaluator",
-      "persona": "evaluator",
+      "profile": "deepseek-builder",
+      "role": "builder",
+      "persona": "builder",
       "provider": "deepseek",
       "vendor": "DeepSeek",
       "backend": "command",
       "model": "deepseek-v4-flash",
-      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;advisory-only",
+      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;builder-pool",
       "base_url": "reasonix-cli",
       "auth_mode": "api_key",
       "key_ref": "deepseek",
@@ -3393,18 +3706,21 @@
       "available": false,
       "health_status": "disabled",
       "roles": [
-        "planner",
-        "evaluator"
+        "builder"
       ],
       "task_classes": [
         "analysis",
         "review",
-        "advisory"
+        "advisory",
+        "implementation",
+        "documentation",
+        "planning"
       ],
       "strengths": [
         "reasoning",
         "critique",
         "analysis",
+        "implementation",
         "fast-iteration"
       ],
       "preferred_for": [
@@ -3416,11 +3732,6 @@
         "reasonix"
       ],
       "avoid_for": [
-        "code-edit",
-        "repo-modification",
-        "implementation",
-        "tests",
-        "test-execution",
         "bulk-extraction",
         "critical-security-review"
       ],
@@ -3430,8 +3741,8 @@
       "max_concurrency": 1,
       "fallback_profile": "evaluator",
       "policy": {
-        "write_files": "denied",
-        "run_shell": "denied",
+        "write_files": "allowed",
+        "run_shell": "allowed",
         "network": "allowed",
         "git_commit": "denied"
       },
@@ -3448,29 +3759,40 @@
         "group": "deepseek-v4-flash",
         "slot": 1,
         "priority": 6,
-        "disabled_reason": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
+        "disabled_reason": "disabled_by_policy_remove_deepseek_from_builder_future",
         "disabled_at": "2026-06-01T20:50:00Z"
       },
       "state": {
         "availability": "disabled",
         "runtime_state": "idle",
-        "last_error": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
+        "last_error": "disabled_by_policy_remove_deepseek_from_builder_future",
         "last_error_at": "2026-06-01T20:50:00Z"
-      }
+      },
+      "compat_alias_for": "docker_sandbox",
+      "compat_maps_to": {
+        "host_type": "docker_sandbox",
+        "carrier_hint": {
+          "antigravity_meta": {
+            "environment_id": "docker-fallback",
+            "region": "local"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-reasonix-deepseek-v4-flash-builder-2": {
-      "display_name": "Mac mini Reasonix DeepSeek V4 Flash advisory reviewer slot 2",
+      "display_name": "Mac mini Reasonix DeepSeek V4 Flash builder pool slot 2",
       "plane": "headless",
       "owner_host": "lisihao@100.122.223.55",
       "pane": "solar-harness-multi-task:*",
-      "profile": "deepseek-advisory",
-      "role": "evaluator",
-      "persona": "evaluator",
+      "profile": "deepseek-builder",
+      "role": "builder",
+      "persona": "builder",
       "provider": "deepseek",
       "vendor": "DeepSeek",
       "backend": "command",
       "model": "deepseek-v4-flash",
-      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;advisory-only",
+      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;builder-pool",
       "base_url": "reasonix-cli",
       "auth_mode": "api_key",
       "key_ref": "deepseek",
@@ -3482,18 +3804,21 @@
       "available": false,
       "health_status": "disabled",
       "roles": [
-        "planner",
-        "evaluator"
+        "builder"
       ],
       "task_classes": [
         "analysis",
         "review",
-        "advisory"
+        "advisory",
+        "implementation",
+        "documentation",
+        "planning"
       ],
       "strengths": [
         "reasoning",
         "critique",
         "analysis",
+        "implementation",
         "fast-iteration"
       ],
       "preferred_for": [
@@ -3505,11 +3830,6 @@
         "reasonix"
       ],
       "avoid_for": [
-        "code-edit",
-        "repo-modification",
-        "implementation",
-        "tests",
-        "test-execution",
         "bulk-extraction",
         "critical-security-review"
       ],
@@ -3519,8 +3839,8 @@
       "max_concurrency": 1,
       "fallback_profile": "evaluator",
       "policy": {
-        "write_files": "denied",
-        "run_shell": "denied",
+        "write_files": "allowed",
+        "run_shell": "allowed",
         "network": "allowed",
         "git_commit": "denied"
       },
@@ -3537,15 +3857,26 @@
         "group": "deepseek-v4-flash",
         "slot": 2,
         "priority": 5,
-        "disabled_reason": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
+        "disabled_reason": "disabled_by_policy_remove_deepseek_from_builder_future",
         "disabled_at": "2026-06-01T20:50:00Z"
       },
       "state": {
         "availability": "disabled",
         "runtime_state": "idle",
-        "last_error": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
+        "last_error": "disabled_by_policy_remove_deepseek_from_builder_future",
         "last_error_at": "2026-06-01T20:50:00Z"
-      }
+      },
+      "compat_alias_for": "local_mlx_process",
+      "compat_maps_to": {
+        "host_type": "local_mlx_process",
+        "carrier_hint": {
+          "mlx_meta": {
+            "model_path": "/tmp/models/local-mlx",
+            "port": 11434
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-thunderomlx-qwen36-builder": {
       "display_name": "Mac mini ThunderOMLX Qwen3.6 builder pool slot 1",
@@ -3626,7 +3957,18 @@
         "group": "thunderomlx",
         "slot": 1,
         "priority": 5
-      }
+      },
+      "compat_alias_for": "local_mlx_process",
+      "compat_maps_to": {
+        "host_type": "local_mlx_process",
+        "carrier_hint": {
+          "mlx_meta": {
+            "model_path": "/tmp/models/local-mlx",
+            "port": 11434
+          }
+        }
+      },
+      "deprecated": true
     },
     "technology-diagram-painter": {
       "display_name": "Technology Diagram Painter Browser Agent",
@@ -3721,7 +4063,20 @@
         "cooldown_until": null,
         "last_error": null,
         "last_error_at": null
-      }
+      },
+      "compat_alias_for": "tmux_pane",
+      "compat_maps_to": {
+        "host_type": "tmux_pane",
+        "carrier_hint": {
+          "tmux_pane_meta": {
+            "session": "solar-harness",
+            "window": "multi-task",
+            "pane": "0",
+            "role": "builder"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt55-medium-planner-1": {
       "display_name": "Mac mini Codex GPT 5.5 medium planner support slot 1",
@@ -3795,7 +4150,19 @@
         "type": "command",
         "command_path": "/opt/homebrew/bin/codex",
         "cache_seconds": 300
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt55-medium-planner-1",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     },
     "mini-codex-gpt55-medium-planner-2": {
       "display_name": "Mac mini Codex GPT 5.5 medium planner support slot 2",
@@ -3869,7 +4236,24 @@
         "type": "command",
         "command_path": "/opt/homebrew/bin/codex",
         "cache_seconds": 300
-      }
+      },
+      "compat_alias_for": "codex_worktree",
+      "compat_maps_to": {
+        "host_type": "codex_worktree",
+        "carrier_hint": {
+          "codex_meta": {
+            "worktree_path": "/tmp/codex/mini-codex-gpt55-medium-planner-2",
+            "repo": "solar-operators",
+            "branch": "main"
+          }
+        }
+      },
+      "deprecated": true
     }
+  },
+  "_meta": {
+    "transition_status": "read_only",
+    "deprecated_at": "2026-06-02",
+    "sunset_target": "S05 acceptance complete"
   }
 }
