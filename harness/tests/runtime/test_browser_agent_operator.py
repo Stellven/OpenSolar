@@ -440,3 +440,26 @@ def test_stage_browser_profile_persistent_strategy_returns_reusable_runtime(tmp_
     staged_root = Path(staged_dir)
     assert (staged_root / "Profile 1" / "Cookies").exists()
     assert "browser-use-persistent-user-data-dir-" in staged_root.name
+
+
+def test_stage_browser_profile_isolates_from_persistent_runtime(tmp_path, monkeypatch):
+    root = tmp_path / "Chrome"
+    profile = root / "Profile 1"
+    profile.mkdir(parents=True)
+    (profile / "Cookies").write_text("cookie-db", encoding="utf-8")
+    (root / "Local State").write_text('{"profile":{"last_used":"Profile 1"}}', encoding="utf-8")
+
+    runtime_root = tmp_path / "runtime-cache"
+    monkeypatch.setattr(bjrt, "PROFILE_RUNTIME_ROOT", runtime_root)
+
+    persistent = bjrt.prepare_browser_profile_runtime(root, "Profile 1")
+    assert persistent is not None
+    staged_dir, cleanup_dir = bjrt._stage_browser_profile(persistent, "Profile 1", strategy="isolated")
+    assert cleanup_dir is not None
+    assert staged_dir is not None
+    staged_root = Path(staged_dir)
+    assert staged_root != persistent
+    assert "browser-use-user-data-dir-" in staged_root.name
+    assert (staged_root / "Profile 1" / "Cookies").exists()
+
+    shutil.rmtree(cleanup_dir, ignore_errors=True)

@@ -541,8 +541,12 @@ def _stage_browser_profile(
         return user_data_dir, None
 
     source_root = Path(user_data_dir)
-    if _STAGED_PROFILE_PREFIX in str(source_root) or _PERSISTENT_PROFILE_PREFIX in str(source_root):
+    if _STAGED_PROFILE_PREFIX in str(source_root):
         return str(source_root), None
+    if _PERSISTENT_PROFILE_PREFIX in str(source_root):
+        if strategy == "persistent":
+            return str(source_root), None
+        strategy = "isolated"
     if strategy == "persistent":
         runtime_root = prepare_browser_profile_runtime(source_root, profile_directory)
         return (str(runtime_root), None) if runtime_root else (None, None)
