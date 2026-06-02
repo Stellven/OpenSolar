@@ -63,19 +63,47 @@ def main() -> None:
         status.REPORTS_DIR = harness / "reports"
         status.KNOWLEDGE_DIR = knowledge
         status.AI_INFLUENCE_RAW_DIR = run_dir.parent
+        status.TECH_HOTSPOT_CONFIG = harness / "missing-tech-hotspot-config.yaml"
+        status.HUGGINGFACE_PAPERS_RAW_DIR = knowledge / "_raw" / "huggingface-papers-trending"
         status.OPEN_ALLOWED_ROOTS = [harness, knowledge]
 
         payload = status._ai_influence_payload(limit=10)
         assert payload["ok"] is True
         assert payload["count"] == 1
-        item = payload["items"][0]
+        item = next(item for item in payload["items"] if item.get("kind") == "daily_digest")
         assert item["date"] == "2026-05-23"
-        assert item["items"] == 1
-        assert item["core_trends"] == 1
-        assert item["primary"]["view_url"].startswith("/ai-influence/report?path=")
+        assert item["metrics"]["条目"] == 1
+        assert item["metrics"]["趋势"] == 1
+        assert item["primary"]["view_url"].startswith("/ai-influence/report?")
         html = status._ai_influence_html()
         assert "AI Influence 报告中心" in html
         assert "打开报告" in html
+
+        hf_dir = knowledge / "_raw" / "tech-hotspot-radar" / "2026-06-01"
+        write(hf_dir / "hf-paper-report.html", "<!doctype html><h1>HF Paper HTML</h1>")
+        write(hf_dir / "hf-paper-report.md", "# HF Paper\n")
+        write(
+            hf_dir / "hf-paper-insight-pack.json",
+            json.dumps(
+                {
+                    "date": "2026-06-01",
+                    "report_variant": "fallback_report",
+                    "premium_insight_count": 0,
+                    "fallback_count": 2,
+                    "papers": [{"paper_id": "p1"}, {"paper_id": "p2"}],
+                },
+                ensure_ascii=False,
+            ),
+        )
+        hf_item = status._huggingface_papers_item(hf_dir)
+        assert hf_item["status"] == "warn"
+        assert hf_item["subtitle"] == "论文热点基础快报"
+        assert hf_item["metrics"]["报告类型"] == "fallback_report"
+        assert hf_item["metrics"]["高级洞察"] == 0
+        assert hf_item["metrics"]["基础摘要"] == 2
+        assert hf_item["primary"]["artifact"] == "report_html"
+        assert any(a["artifact"] == "report_html" for a in hf_item["artifacts"])
+        assert any(r["artifact"] == "report_html" for r in hf_item["resources"])
 
         import os
 
