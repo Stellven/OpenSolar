@@ -45,6 +45,7 @@
         "ResearchSynthesizer",
         "Critic",
         "Verifier",
+        "VerifierLite",
         "SecurityGate",
         "QuotaBroker",
         "ContextCompressor",

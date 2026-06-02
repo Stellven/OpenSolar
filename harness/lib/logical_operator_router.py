@@ -17,7 +17,7 @@ ACTORS_PATH = HARNESS_DIR / "config" / "agent-actors.json"
 P0_LOGICAL_OPERATORS = frozenset([
     "DeepArchitect", "RootCauseDebugger", "ImplementationWorker", "PatchWorker",
     "TestDesigner", "TestRunner", "BenchmarkRunner", "ParallelExplorer",
-    "ResearchScout", "ResearchSynthesizer", "Critic", "Verifier",
+    "ResearchScout", "ResearchSynthesizer", "Critic", "Verifier", "VerifierLite",
     "SecurityGate", "QuotaBroker", "ContextCompressor", "ArtifactCurator",
 ])
 
