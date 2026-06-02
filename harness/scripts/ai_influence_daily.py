@@ -37,6 +37,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_ACCOUNTS_PATH = SCRIPT_DIR / ".." / "ai-influence-digest" / "references" / "accounts_extended.txt"
 DEFAULT_STATE_DIR = Path.home() / ".solar" / "harness" / "state" / "ai-influence-digest"
 DEFAULT_MAX_AGE_DAYS = int(os.environ.get("AI_INFLUENCE_MAX_AGE_DAYS", "30"))
+DEFAULT_ANALYSIS_TOP_N = int(os.environ.get("AI_INFLUENCE_ANALYSIS_TOP_N", "300"))
 USER_AGENT = "Solar-AI-Influence-Daily/2.0"
 DEFAULT_MAIL_TO = "sean.lisihao@huawei.com"
 DEFAULT_GMAIL_USER = "lisihao@gmail.com"
@@ -456,6 +457,19 @@ def dedupe_candidates(candidates: list[Candidate], db_path: Path, date_str: str 
         ch = content_hash(c.text)
         if (c.tweet_url, ch) not in seen:
             unique.append(c)
+    return unique
+
+
+def dedupe_candidates_in_memory(candidates: list[Candidate]) -> list[Candidate]:
+    """Remove duplicate candidates within the current scan only."""
+    seen: set[tuple[str, str]] = set()
+    unique: list[Candidate] = []
+    for candidate in candidates:
+        key = (candidate.tweet_url, content_hash(candidate.text))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
     return unique
 
 
@@ -953,7 +967,7 @@ def build_trend_analysis(analysis: dict[str, Any], candidates: list[Candidate]) 
     for theme_id, score in theme_scores.most_common(5):
         theme = theme_by_id[theme_id]
         evidence = []
-        for item in theme_items[theme_id][:3]:
+        for item in theme_items[theme_id][:6]:
             evidence.append({
                 "handle": item.get("handle", "N/A"),
                 "title": item.get("title", "N/A"),
@@ -993,7 +1007,7 @@ def build_trend_analysis(analysis: dict[str, Any], candidates: list[Candidate]) 
         "summary": "从单条资讯列表升级为主题趋势视图：按证据密度、实用价值和影响面识别趋势，并保留弱信号观察指标。",
         "core_trends": core_trends,
         "weak_signals": weak_signals[:5],
-        "top_handles": [{"handle": handle, "count": count} for handle, count in handles.most_common(8)],
+        "top_handles": [{"handle": handle, "count": count} for handle, count in handles.most_common(20)],
         "knowledge_tags": recommended_tags,
         "next_watch": [trend["watch_metric"] for trend in core_trends[:5]],
     }
@@ -1017,6 +1031,7 @@ def render_digest_json(analysis: dict, plan: dict, stats: dict, date_str: str) -
         "analysis_status": analysis.get("analysis_status"),
         "model": analysis.get("model"),
         "trend_analysis": analysis.get("trend_analysis", {}),
+        "coverage": analysis.get("coverage", {}),
         "items": analysis.get("items", []),
         "plan": {
             "tier1_count": plan.get("tier1_count"),
@@ -1030,10 +1045,19 @@ def render_digest_json(analysis: dict, plan: dict, stats: dict, date_str: str) -
 def render_digest_md(analysis: dict, date_str: str) -> str:
     """Render digest.md — wiki-ingest-ready Markdown."""
     trends = analysis.get("trend_analysis") or {}
+    coverage = analysis.get("coverage") or {}
     lines = [
         f"# AI Influence Digest — {date_str}",
         "",
         f"分析状态: {analysis.get('analysis_status', 'unknown')} | 模型: {analysis.get('model', 'N/A')}",
+        "",
+        "## 采集覆盖率",
+        "",
+        f"- 账号库: {coverage.get('enabled_accounts', 'N/A')} enabled / {coverage.get('total_accounts', 'N/A')} total",
+        f"- 本轮计划扫描: {coverage.get('planned_accounts', 'N/A')}，实际扫描: {coverage.get('scanned_accounts', 'N/A')}",
+        f"- 有候选内容账号: {coverage.get('accounts_with_candidates', 'N/A')}，有新鲜候选账号: {coverage.get('accounts_with_fresh_candidates', 'N/A')}",
+        f"- 候选总数: {coverage.get('collected_candidates', 'N/A')}，去重后: {coverage.get('unique_after_dedupe', 'N/A')}，新鲜候选: {coverage.get('fresh_candidates', 'N/A')}",
+        f"- 进入逐条分析条数: {coverage.get('analysis_items', 'N/A')} / top_n={coverage.get('analysis_top_n', 'N/A')}，失败账号数: {coverage.get('failure_count', 'N/A')}",
         "",
         "## 趋势分析",
         "",
@@ -1117,6 +1141,7 @@ def render_digest_html(analysis: dict, date_str: str) -> str:
     """Render digest.html — email-ready HTML table."""
     items = analysis.get("items", [])
     trends = analysis.get("trend_analysis") or {}
+    coverage = analysis.get("coverage") or {}
     trend_cards = ""
     for trend in (trends.get("core_trends") or [])[:5]:
         evidence_rows = ""
@@ -1166,6 +1191,8 @@ table{{border-collapse:collapse;width:100%;font-size:13px}}td,th{{border-bottom:
 <body style="margin:0;background:#f4efe4;color:#17231f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;line-height:1.65"><div class="wrap" style="max-width:980px;margin:0 auto;padding:28px 18px 44px"><div class="hero" style="background:linear-gradient(135deg,#123b35,#315f4f 58%,#c9863d);color:#fff;border-radius:24px;padding:28px;margin-bottom:18px"><div class="kicker" style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.82">AI Influence Digest</div><h1 style="margin:8px 0 8px;font-size:30px;line-height:1.2">{date_str} 趋势雷达</h1>
 <p>从账号信号升级为趋势视图：先看方向，再看证据，最后沉淀到 Solar 知识库。</p></div>
 <div class="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0"><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{len(items)}</b><span style="font-size:12px;color:#66736d">精选条目</span></div><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{len(trends.get('core_trends') or [])}</b><span style="font-size:12px;color:#66736d">核心趋势</span></div><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{_h(analysis.get('analysis_status',''))}</b><span style="font-size:12px;color:#66736d">分析状态</span></div></div>
+<div class="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0"><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{_h(coverage.get('enabled_accounts','N/A'))}/{_h(coverage.get('total_accounts','N/A'))}</b><span style="font-size:12px;color:#66736d">账号库覆盖</span></div><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{_h(coverage.get('accounts_with_candidates','N/A'))}</b><span style="font-size:12px;color:#66736d">有候选内容账号</span></div><div class="metric" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:14px"><b style="display:block;font-size:24px;color:#123b35">{_h(coverage.get('collected_candidates','N/A'))}</b><span style="font-size:12px;color:#66736d">候选总数</span></div></div>
+<div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">采集覆盖率</h2><p>本轮计划扫描 {_h(coverage.get('planned_accounts','N/A'))} 个账号，实际扫描 {_h(coverage.get('scanned_accounts','N/A'))} 个；有新鲜候选内容的账号 {_h(coverage.get('accounts_with_fresh_candidates','N/A'))} 个。候选去重后 {_h(coverage.get('unique_after_dedupe','N/A'))} 条，新鲜候选 {_h(coverage.get('fresh_candidates','N/A'))} 条，进入逐条分析 {_h(coverage.get('analysis_items','N/A'))} 条（top_n={_h(coverage.get('analysis_top_n','N/A'))}）；失败账号 {_h(coverage.get('failure_count','N/A'))} 个。</p></div>
 <div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">核心趋势</h2>{trend_cards or '<p>N/A</p>'}</div>
 <div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">弱信号</h2><ul>{weak_rows or '<li>N/A</li>'}</ul></div>
 <div class="card" style="background:#fffdf8;border:1px solid #eadfcd;border-radius:18px;box-shadow:0 8px 24px rgba(49,42,31,.06);padding:20px;margin:14px 0"><h2 style="font-size:20px;color:#123b35;margin:0 0 12px">知识库标签</h2>{tag_rows or 'N/A'}</div>
@@ -1537,6 +1564,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     date_str = args.date
     max_age_days = max(0, int(args.max_age_days))
     sleep_between_accounts = max(0.0, float(args.sleep_between_accounts))
+    analysis_top_n = max(1, int(args.analysis_top_n))
 
     accounts = parse_accounts(accounts_path)
     print(f"Parsed {len(accounts)} accounts ({sum(1 for a in accounts if a.enabled)} enabled)", file=sys.stderr)
@@ -1568,37 +1596,57 @@ def cmd_run(args: argparse.Namespace) -> int:
         if sleep_between_accounts > 0 and not dry_run:
             time.sleep(sleep_between_accounts)
 
-    unique = dedupe_candidates(all_candidates, db_path, date_str and date_str[:10])
+    run_unique = dedupe_candidates_in_memory(all_candidates)
+    new_unique = dedupe_candidates(all_candidates, db_path, date_str and date_str[:10])
     print(
-        f"Collected {len(all_candidates)} candidates, {len(unique)} unique after dedupe",
+        f"Collected {len(all_candidates)} candidates, {len(run_unique)} unique after in-run dedupe; "
+        f"{len(new_unique)} new vs today's state",
         file=sys.stderr,
     )
 
     recent, stale, missing_published = filter_recent_candidates(
-        unique,
+        run_unique,
         date_str=date_str,
         max_age_days=max_age_days,
     )
     print(
-        f"Freshness gate: keep={len(recent)} stale={len(stale)} missing_published_at={len(missing_published)} cutoff_days={max_age_days}",
+        f"Freshness stats: fresh={len(recent)} stale={len(stale)} missing_published_at={len(missing_published)} cutoff_days={max_age_days}",
         file=sys.stderr,
     )
 
-    if recent:
-        record_candidates(recent, db_path)
+    if run_unique:
+        record_candidates(run_unique, db_path)
 
-    # Score and rank
-    top = rank_candidates(recent, top_n=15)
+    # Score and rank. Keep this higher than the old 15-item cap so a 200-account
+    # monitor does not look like a 10-account sample in the final digest.
+    analysis_pool = run_unique
+    top = rank_candidates(analysis_pool, top_n=analysis_top_n)
 
     # GLM analysis (skip if dry-run and no candidates)
     analysis = {"analysis_status": "skipped", "items": []}
     if top and not dry_run:
-        analysis = analyze_with_glm(recent, top_n=15)
+        analysis = analyze_with_glm(analysis_pool, top_n=analysis_top_n)
     elif top and dry_run:
         # In dry-run, use local scoring only (no GLM/network LLM call)
-        analysis = local_heuristic_analysis(recent, top_n=15)
+        analysis = local_heuristic_analysis(analysis_pool, top_n=analysis_top_n)
         analysis["analysis_status"] = "dry_run_local"
     analysis["trend_analysis"] = build_trend_analysis(analysis, top)
+    coverage = {
+        "total_accounts": len(accounts),
+        "enabled_accounts": sum(1 for a in accounts if a.enabled),
+        "planned_accounts": total_handles,
+        "scanned_accounts": len(all_handles),
+        "accounts_with_candidates": len({c.handle for c in all_candidates}),
+        "accounts_with_fresh_candidates": len({c.handle for c in recent}),
+        "collected_candidates": len(all_candidates),
+        "unique_after_dedupe": len(run_unique),
+        "new_after_state_dedupe": len(new_unique),
+        "fresh_candidates": len(recent),
+        "analysis_top_n": analysis_top_n,
+        "analysis_items": len(analysis.get("items") or []),
+        "failure_count": len(failures),
+    }
+    analysis["coverage"] = coverage
 
     result = {
         "ok": True,
@@ -1607,11 +1655,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         "analysis": analysis,
         "stats": {
             "total_collected": len(all_candidates),
-            "unique_after_dedupe": len(unique),
+            "unique_after_dedupe": len(run_unique),
+            "new_after_state_dedupe": len(new_unique),
             "fresh_candidates": len(recent),
-            "stale_filtered": len(stale),
-            "missing_published_at_filtered": len(missing_published),
+            "stale_candidates": len(stale),
+            "missing_published_at_candidates": len(missing_published),
             "max_age_days": max_age_days,
+            "analysis_top_n": analysis_top_n,
+            "analysis_pool_candidates": len(analysis_pool),
+            "accounts_with_candidates": coverage["accounts_with_candidates"],
+            "accounts_with_fresh_candidates": coverage["accounts_with_fresh_candidates"],
             "top_scored": len(top),
             "failures": failures[:20],
         },
@@ -1823,6 +1876,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=float(os.environ.get("AI_INFLUENCE_SLEEP_SECONDS", "1.0")),
         help="Polite delay between account fetches in seconds",
+    )
+    parser.add_argument(
+        "--analysis-top-n",
+        type=int,
+        default=DEFAULT_ANALYSIS_TOP_N,
+        help="Number of top candidates sent into analysis and rendered as selected items",
     )
 
     sub = parser.add_subparsers(dest="command")
