@@ -211,3 +211,143 @@ def test_cmd_compile_request_rejects_invalid_compiled_package(monkeypatch, tmp_p
     rc = pm_dispatch.cmd_compile_request(args)
     assert rc == 2
     assert touched["status"] is False
+
+
+def test_cmd_submit_persists_failed_record_when_no_operator_available(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setenv("SOLAR_PM_DISPATCH_ALLOW_DIRECT", "1")
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", tmp_path / "run" / "pm-inbox")
+    monkeypatch.setattr(pm_dispatch, "OPERATOR_INBOX_DIR", tmp_path / "run" / "operator-inbox")
+    monkeypatch.setattr(pm_dispatch, "OPERATOR_STATUS_DIR", tmp_path / "run" / "operator-status")
+    monkeypatch.setattr(
+        pm_dispatch,
+        "select_operator_by_role",
+        lambda **kwargs: ("", {}, "no_dispatchable_operator_for_role: planner"),
+    )
+
+    args = argparse.Namespace(
+        role="planner",
+        objective="Need planner handoff",
+        operator="",
+        sprint="sprint-no-operator",
+        node="N0",
+        task_type="planning",
+        context="",
+        dry_run=False,
+    )
+    rc = pm_dispatch.cmd_submit(args)
+    assert rc == 1
+    records = list((tmp_path / "run" / "pm-inbox").glob("pm-*.json"))
+    assert len(records) == 1
+    payload = json.loads(records[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "failed_no_dispatchable_operator"
+    assert payload["failure_reason"] == "no_dispatchable_operator_for_role: planner"
+
+
+def test_pending_pm_backlog_count_ignores_failed_variants(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    inbox = tmp_path / "run" / "pm-inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+    samples = {
+        "pm-a.json": {"status": "submitted"},
+        "pm-b.json": {"status": "failed_contract_closeout"},
+        "pm-c.json": {"status": "failed_missing_pm_result"},
+        "pm-d.json": {"status": "completed"},
+    }
+    for name, payload in samples.items():
+        (inbox / name).write_text(json.dumps(payload), encoding="utf-8")
+    assert pm_dispatch._pending_pm_backlog_count() == 1
+
+
+def _write_builder_ready_graph(sprints: Path, sprint_id: str) -> None:
+    (sprints / f"{sprint_id}.status.json").write_text(
+        json.dumps({"status": "active", "phase": "planning_complete"}),
+        encoding="utf-8",
+    )
+    (sprints / f"{sprint_id}.task_graph.json").write_text(
+        json.dumps(
+            {
+                "sprint_id": sprint_id,
+                "nodes": [
+                    {
+                        "id": "B1",
+                        "goal": "Implement approved change.",
+                        "logical_operator": "ImplementationWorker",
+                        "dispatch_task_type": "implementation",
+                        "acceptance": ["handoff exists"],
+                        "requirement_ids": ["REQ-1"],
+                        "status": "pending",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    _write_builder_ready_graph(sprints, "sprint-latent")
+
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    assert pm_dispatch._builder_pool_backlog_breakdown() == {
+        "pending_pm": 0,
+        "latent_builder_ready": 1,
+        "total": 1,
+    }
+
+    (inbox / "pm-existing.json").write_text(
+        json.dumps({"status": "submitted", "sprint_id": "sprint-latent", "node_id": "B1"}),
+        encoding="utf-8",
+    )
+    assert pm_dispatch._builder_pool_backlog_breakdown() == {
+        "pending_pm": 1,
+        "latent_builder_ready": 0,
+        "total": 1,
+    }
+
+
+def test_drain_builder_ready_submits_and_marks_graph(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    _write_builder_ready_graph(sprints, "sprint-drain")
+
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path)
+
+    def fake_cmd_submit(args):
+        pm_dispatch.write_pm_task_record(
+            "pm-sprint-drain-B1-test",
+            {
+                "task_id": "pm-sprint-drain-B1-test",
+                "status": "submitted",
+                "sprint_id": args.sprint,
+                "node_id": args.node,
+                "operator_id": "mini-codex-gpt53-spark-builder-1",
+            },
+        )
+        return 0
+
+    monkeypatch.setattr(pm_dispatch, "cmd_submit", fake_cmd_submit)
+    rc = pm_dispatch.cmd_drain_builder_ready(
+        argparse.Namespace(sprint="", max_items=0, dry_run=False, json=True)
+    )
+
+    assert rc == 0
+    graph = json.loads((sprints / "sprint-drain.task_graph.json").read_text(encoding="utf-8"))
+    assert graph["nodes"][0]["status"] == "dispatched"
+    assert graph["nodes"][0]["dispatched_via"] == "pm_dispatch"
+    assert graph["nodes"][0]["pm_task_id"] == "pm-sprint-drain-B1-test"
