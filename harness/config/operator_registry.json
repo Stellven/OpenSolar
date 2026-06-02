@@ -10,20 +10,6 @@
       "schedule": "daily",
       "output_dir": "reports/x-social/"
     },
-    "github_trends": {
-      "primary": "scripts/github_trends_digest.py",
-      "executors": [],
-      "fallback": [],
-      "control": [
-        "tools/github_intelligence/pipeline.py"
-      ],
-      "schedule": "daily",
-      "output_dir": "reports/github/",
-      "dual_run": {
-        "enabled": true,
-        "comparison_view": true
-      }
-    },
     "hf_papers": {
       "primary": "scripts/tech_hotspot_radar.py",
       "executors": [],
@@ -31,8 +17,22 @@
       "helper": [
         "scripts/run_tech_hotspot_radar.sh"
       ],
-      "schedule": "daily",
+      "schedule": "weekly",
       "output_dir": "reports/hf-papers/"
+    },
+    "github": {
+      "primary": "scripts/tech_hotspot_radar.py",
+      "executors": [],
+      "fallback": [],
+      "helper": [
+        "scripts/run_tech_hotspot_radar.sh"
+      ],
+      "schedule": "daily",
+      "output_dir": "reports/github/",
+      "report_operator": "chatgpt_report_chapter_writer",
+      "external_sources": [
+        "trendshift"
+      ]
     },
     "gemini_research": {
       "primary": "tools/gemini_deep_research_operator.py",

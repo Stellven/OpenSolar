@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-01T20:45:00Z",
+  "updated_at": "2026-06-02T01:59:19Z",
   "operators": {
     "mini-claude-opus-planner": {
       "display_name": "Mac mini Claude Opus planner",
@@ -486,76 +486,76 @@
       "max_concurrency": 1,
       "fallback_profile": "builder"
     },
-      "mini-antigravity-gemini35-flash-image": {
-    "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
-    "plane": "headless",
-    "owner_host": "lisihao@100.122.223.55",
-    "pane": "solar-harness-multi-task:*",
-    "profile": "gemini-builder",
-    "role": "builder",
-    "persona": "builder",
-    "provider": "google",
-    "vendor": "Google",
-    "backend": "command",
-    "model": "gemini-3.5-flash-high",
-    "model_config": "Antigravity CLI agy;multimodal=blocked-until-media-adapter",
-    "base_url": "agy-cli",
-    "command_path": "/Users/lisihao/.local/bin/agy",
-    "auth_mode": "oauth",
-    "key_ref": "antigravity_oauth",
-    "quota_cycle": "google-account",
-    "quota_refresh_at": null,
-    "quota_guard_state": "ok",
-    "enabled": false,
-    "disabled_reason": "failed true-image smoke: agy --print path reports media=0/placeholder output; blocked until real media attachment adapter passes non-placeholder image test",
-    "enabled_at": "2026-05-22T00:34:00Z",
-    "available": false,
-    "health_status": "failed_smoke",
-    "input_modalities": [
-      "text"
-    ],
-    "output_modalities": [
-      "text",
-      "structured-json"
-    ],
-    "artifact_types": [],
-    "roles": [
-      "builder",
-      "evaluator"
-    ],
-    "task_classes": [
-      "blocked-image-adapter"
-    ],
-    "strengths": [
-      "google-stack"
-    ],
-    "preferred_for": [],
-    "avoid_for": [
-      "bulk-text-extraction",
-      "critical-code-review",
-      "diagram-analysis",
-      "image",
-      "multimodal",
-      "ocr",
-      "screenshot",
-      "vision"
-    ],
-    "cost_tier": "low",
-    "latency_tier": "low",
-    "context_tier": "high",
-    "max_concurrency": 1,
-    "fallback_profile": "builder",
-    "last_smoke_at": "2026-05-31T04:15:00Z",
-    "last_smoke_evidence": "operator_runtime image smoke refused placeholder/non-final output; Antigravity CLI log showed media=0",
-    "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
-    "state": {
-      "availability": "disabled",
-      "runtime_state": "blocked",
-      "cooldown_until": null,
-      "last_error": "failed_nonfinal_or_no_media_image_smoke",
-      "last_error_at": "2026-05-31T04:15:00Z"
-    }
-  },
+    "mini-antigravity-gemini35-flash-image": {
+      "display_name": "Mac mini Antigravity Gemini 3.5 Flash multimodal image",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "gemini-builder",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "google",
+      "vendor": "Google",
+      "backend": "command",
+      "model": "gemini-3.5-flash-high",
+      "model_config": "Antigravity CLI agy;multimodal=blocked-until-media-adapter",
+      "base_url": "agy-cli",
+      "command_path": "/Users/lisihao/.local/bin/agy",
+      "auth_mode": "oauth",
+      "key_ref": "antigravity_oauth",
+      "quota_cycle": "google-account",
+      "quota_refresh_at": null,
+      "quota_guard_state": "ok",
+      "enabled": false,
+      "disabled_reason": "failed true-image smoke: agy --print path reports media=0/placeholder output; blocked until real media attachment adapter passes non-placeholder image test",
+      "enabled_at": "2026-05-22T00:34:00Z",
+      "available": false,
+      "health_status": "failed_smoke",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text",
+        "structured-json"
+      ],
+      "artifact_types": [],
+      "roles": [
+        "builder",
+        "evaluator"
+      ],
+      "task_classes": [
+        "blocked-image-adapter"
+      ],
+      "strengths": [
+        "google-stack"
+      ],
+      "preferred_for": [],
+      "avoid_for": [
+        "bulk-text-extraction",
+        "critical-code-review",
+        "diagram-analysis",
+        "image",
+        "multimodal",
+        "ocr",
+        "screenshot",
+        "vision"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "builder",
+      "last_smoke_at": "2026-05-31T04:15:00Z",
+      "last_smoke_evidence": "operator_runtime image smoke refused placeholder/non-final output; Antigravity CLI log showed media=0",
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
+      "state": {
+        "availability": "disabled",
+        "runtime_state": "blocked",
+        "cooldown_until": null,
+        "last_error": "failed_nonfinal_or_no_media_image_smoke",
+        "last_error_at": "2026-05-31T04:15:00Z"
+      }
+    },
     "mini-antigravity-gemini31-pro": {
       "display_name": "Mac mini Antigravity Gemini 3.1 Pro",
       "plane": "headless",
@@ -574,7 +574,7 @@
       "key_ref": "antigravity_oauth",
       "quota_cycle": "google-account",
       "quota_refresh_at": null,
-      "quota_guard_state": "ok",
+      "quota_guard_state": "conserve",
       "enabled": true,
       "disabled_reason": "",
       "enabled_at": "2026-05-22T14:36:00Z",
@@ -598,13 +598,14 @@
         "long-context"
       ],
       "preferred_for": [
-        "planner",
-        "architecture",
-        "research",
-        "google"
+        "google-specific-planning",
+        "emergency-planner-fallback"
       ],
       "avoid_for": [
-        "bulk-extraction"
+        "bulk-extraction",
+        "planning-primary",
+        "prd-primary",
+        "quota-sensitive-planning"
       ],
       "cost_tier": "medium",
       "latency_tier": "medium",
@@ -621,10 +622,8 @@
         "quota_type": "google-account",
         "period": "daily",
         "reserve_for": [
-          "ARCH_DESIGN",
-          "ROOT_CAUSE_DEBUG",
-          "RESEARCH_SYNTHESIS",
-          "FINAL_REVIEW"
+          "emergency-planner-fallback",
+          "google-specific-planning"
         ],
         "on_exhausted": "disable_and_fallback"
       },
@@ -640,12 +639,13 @@
       "routing": {
         "operator_class": "GoogleStack",
         "primary_task_types": [
-          "ARCH_DESIGN",
-          "ROOT_CAUSE_DEBUG",
-          "RESEARCH_SYNTHESIS",
-          "FINAL_REVIEW"
+          "EMERGENCY_PLANNER_FALLBACK",
+          "GOOGLE_SPECIFIC_PLANNING"
         ],
         "avoid_task_types": [
+          "PLANNING_PRIMARY",
+          "PRD_PRIMARY",
+          "QUOTA_SENSITIVE_PLANNING",
           "bulk-extraction"
         ],
         "fallback_operator_classes": [
@@ -1576,7 +1576,7 @@
       "context_tier": "high",
       "max_concurrency": 1,
       "fallback_profile": "builder",
-      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" CHATGPT_MODEL=\"${CHATGPT_MODEL:-chatgpt-5.5}\" CHATGPT_REASONING_EFFORT=\"${CHATGPT_REASONING_EFFORT:-high}\" BROWSER_AGENT_CHATGPT_MODEL_MODE=\"${BROWSER_AGENT_CHATGPT_MODEL_MODE:-thinking}\" BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE=\"${BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE:-true}\" BROWSER_AGENT_CHATGPT_PROJECT_NAME=\"${BROWSER_AGENT_CHATGPT_PROJECT_NAME:-杂项}\" python3 \"$HARNESS_DIR/tools/chatgpt_browser_agent_task_operator.py\"",
+      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" CHATGPT_MODEL=\"${CHATGPT_MODEL:-chatgpt-5.5}\" CHATGPT_REASONING_EFFORT=\"${CHATGPT_REASONING_EFFORT:-high}\" BROWSER_AGENT_CHATGPT_MODEL_MODE=\"${BROWSER_AGENT_CHATGPT_MODEL_MODE:-thinking}\" BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE=\"${BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE:-true}\" BROWSER_AGENT_CHATGPT_PROJECT_NAME=\"${BROWSER_AGENT_CHATGPT_PROJECT_NAME:-杂项}\" BROWSER_AGENT_PROFILE_DIRECTORY=\"${BROWSER_AGENT_PROFILE_DIRECTORY:-Profile 1}\" BROWSER_AGENT_PROFILE_STRATEGY=\"${BROWSER_AGENT_PROFILE_STRATEGY:-persistent}\" BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY=\"${BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY:-persistent}\" BROWSER_AGENT_TARGET_ACCOUNT_EMAIL=\"${BROWSER_AGENT_TARGET_ACCOUNT_EMAIL:-haogege1977@gmail.com}\" BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL=\"${BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL:-haogege1977@gmail.com}\" BROWSER_AGENT_USER_DATA_DIR=\"${BROWSER_AGENT_USER_DATA_DIR:-/Users/lisihao/Library/Application Support/Google/Chrome}\" BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE=\"${BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE:-/Users/lisihao/.solar/harness/browser-agent-chatgpt-local.json}\" python3 \"$HARNESS_DIR/tools/chatgpt_browser_agent_task_operator.py\"",
       "policy": {
         "write_files": "artifact_dir_only",
         "run_shell": "restricted_operator_command",
@@ -3628,100 +3628,248 @@
         "priority": 5
       }
     },
-      "technology-diagram-painter": {
-    "display_name": "Technology Diagram Painter Browser Agent",
-    "plane": "interactive_browser",
-    "owner_host": "lisihao@100.122.223.55",
-    "pane": "solar-harness-multi-task:*",
-    "profile": "browser-agent",
-    "role": "builder",
-    "persona": "builder",
-    "provider": "browser",
-    "vendor": "BrowserAgent",
-    "backend": "command",
-    "model": "chatgpt-image-browser-agent",
-    "model_config": "ChatGPT image generation via browser-use/Playwright technology diagram painter",
-    "base_url": "https://chatgpt.com",
-    "auth_mode": "oauth",
-    "key_ref": "chatgpt_browser_profile",
-    "quota_cycle": "webapp-account",
-    "quota_refresh_at": null,
-    "quota_guard_state": "ok",
-    "enabled": true,
-    "enabled_at": "2026-05-31T04:15:00Z",
-    "available": true,
-    "health_status": "ok",
-    "roles": [
-      "builder"
-    ],
-    "input_modalities": [
-      "text",
-      "structured-json"
-    ],
-    "output_modalities": [
-      "image",
-      "png",
-      "artifact",
-      "structured-json"
-    ],
-    "artifact_types": [
-      "png",
-      "browser-trace",
-      "result-json"
-    ],
-    "task_classes": [
-      "technology-diagram",
-      "diagram-generation",
-      "browser-asset-generation",
-      "architecture-figure",
-      "visual-artifact"
-    ],
-    "strengths": [
-      "technology-diagram-generation",
-      "architecture-figure",
-      "browser-agent",
-      "chatgpt-image"
-    ],
-    "preferred_for": [
-      "technology-diagram",
-      "architecture-figure",
-      "report-figure",
-      "browser-asset-generation",
-      "diagram"
-    ],
-    "avoid_for": [
-      "vision-analysis",
-      "ocr",
-      "code-implementation",
-      "critical-security-review"
-    ],
-    "cost_tier": "medium",
-    "latency_tier": "high",
-    "context_tier": "medium",
-    "max_concurrency": 1,
-    "fallback_profile": "browser-agent",
-    "policy": {
-      "write_files": "artifact_dir_only",
-      "run_shell": "restricted_operator_command",
-      "network": "allowed",
-      "secrets_access": "secret_ref_only",
-      "git_commit": "denied"
+    "technology-diagram-painter": {
+      "display_name": "Technology Diagram Painter Browser Agent",
+      "plane": "interactive_browser",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "browser-agent",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "browser",
+      "vendor": "BrowserAgent",
+      "backend": "command",
+      "model": "chatgpt-image-browser-agent",
+      "model_config": "ChatGPT image generation via browser-use/Playwright technology diagram painter",
+      "base_url": "https://chatgpt.com",
+      "auth_mode": "oauth",
+      "key_ref": "chatgpt_browser_profile",
+      "quota_cycle": "webapp-account",
+      "quota_refresh_at": null,
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-05-31T04:15:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "builder"
+      ],
+      "input_modalities": [
+        "text",
+        "structured-json"
+      ],
+      "output_modalities": [
+        "image",
+        "png",
+        "artifact",
+        "structured-json"
+      ],
+      "artifact_types": [
+        "png",
+        "browser-trace",
+        "result-json"
+      ],
+      "task_classes": [
+        "technology-diagram",
+        "diagram-generation",
+        "browser-asset-generation",
+        "architecture-figure",
+        "visual-artifact"
+      ],
+      "strengths": [
+        "technology-diagram-generation",
+        "architecture-figure",
+        "browser-agent",
+        "chatgpt-image"
+      ],
+      "preferred_for": [
+        "technology-diagram",
+        "architecture-figure",
+        "report-figure",
+        "browser-asset-generation",
+        "diagram"
+      ],
+      "avoid_for": [
+        "vision-analysis",
+        "ocr",
+        "code-implementation",
+        "critical-security-review"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "high",
+      "context_tier": "medium",
+      "max_concurrency": 1,
+      "fallback_profile": "browser-agent",
+      "policy": {
+        "write_files": "artifact_dir_only",
+        "run_shell": "restricted_operator_command",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/technology_diagram_painter_operator.py\"",
+      "flow_control": {
+        "success_cooldown_seconds": 30,
+        "rate_limit_cooldown_seconds": 600,
+        "auth_cooldown_seconds": 3600,
+        "defer_on_cooldown": true,
+        "defer_on_auth": true
+      },
+      "state": {
+        "availability": "enabled",
+        "runtime_state": "idle",
+        "cooldown_until": null,
+        "last_error": null,
+        "last_error_at": null
+      }
     },
-    "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/technology_diagram_painter_operator.py\"",
-    "flow_control": {
-      "success_cooldown_seconds": 30,
-      "rate_limit_cooldown_seconds": 600,
-      "auth_cooldown_seconds": 3600,
-      "defer_on_cooldown": true,
-      "defer_on_auth": true
+    "mini-codex-gpt55-medium-planner-1": {
+      "display_name": "Mac mini Codex GPT 5.5 medium planner support slot 1",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "codex-planner",
+      "role": "planner",
+      "persona": "planner",
+      "provider": "openai",
+      "vendor": "OpenAI",
+      "backend": "command",
+      "model": "gpt-5.5",
+      "model_config": "Codex CLI;gpt-5.5;reasoning=high;planner-support;prd",
+      "base_url": "codex-cli",
+      "auth_mode": "subscription_or_api_key",
+      "key_ref": "codex_auth",
+      "quota_cycle": "api_balance",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-06-02T00:00:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "planner"
+      ],
+      "task_classes": [
+        "planning",
+        "requirements",
+        "prd",
+        "schema-design",
+        "architecture-support"
+      ],
+      "strengths": [
+        "prd-compilation",
+        "code-aware-planning",
+        "schema-design",
+        "implementation-aware-architecture"
+      ],
+      "preferred_for": [
+        "planning",
+        "requirements",
+        "prd",
+        "schema-design",
+        "code-aware-architecture",
+        "codex",
+        "gpt"
+      ],
+      "avoid_for": [
+        "bulk-extraction",
+        "cheap-background",
+        "critical-security-review",
+        "final-acceptance-signoff"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "planner",
+      "policy": {
+        "write_files": "allowed",
+        "run_shell": "allowed",
+        "network": "allowed",
+        "git_commit": "allowed"
+      },
+      "command": "CODEX_MODEL=gpt-5.5 CODEX_REASONING_EFFORT=high PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/codex_operator.py\"",
+      "command_path": "/opt/homebrew/bin/codex",
+      "launch_cmd_kind": "print_once",
+      "health_check": {
+        "type": "command",
+        "command_path": "/opt/homebrew/bin/codex",
+        "cache_seconds": 300
+      }
     },
-    "state": {
-      "availability": "enabled",
-      "runtime_state": "idle",
-      "cooldown_until": null,
-      "last_error": null,
-      "last_error_at": null
+    "mini-codex-gpt55-medium-planner-2": {
+      "display_name": "Mac mini Codex GPT 5.5 medium planner support slot 2",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "codex-planner",
+      "role": "planner",
+      "persona": "planner",
+      "provider": "openai",
+      "vendor": "OpenAI",
+      "backend": "command",
+      "model": "gpt-5.5",
+      "model_config": "Codex CLI;gpt-5.5;reasoning=high;planner-support;prd",
+      "base_url": "codex-cli",
+      "auth_mode": "subscription_or_api_key",
+      "key_ref": "codex_auth",
+      "quota_cycle": "api_balance",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-06-02T00:00:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "planner"
+      ],
+      "task_classes": [
+        "planning",
+        "requirements",
+        "prd",
+        "schema-design",
+        "architecture-support"
+      ],
+      "strengths": [
+        "prd-compilation",
+        "code-aware-planning",
+        "schema-design",
+        "implementation-aware-architecture"
+      ],
+      "preferred_for": [
+        "planning",
+        "requirements",
+        "prd",
+        "schema-design",
+        "code-aware-architecture",
+        "codex",
+        "gpt"
+      ],
+      "avoid_for": [
+        "bulk-extraction",
+        "cheap-background",
+        "critical-security-review",
+        "final-acceptance-signoff"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "planner",
+      "policy": {
+        "write_files": "allowed",
+        "run_shell": "allowed",
+        "network": "allowed",
+        "git_commit": "allowed"
+      },
+      "command": "CODEX_MODEL=gpt-5.5 CODEX_REASONING_EFFORT=high PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/codex_operator.py\"",
+      "command_path": "/opt/homebrew/bin/codex",
+      "launch_cmd_kind": "print_once",
+      "health_check": {
+        "type": "command",
+        "command_path": "/opt/homebrew/bin/codex",
+        "cache_seconds": 300
+      }
     }
-  }
   }
 }
