@@ -393,6 +393,65 @@ def test_hf_candidate_reasoning_plan_allows_weekly_per_paper_override():
     assert support_plan["strategy"] == "per_paper"
 
 
+def test_hf_report_collection_summary_uses_weekly_source_tables(tmp_path):
+    ns = _load_namespace()
+    db_path = tmp_path / "tech-hotspot-radar.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE hf_daily_papers (
+            paper_date TEXT NOT NULL,
+            paper_id TEXT NOT NULL,
+            rank INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE hf_paper_period_snapshots (
+            paper_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            snapshot_at TEXT NOT NULL
+        );
+        """
+    )
+    conn.executemany(
+        "INSERT INTO hf_daily_papers (paper_date, paper_id, rank) VALUES (?, ?, ?)",
+        [
+            ("2026-05-26", "p1", 1),
+            ("2026-05-26", "p2", 2),
+            ("2026-05-27", "p1", 3),
+            ("2026-05-28", "p3", 4),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO hf_paper_period_snapshots (paper_id, period, snapshot_at) VALUES (?, ?, ?)",
+        [
+            ("p1", "weekly", "2026-05-26T10:00:00Z"),
+            ("p2", "weekly", "2026-05-27T10:00:00Z"),
+            ("p2", "monthly", "2026-05-27T11:00:00Z"),
+            ("p4", "monthly", "2026-06-01T12:00:00Z"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+    summary = ns["hf_report_collection_summary"](
+        {"output": {"database": str(db_path)}},
+        report_context={
+            "cadence": "weekly",
+            "window_start": "2026-05-26",
+            "window_end": "2026-06-01",
+            "window_label": "2026-05-26 ~ 2026-06-01",
+        },
+        public_records=[
+            {"paper_id": "p1", "weekly_signal": {"is_core": True}},
+            {"paper_id": "p2", "weekly_signal": {"is_core": False}},
+        ],
+    )
+    assert summary["daily_rows"] == 4
+    assert summary["daily_unique_papers"] == 3
+    assert summary["weekly_snapshot_unique_papers"] == 2
+    assert summary["monthly_snapshot_unique_papers"] == 2
+    assert summary["selected_papers"] == 2
+    assert summary["core_papers"] == 1
+
+
 def test_hf_missing_value_handles_lists_without_typeerror():
     ns = _load_namespace()
     assert ns["_hf_missing_value"](None) is True

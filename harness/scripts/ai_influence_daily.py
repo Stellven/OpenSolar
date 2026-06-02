@@ -38,6 +38,7 @@ DEFAULT_ACCOUNTS_PATH = SCRIPT_DIR / ".." / "ai-influence-digest" / "references"
 DEFAULT_STATE_DIR = Path.home() / ".solar" / "harness" / "state" / "ai-influence-digest"
 DEFAULT_MAX_AGE_DAYS = int(os.environ.get("AI_INFLUENCE_MAX_AGE_DAYS", "30"))
 DEFAULT_ANALYSIS_TOP_N = int(os.environ.get("AI_INFLUENCE_ANALYSIS_TOP_N", "300"))
+DEFAULT_GLM_BATCH_SIZE = int(os.environ.get("AI_INFLUENCE_GLM_BATCH_SIZE", "25"))
 USER_AGENT = "Solar-AI-Influence-Daily/2.0"
 DEFAULT_MAIL_TO = "sean.lisihao@huawei.com"
 DEFAULT_GMAIL_USER = "lisihao@gmail.com"
@@ -67,6 +68,7 @@ class Candidate:
     published_at: str
     source_method: str  # ddg | profile | rss
     raw_score: int = 0
+    is_pinned: bool = False
     external_links: list[str] = dataclasses.field(default_factory=list)
     images: list[str] = dataclasses.field(default_factory=list)
     external_text: str = ""
@@ -407,6 +409,39 @@ def filter_recent_candidates(
     return recent, stale, missing
 
 
+def filter_pinned_candidates(candidates: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
+    kept: list[Candidate] = []
+    pinned: list[Candidate] = []
+    for candidate in candidates:
+        if bool(getattr(candidate, "is_pinned", False)):
+            pinned.append(candidate)
+        else:
+            kept.append(candidate)
+    return kept, pinned
+
+
+def prune_recent_per_handle(candidates: list[Candidate], max_per_handle: int = 4) -> tuple[list[Candidate], list[Candidate]]:
+    limit = max(1, int(max_per_handle))
+    grouped: dict[str, list[Candidate]] = {}
+    for candidate in candidates:
+        grouped.setdefault(candidate.handle, []).append(candidate)
+    kept: list[Candidate] = []
+    overflow: list[Candidate] = []
+    for group in grouped.values():
+        ordered = sorted(
+            group,
+            key=lambda c: parse_published_at(c.published_at) or dt.datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )
+        kept.extend(ordered[:limit])
+        overflow.extend(ordered[limit:])
+    kept.sort(
+        key=lambda c: parse_published_at(c.published_at) or dt.datetime.min.replace(tzinfo=UTC),
+        reverse=True,
+    )
+    return kept, overflow
+
+
 def init_state_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
@@ -737,33 +772,21 @@ def local_heuristic_analysis(candidates: list[Candidate], top_n: int = 15) -> di
     }
 
 
-def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: Path | None = None) -> dict[str, Any]:
-    """Analyze top candidates with GLM-5.1. Returns analysis result or degraded fallback."""
-    top = rank_candidates(candidates, top_n)
-    if not top:
-        return {"analysis_status": "empty", "items": [], "model": "none"}
-        
-    if images_dir:
-        for c in top:
-            if getattr(c, "external_links", None):
-                ext_text, imgs = fetch_external_article(c.external_links[0], images_dir)
-                if ext_text:
-                    c.external_text = ext_text
-                    c.text += f"\n\n[External Content Snippet]:\n{ext_text}"
-                if imgs:
-                    c.images = imgs
-
-    # Build prompt
+def _build_glm_analysis_prompt(top: list[Candidate]) -> str:
     items_text = "\n\n".join(
         GLM_ANALYSIS_ITEM_TEMPLATE.format(
             handle=c.handle, url=c.tweet_url, text=c.text[:500],
         )
         for c in top
     )
-    prompt = GLM_ANALYSIS_PROMPT.format(n=len(top)) + "\n\n" + items_text
+    return GLM_ANALYSIS_PROMPT.format(n=len(top)) + "\n\n" + items_text
 
+
+def _analyze_glm_chunk(top: list[Candidate]) -> dict[str, Any] | None:
+    prompt = _build_glm_analysis_prompt(top)
+    max_tokens = max(1024, int(os.environ.get("AI_INFLUENCE_GLM_MAX_TOKENS", "8192")))
     # Attempt 1: call GLM
-    raw_response = _call_glm(prompt)
+    raw_response = _call_glm(prompt, max_tokens=max_tokens)
     if raw_response:
         items = _extract_json_array(raw_response)
         if items:
@@ -782,7 +805,7 @@ def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: P
             "上一次输出不是合法 JSON 数组。请只输出纯 JSON 数组，不要任何其他文字。\n\n"
             + prompt
         )
-        raw_response = _call_glm(repair_prompt)
+        raw_response = _call_glm(repair_prompt, max_tokens=max_tokens)
         if raw_response:
             items = _extract_json_array(raw_response)
             if items:
@@ -794,6 +817,76 @@ def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: P
                         "model": os.environ.get("ZHIPU_MODEL", "GLM-5.1"),
                         "raw_scored_count": len(top),
                     }
+    return None
+
+
+def _candidate_chunks(items: list[Candidate], batch_size: int) -> list[list[Candidate]]:
+    clean_size = max(1, batch_size)
+    return [items[index:index + clean_size] for index in range(0, len(items), clean_size)]
+
+
+def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: Path | None = None) -> dict[str, Any]:
+    """Analyze top candidates with GLM-5.1 in batches.
+
+    Large social runs can contain hundreds of short signals. One huge JSON
+    request is fragile, so keep the 300-item analysis pool but call the high
+    model in bounded chunks.
+    """
+    top = rank_candidates(candidates, top_n)
+    if not top:
+        return {"analysis_status": "empty", "items": [], "model": "none"}
+
+    if images_dir:
+        for c in top:
+            if getattr(c, "external_links", None):
+                ext_text, imgs = fetch_external_article(c.external_links[0], images_dir)
+                if ext_text:
+                    c.external_text = ext_text
+                    c.text += f"\n\n[External Content Snippet]:\n{ext_text}"
+                if imgs:
+                    c.images = imgs
+
+    batch_size = max(1, DEFAULT_GLM_BATCH_SIZE)
+    chunks = _candidate_chunks(top, batch_size)
+    analyzed_items: list[dict[str, Any]] = []
+    failed_chunks = 0
+    partial_chunks = 0
+    chunk_statuses: list[str] = []
+    for chunk in chunks:
+        result = _analyze_glm_chunk(chunk)
+        if result and result.get("items"):
+            chunk_statuses.append(str(result.get("analysis_status") or "ok"))
+            chunk_items = list(result["items"])
+            returned_urls = {str(item.get("tweet_url") or "") for item in chunk_items}
+            missing = [candidate for candidate in chunk if candidate.tweet_url not in returned_urls]
+            if missing:
+                partial_chunks += 1
+                chunk_items.extend(local_heuristic_analysis(missing, top_n=len(missing)).get("items") or [])
+            analyzed_items.extend(chunk_items)
+            continue
+        failed_chunks += 1
+        analyzed_items.extend(local_heuristic_analysis(chunk, top_n=len(chunk)).get("items") or [])
+
+    if failed_chunks == len(chunks):
+        return local_heuristic_analysis(top, top_n=len(top))
+
+    if analyzed_items:
+        if failed_chunks or partial_chunks:
+            status = "partial_batched"
+        elif len(chunks) > 1:
+            status = "ok_batched"
+        else:
+            status = chunk_statuses[0] if chunk_statuses else "ok"
+        return {
+            "analysis_status": status,
+            "items": analyzed_items[:len(top)],
+            "model": os.environ.get("ZHIPU_MODEL", "GLM-5.1"),
+            "raw_scored_count": len(top),
+            "batch_size": batch_size,
+            "batch_count": len(chunks),
+            "failed_chunks": failed_chunks,
+            "partial_chunks": partial_chunks,
+        }
 
     # Degraded fallback: return local-scored digest
     return local_heuristic_analysis(top, top_n=len(top))
@@ -1681,6 +1774,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     digest_html = render_digest_html(analysis, effective_date)
 
     (digest_path / "digest.json").write_text(digest_json, encoding="utf-8")
+    (digest_path / "candidate-pool.json").write_text(
+        json.dumps(
+            {
+                "date": effective_date,
+                "analysis_top_n": analysis_top_n,
+                "candidates": result["candidates"],
+                "stats": result["stats"],
+                "plan": plan,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     # No-empty-overwrite guard: if existing digest.md has content and new one is empty, skip
     _existing_md = digest_path / "digest.md"
     if _existing_md.exists() and _existing_md.stat().st_size > 200 and len(digest_md.strip()) < 200:
@@ -1706,7 +1813,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     result["gmail"] = gmail_result
     if gmail_result["status"] == "skipped":
-        print("Mail: skipped for dry-run", file=sys.stderr)
+        reason = gmail_result.get("reason") or gmail_result.get("backend") or "skipped"
+        print(f"Mail: skipped — {reason}", file=sys.stderr)
     elif gmail_result["status"] == "warn":
         preview_path = digest_path / "digest.preview.html"
         preview_path.write_text(digest_html, encoding="utf-8")
