@@ -9,23 +9,19 @@
       "type": "cron",
       "cron": "0 8 * * *"
     },
-    "github_trends": {
-      "line": "github_trends",
-      "primary": "scripts/github_trends_digest.py",
-      "source_schedule": "daily",
-      "type": "cron",
-      "cron": "30 8 * * *",
-      "dual_run": {
-        "enabled": true,
-        "comparison_view": true
-      }
-    },
     "hf_papers": {
       "line": "hf_papers",
       "primary": "scripts/tech_hotspot_radar.py",
+      "source_schedule": "weekly",
+      "type": "cron",
+      "cron": "0 9 * * 1"
+    },
+    "github": {
+      "line": "github",
+      "primary": "scripts/tech_hotspot_radar.py",
       "source_schedule": "daily",
       "type": "cron",
-      "cron": "0 9 * * *"
+      "cron": "0 8/6 * * *"
     },
     "gemini_research": {
       "line": "gemini_research",
