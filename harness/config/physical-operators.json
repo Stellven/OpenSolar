@@ -2510,6 +2510,240 @@
         "priority": 9
       }
     },
+    "mini-codex-gpt53-spark-builder-2": {
+      "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 2",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "codex-builder",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "openai",
+      "vendor": "OpenAI",
+      "backend": "command",
+      "model": "gpt-5.3-codex-spark",
+      "model_config": "Codex CLI;gpt-5.3-codex-spark;reasoning=medium;builder-pool;independent-budget",
+      "base_url": "codex-cli",
+      "auth_mode": "subscription_or_api_key",
+      "key_ref": "codex_auth",
+      "quota_cycle": "api_balance",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-06-02T00:35:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "implementation",
+        "debugging",
+        "tests",
+        "refactor",
+        "fast-patch",
+        "code-edit"
+      ],
+      "strengths": [
+        "code-edit",
+        "tests",
+        "repo-modification",
+        "independent-budget"
+      ],
+      "preferred_for": [
+        "implementation",
+        "code-edit",
+        "tests",
+        "refactor",
+        "codex",
+        "spark"
+      ],
+      "avoid_for": [
+        "bulk-extraction",
+        "critical-security-review"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "builder",
+      "policy": {
+        "write_files": "allowed",
+        "run_shell": "allowed",
+        "network": "allowed",
+        "git_commit": "allowed"
+      },
+      "command": "CODEX_MODEL=gpt-5.3-codex-spark CODEX_REASONING_EFFORT=medium PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/codex_operator.py\"",
+      "command_path": "/opt/homebrew/bin/codex",
+      "launch_cmd_kind": "print_once",
+      "health_check": {
+        "type": "command",
+        "command_path": "/opt/homebrew/bin/codex",
+        "cache_seconds": 300
+      },
+      "builder_pool": {
+        "enabled": true,
+        "group": "codex-gpt-5.3-spark",
+        "slot": 2,
+        "priority": 9
+      }
+    },
+    "mini-codex-gpt53-spark-builder-3": {
+      "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 3",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "codex-builder",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "openai",
+      "vendor": "OpenAI",
+      "backend": "command",
+      "model": "gpt-5.3-codex-spark",
+      "model_config": "Codex CLI;gpt-5.3-codex-spark;reasoning=medium;builder-pool;independent-budget",
+      "base_url": "codex-cli",
+      "auth_mode": "subscription_or_api_key",
+      "key_ref": "codex_auth",
+      "quota_cycle": "api_balance",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-06-02T00:35:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "implementation",
+        "debugging",
+        "tests",
+        "refactor",
+        "fast-patch",
+        "code-edit"
+      ],
+      "strengths": [
+        "code-edit",
+        "tests",
+        "repo-modification",
+        "independent-budget"
+      ],
+      "preferred_for": [
+        "implementation",
+        "code-edit",
+        "tests",
+        "refactor",
+        "codex",
+        "spark"
+      ],
+      "avoid_for": [
+        "bulk-extraction",
+        "critical-security-review"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "builder",
+      "policy": {
+        "write_files": "allowed",
+        "run_shell": "allowed",
+        "network": "allowed",
+        "git_commit": "allowed"
+      },
+      "command": "CODEX_MODEL=gpt-5.3-codex-spark CODEX_REASONING_EFFORT=medium PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/codex_operator.py\"",
+      "command_path": "/opt/homebrew/bin/codex",
+      "launch_cmd_kind": "print_once",
+      "health_check": {
+        "type": "command",
+        "command_path": "/opt/homebrew/bin/codex",
+        "cache_seconds": 300
+      },
+      "builder_pool": {
+        "enabled": true,
+        "group": "codex-gpt-5.3-spark",
+        "slot": 3,
+        "priority": 9
+      }
+    },
+    "mini-codex-gpt53-spark-builder-4": {
+      "display_name": "Mac mini Codex GPT 5.3 Spark builder pool slot 4",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "codex-builder",
+      "role": "builder",
+      "persona": "builder",
+      "provider": "openai",
+      "vendor": "OpenAI",
+      "backend": "command",
+      "model": "gpt-5.3-codex-spark",
+      "model_config": "Codex CLI;gpt-5.3-codex-spark;reasoning=medium;builder-pool;independent-budget",
+      "base_url": "codex-cli",
+      "auth_mode": "subscription_or_api_key",
+      "key_ref": "codex_auth",
+      "quota_cycle": "api_balance",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-06-02T00:35:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "builder"
+      ],
+      "task_classes": [
+        "implementation",
+        "debugging",
+        "tests",
+        "refactor",
+        "fast-patch",
+        "code-edit"
+      ],
+      "strengths": [
+        "code-edit",
+        "tests",
+        "repo-modification",
+        "independent-budget"
+      ],
+      "preferred_for": [
+        "implementation",
+        "code-edit",
+        "tests",
+        "refactor",
+        "codex",
+        "spark"
+      ],
+      "avoid_for": [
+        "bulk-extraction",
+        "critical-security-review"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "medium",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "builder",
+      "policy": {
+        "write_files": "allowed",
+        "run_shell": "allowed",
+        "network": "allowed",
+        "git_commit": "allowed"
+      },
+      "command": "CODEX_MODEL=gpt-5.3-codex-spark CODEX_REASONING_EFFORT=medium PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/codex_operator.py\"",
+      "command_path": "/opt/homebrew/bin/codex",
+      "launch_cmd_kind": "print_once",
+      "health_check": {
+        "type": "command",
+        "command_path": "/opt/homebrew/bin/codex",
+        "cache_seconds": 300
+      },
+      "builder_pool": {
+        "enabled": true,
+        "group": "codex-gpt-5.3-spark",
+        "slot": 4,
+        "priority": 9
+      }
+    },
     "mini-glm51-builder-1": {
       "display_name": "Mac mini GLM-5.1 builder pool slot 1",
       "plane": "headless",
