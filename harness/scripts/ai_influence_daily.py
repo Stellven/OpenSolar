@@ -38,7 +38,7 @@ DEFAULT_ACCOUNTS_PATH = SCRIPT_DIR / ".." / "ai-influence-digest" / "references"
 DEFAULT_STATE_DIR = Path.home() / ".solar" / "harness" / "state" / "ai-influence-digest"
 DEFAULT_MAX_AGE_DAYS = int(os.environ.get("AI_INFLUENCE_MAX_AGE_DAYS", "30"))
 DEFAULT_ANALYSIS_TOP_N = int(os.environ.get("AI_INFLUENCE_ANALYSIS_TOP_N", "300"))
-DEFAULT_GLM_BATCH_SIZE = int(os.environ.get("AI_INFLUENCE_GLM_BATCH_SIZE", "25"))
+DEFAULT_GLM_BATCH_SIZE = int(os.environ.get("AI_INFLUENCE_GLM_BATCH_SIZE", "10"))
 USER_AGENT = "Solar-AI-Influence-Daily/2.0"
 DEFAULT_MAIL_TO = "sean.lisihao@huawei.com"
 DEFAULT_GMAIL_USER = "lisihao@gmail.com"
@@ -642,6 +642,7 @@ def _call_glm(prompt: str, max_tokens: int = 4096, timeout: int = 60) -> str | N
         return None
 
     try:
+        timeout = int(os.environ.get("AI_INFLUENCE_GLM_TIMEOUT_SEC", str(timeout)))
         resp = requests.post(
             f"{base_url}/v1/messages",
             headers={
@@ -657,13 +658,15 @@ def _call_glm(prompt: str, max_tokens: int = 4096, timeout: int = 60) -> str | N
             timeout=timeout,
         )
         if resp.status_code != 200:
+            print(f"GLM request failed: status={resp.status_code} body={resp.text[:240]}", file=sys.stderr)
             return None
         data = resp.json()
         for block in data.get("content", []):
             if block.get("type") == "text":
                 return block["text"]
         return None
-    except Exception:
+    except Exception as exc:
+        print(f"GLM request error: {exc}", file=sys.stderr)
         return None
 
 
@@ -825,6 +828,39 @@ def _candidate_chunks(items: list[Candidate], batch_size: int) -> list[list[Cand
     return [items[index:index + clean_size] for index in range(0, len(items), clean_size)]
 
 
+def _merge_glm_chunk_with_retry(
+    chunk: list[Candidate],
+    *,
+    retry_missing: bool = True,
+) -> tuple[list[dict[str, Any]], int, int, str]:
+    """Return analyzed items plus failed/partial counters for a chunk.
+
+    GLM may return fewer rows than requested. Retry only the missing rows before
+    falling back locally, so a single malformed batch does not erase high-model
+    coverage for the whole chunk.
+    """
+    result = _analyze_glm_chunk(chunk)
+    if not result or not result.get("items"):
+        return [], 1, 0, "failed"
+
+    chunk_items = list(result["items"])
+    returned_urls = {str(item.get("tweet_url") or "") for item in chunk_items}
+    missing = [candidate for candidate in chunk if candidate.tweet_url not in returned_urls]
+    partial = 0
+    if missing:
+        partial = 1
+        if retry_missing:
+            retry_result = _analyze_glm_chunk(missing)
+            if retry_result and retry_result.get("items"):
+                retry_items = list(retry_result["items"])
+                chunk_items.extend(retry_items)
+                returned_urls = {str(item.get("tweet_url") or "") for item in chunk_items}
+                missing = [candidate for candidate in chunk if candidate.tweet_url not in returned_urls]
+        if missing:
+            chunk_items.extend(local_heuristic_analysis(missing, top_n=len(missing)).get("items") or [])
+    return chunk_items, 0, partial, str(result.get("analysis_status") or "ok")
+
+
 def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: Path | None = None) -> dict[str, Any]:
     """Analyze top candidates with GLM-5.1 in batches.
 
@@ -851,23 +887,62 @@ def analyze_with_glm(candidates: list[Candidate], top_n: int = 15, images_dir: P
     analyzed_items: list[dict[str, Any]] = []
     failed_chunks = 0
     partial_chunks = 0
+    model_success_chunks = 0
     chunk_statuses: list[str] = []
-    for chunk in chunks:
-        result = _analyze_glm_chunk(chunk)
-        if result and result.get("items"):
-            chunk_statuses.append(str(result.get("analysis_status") or "ok"))
-            chunk_items = list(result["items"])
-            returned_urls = {str(item.get("tweet_url") or "") for item in chunk_items}
-            missing = [candidate for candidate in chunk if candidate.tweet_url not in returned_urls]
-            if missing:
-                partial_chunks += 1
-                chunk_items.extend(local_heuristic_analysis(missing, top_n=len(missing)).get("items") or [])
+    for index, chunk in enumerate(chunks, 1):
+        print(f"GLM batch {index}/{len(chunks)} size={len(chunk)}", file=sys.stderr)
+        chunk_items, failed, partial, status = _merge_glm_chunk_with_retry(chunk)
+        if chunk_items and not failed:
+            model_success_chunks += 1
+            chunk_statuses.append(status)
+            partial_chunks += partial
             analyzed_items.extend(chunk_items)
+            print(
+                f"GLM batch {index}/{len(chunks)} {status} items={len(chunk_items)} partial={partial}",
+                file=sys.stderr,
+            )
             continue
+
+        if len(chunk) > 5:
+            print(
+                f"GLM batch {index}/{len(chunks)} failed; retrying as 5-item sub-batches",
+                file=sys.stderr,
+            )
+            split_items: list[dict[str, Any]] = []
+            split_failed = 0
+            split_partial = 0
+            for sub_index, sub_chunk in enumerate(_candidate_chunks(chunk, 5), 1):
+                sub_items, sub_failed, sub_partial, sub_status = _merge_glm_chunk_with_retry(sub_chunk)
+                split_failed += sub_failed
+                split_partial += sub_partial
+                if sub_items and not sub_failed:
+                    model_success_chunks += 1
+                    split_items.extend(sub_items)
+                    print(
+                        f"GLM sub-batch {index}.{sub_index} {sub_status} items={len(sub_items)} partial={sub_partial}",
+                        file=sys.stderr,
+                    )
+                else:
+                    split_items.extend(local_heuristic_analysis(sub_chunk, top_n=len(sub_chunk)).get("items") or [])
+                    print(
+                        f"GLM sub-batch {index}.{sub_index} failed; local fallback items={len(sub_chunk)}",
+                        file=sys.stderr,
+                    )
+            if split_items:
+                failed_chunks += split_failed
+                partial_chunks += split_partial
+                chunk_statuses.append("split_retry")
+                analyzed_items.extend(split_items)
+                continue
+
         failed_chunks += 1
         analyzed_items.extend(local_heuristic_analysis(chunk, top_n=len(chunk)).get("items") or [])
+        print(
+            f"GLM batch {index}/{len(chunks)} failed; local fallback items={len(chunk)}",
+            file=sys.stderr,
+        )
 
-    if failed_chunks == len(chunks):
+    if model_success_chunks == 0:
         return local_heuristic_analysis(top, top_n=len(top))
 
     if analyzed_items:
@@ -1123,6 +1198,13 @@ def render_digest_json(analysis: dict, plan: dict, stats: dict, date_str: str) -
         "date": date_str,
         "analysis_status": analysis.get("analysis_status"),
         "model": analysis.get("model"),
+        "analysis_meta": {
+            "batch_size": analysis.get("batch_size"),
+            "batch_count": analysis.get("batch_count"),
+            "failed_chunks": analysis.get("failed_chunks"),
+            "partial_chunks": analysis.get("partial_chunks"),
+            "raw_scored_count": analysis.get("raw_scored_count"),
+        },
         "trend_analysis": analysis.get("trend_analysis", {}),
         "coverage": analysis.get("coverage", {}),
         "items": analysis.get("items", []),
