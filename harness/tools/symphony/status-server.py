@@ -637,7 +637,8 @@ def _build_report_subject(item: dict) -> str:
     title = str(item.get("title") or "AI Influence 报告").strip()
     date_str = str(item.get("date") or "").strip()
     module_label = str(item.get("module_label") or "AI Influence").strip()
-    return f"{module_label}：{title}" + (f" — {date_str}" if date_str else "")
+    suffix = f" — {date_str}" if date_str and date_str not in title else ""
+    return f"{module_label}：{title}{suffix}"
 
 
 def _planned_report_item(report_dir: Path) -> dict:
@@ -855,6 +856,57 @@ def _phase_report_item(run_dir: Path, phase_name: str) -> dict:
     }
 
 
+def _github_trend_report_item(run_dir: Path) -> dict:
+    report_id = _ai_influence_report_id("github_trend_report", run_dir)
+    report_json_path = run_dir / "github-trend-report.json"
+    html_path = run_dir / "github-trend-report.html"
+    md_path = run_dir / "github-trend-report.md"
+    pack_path = run_dir / "github-trend-pack.json"
+    mail_path = run_dir / "mail-result.json"
+    result = _read_json_file(report_json_path)
+    pack = _read_json_file(pack_path)
+    date_str = _ai_influence_date_from_path(run_dir) or run_dir.name
+    card_count = len(pack.get("cards") or []) if isinstance(pack, dict) else 0
+    model = str(result.get("model") or "N/A") if isinstance(result, dict) else "N/A"
+    return {
+        "kind": "github_trend_report",
+        "id": report_id,
+        "module_key": "github_trend_report",
+        "module_label": "GitHub 洞察",
+        "module_title": "AI Influence GitHub 开源趋势洞察",
+        "date": date_str,
+        "title": f"AI Influence GitHub 开源趋势洞察 — {date_str}",
+        "subtitle": "基于项目情报卡、HF 论文侧信号和证据包生成的开源趋势判断",
+        "status": "ok" if html_path.exists() and md_path.exists() else "warn",
+        "primary": _ai_influence_public_artifact("report_html", html_path, report_id) if html_path.exists() else _ai_influence_public_artifact("report_md", md_path, report_id),
+        "artifacts": [
+            _ai_influence_public_artifact("report_html", html_path, report_id),
+            _ai_influence_public_artifact("report_md", md_path, report_id),
+            _ai_influence_public_artifact("report_result_json", report_json_path, report_id),
+            _ai_influence_public_artifact("evidence_pack_json", pack_path, report_id),
+        ],
+        "mail": _read_json_file(mail_path) if mail_path.exists() else {"status": "skipped"},
+        "metrics": {
+            "项目卡": card_count,
+            "模型": model,
+            "watchlist": int(pack.get("repo_count") or 0) if isinstance(pack, dict) else 0,
+        },
+        "filters": {
+            "themes": ["GitHub 洞察", "开源趋势"],
+            "technologies": ["GitHub", "Repo", "Open Source"],
+            "channels": [],
+        },
+        "resources": _ai_influence_resource_links(run_dir, [
+            "github-trend-report.md",
+            "github-trend-report.json",
+            "github-trend-pack.json",
+            "wiki-dispatch.md",
+        ], report_id),
+        "_report_dir": str(run_dir),
+        "mtime": max((p.stat().st_mtime for p in [html_path, md_path, report_json_path, pack_path, mail_path] if p.exists()), default=run_dir.stat().st_mtime if run_dir.exists() else 0),
+    }
+
+
 def _ai_influence_group_summary(key: str, items: list[dict]) -> dict:
     if key == "planned":
         rows = []
@@ -1062,6 +1114,11 @@ def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict
             for child in sorted((p for p in phase_dir.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
                 if (child / "report.html").exists() and (child / "phase-report.json").exists():
                     items.append(_phase_report_item(child, phase_dir.name))
+        github_report_root = tech_hotspot_raw_dir / "github-trend-report"
+        if github_report_root.exists():
+            for child in github_report_root.iterdir():
+                if child.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", child.name) and ((child / "github-trend-report.html").exists() or (child / "github-trend-report.md").exists()):
+                    items.append(_github_trend_report_item(child))
     items.sort(key=lambda item: item.get("mtime", 0), reverse=True)
     normalized_period, cutoff = _ai_influence_period_cutoff(period)
     if cutoff is not None:
@@ -1131,6 +1188,13 @@ def _resolve_ai_influence_artifact(report_id: str, artifact_label: str) -> Path 
         "phase_report_md": report_dir / "phase-report.md",
         "phase_report_json": report_dir / "phase-report.json",
     }
+    if str(item.get("kind") or "") == "github_trend_report":
+        allowed.update({
+            "report_html": report_dir / "github-trend-report.html",
+            "report_md": report_dir / "github-trend-report.md",
+            "report_result_json": report_dir / "github-trend-report.json",
+            "evidence_pack_json": report_dir / "github-trend-pack.json",
+        })
     for resource in item.get("resources") or []:
         if not isinstance(resource, dict):
             continue
@@ -1153,7 +1217,7 @@ def _resolve_ai_influence_mail_target(data: dict):
     target = _resolve_open_file(raw)
     if not target:
         return None
-    if target.name not in {"report.html", "digest.html", "digest.preview.html"}:
+    if target.suffix.lower() != ".html":
         return None
     roots = [AI_INFLUENCE_RAW_DIR, _tech_hotspot_raw_dir()]
     if not any(_is_within(target, root) for root in roots if root.exists()):
@@ -1179,7 +1243,19 @@ def _ai_influence_send_report(data: dict) -> dict:
     }
     subject = str(data.get("subject") or _build_report_subject(item))
     attachments = _ai_influence_collect_attachments(report_dir)
-    with _temporary_environ({"AI_INFLUENCE_MAIL_TO": to_value}):
+    from_value = str(config.get("from") or "").strip()
+    if not from_value:
+        # Status-server launchd does not inherit the user's shell GMAIL_USER.
+        # Prefer an explicit Gmail recipient as the SMTP account so send buttons
+        # work without duplicating secrets in the status UI config.
+        recipients_for_account = [addr.strip() for addr in re.split(r"[,;]", to_value) if addr.strip()]
+        from_value = next((addr for addr in recipients_for_account if addr.lower().endswith("@gmail.com")), "")
+    env_overrides = {"AI_INFLUENCE_MAIL_TO": to_value}
+    if from_value:
+        env_overrides["AI_INFLUENCE_GMAIL_USER"] = from_value
+        env_overrides["GMAIL_USER"] = from_value
+        env_overrides["GMAIL_APP_PASSWORD_KEYCHAIN_ACCOUNT"] = from_value
+    with _temporary_environ(env_overrides):
         result = module.send_html_email(html_content, subject, attachments)
     result = dict(result or {})
     result["subject"] = subject
@@ -1187,7 +1263,7 @@ def _ai_influence_send_report(data: dict) -> dict:
     result["to"] = result.get("to") or [addr.strip() for addr in re.split(r"[,;]", to_value) if addr.strip()]
     if str(result.get("status") or "").lower() == "sent":
         (report_dir / "mail-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"ok": str(result.get("status") or "").lower() in {"sent", "warn"}, "status": result.get("status", "warn"), "result": result}
+    return {"ok": str(result.get("status") or "").lower() == "sent", "status": result.get("status", "warn"), "result": result}
 
 
 def _ai_influence_html(period: str = "30d") -> str:
@@ -1258,7 +1334,7 @@ def _ai_influence_html(period: str = "30d") -> str:
               <div class="metrics">{''.join(metric_bits) or '<span><b>N/A</b><small>指标</small></span>'}</div>
               <div class="actions">
                 <a class="btn primary" href="{html.escape(open_url)}" target="_blank" rel="noreferrer">打开报告</a>
-                <button class="btn accent" data-payload="{mail_payload_attr}" onclick="sendAiInfluenceReport(JSON.parse(this.dataset.payload))">发送邮件</button>
+                <button class="btn accent" data-payload="{mail_payload_attr}" onclick="sendAiInfluenceReport(JSON.parse(this.dataset.payload), {{button: this}})">发送邮件</button>
                 <button class="btn" onclick='showMailConfig()'>配置发送邮箱</button>
               </div>
             </article>
@@ -1353,6 +1429,9 @@ def _ai_influence_html(period: str = "30d") -> str:
     .btn {{ border:1px solid var(--line); background:#fff; color:var(--green); text-decoration:none; border-radius:999px; padding:9px 14px; font-size:13px; font-weight:700; cursor:pointer; }}
     .btn.primary {{ background:var(--green); color:#fff; border-color:var(--green); }}
     .btn.accent {{ background:#fff4e8; color:var(--accent); border-color:#efcfaa; }}
+    .btn.sending {{ opacity:.72; transform:translateY(1px); box-shadow:inset 0 0 0 999px rgba(18,59,53,.08); cursor:wait; }}
+    .btn.sent {{ background:#e6f5ee; color:#16633f; border-color:#a9d9c0; }}
+    .btn.failed {{ background:#fff0ef; color:#9f2e24; border-color:#e5aaa3; }}
     .btn.tiny {{ padding:6px 10px; font-size:12px; }}
     .mail-config {{ display:none; margin:16px 0 22px; padding:18px; border-radius:22px; border:1px solid var(--line); background:rgba(255,253,248,.9); box-shadow:0 10px 26px rgba(49,42,31,.06); }}
     .mail-config.visible {{ display:block; }}
@@ -1685,22 +1764,52 @@ def _ai_influence_html(period: str = "30d") -> str:
     }}
     async function sendAiInfluenceReport(payload, options = {{}}) {{
       const status = document.getElementById('mail-status');
-      status.textContent = '发信中...';
-      const body = Object.assign({{}}, payload, {{to: document.getElementById('mail-to').value.trim()}});
-      const res = await fetch('/ai-influence/send', {{
-        method: 'POST',
-        headers: {{'Content-Type': 'application/json'}},
-        body: JSON.stringify(body)
-      }});
-      const data = await res.json();
-      if (!data.ok) {{
-        status.textContent = '发送失败：' + (data.error || data.result?.reason || JSON.stringify(data));
-        return;
+      const button = options.button || null;
+      const originalText = button ? button.textContent : '';
+      if (button) {{
+        button.disabled = true;
+        button.classList.remove('sent', 'failed');
+        button.classList.add('sending');
+        button.textContent = '发送中...';
       }}
-      const result = data.result || {{}};
-      status.textContent = '已发送：' + (result.subject || payload.title || '报告');
-      if (!options.silent) {{
-        setTimeout(() => location.reload(), 700);
+      status.textContent = '发信中...';
+      try {{
+        const body = Object.assign({{}}, payload, {{to: document.getElementById('mail-to').value.trim()}});
+        const res = await fetch('/ai-influence/send', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify(body)
+        }});
+        const data = await res.json();
+        if (!data.ok) {{
+          const message = data.error || data.result?.reason || JSON.stringify(data);
+          status.textContent = '发送失败：' + message;
+          if (button) {{
+            button.classList.remove('sending');
+            button.classList.add('failed');
+            button.textContent = '发送失败';
+            setTimeout(() => {{ button.disabled = false; button.textContent = originalText || '发送邮件'; button.classList.remove('failed'); }}, 2200);
+          }}
+          return;
+        }}
+        const result = data.result || {{}};
+        status.textContent = '已发送：' + (result.subject || payload.title || '报告');
+        if (button) {{
+          button.classList.remove('sending');
+          button.classList.add('sent');
+          button.textContent = '已发送';
+        }}
+        if (!options.silent) {{
+          setTimeout(() => location.reload(), 900);
+        }}
+      }} catch (err) {{
+        status.textContent = '发送失败：' + (err && err.message ? err.message : err);
+        if (button) {{
+          button.classList.remove('sending');
+          button.classList.add('failed');
+          button.textContent = '发送失败';
+          setTimeout(() => {{ button.disabled = false; button.textContent = originalText || '发送邮件'; button.classList.remove('failed'); }}, 2200);
+        }}
       }}
     }}
     async function sendBatchReports(cards, label) {{
@@ -2003,7 +2112,6 @@ def _knowledge_ingest_progress_payload() -> dict:
         "web_captures": raw_dir / "web-captures",
         "youtube": raw_dir / "youtube-influence-digest",
         "ai_influence": raw_dir / "ai-influence-daily-digest",
-        "github_trends": raw_dir / "github-trends-digest",
         "solar_harness": raw_dir / "solar-harness",
     }
     source_rows = []
@@ -5979,10 +6087,6 @@ Config http://127.0.0.1:8789/setup</div>
           <div class="action-card">
             <div><h3>订阅中心</h3><div class="muted">维护 YouTube、热点社交媒体和 GitHub 趋势分类。</div></div>
             <a class="btn primary" href="/knowledge/subscriptions-view" target="_blank" rel="noreferrer">打开订阅中心</a>
-          </div>
-          <div class="action-card">
-            <div><h3>GitHub 趋势日报</h3><div class="muted">采集 GitHub Trending / Trendshift，并写入 SQLite + Raw。</div></div>
-            <button class="btn" onclick="copyText('python3 ~/Solar/harness/scripts/github_trends_digest.py run')">复制命令</button>
           </div>
         </div>
       </div>
