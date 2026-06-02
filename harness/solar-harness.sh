@@ -3948,6 +3948,7 @@ PY
     echo "  $0 2 [工作目录]        启动2化身"
     echo "  $0 status              查看状态"
     echo "  $0 main-status         查看主屏 runtime + assignment + artifact 状态"
+    echo "  $0 actorhost-status [--json] [--host-type TYPE]  查看 actor/host/lease taxonomy"
     echo "  $0 lab-status          查看 lab pane runtime + handoff artifact 状态"
     echo "  $0 doctor              环境自检"
     echo "  $0 kill                关闭"
@@ -5011,6 +5012,79 @@ PLIST
         err "Unknown graph-dispatch subcommand: $_graph_dispatch_subcmd"; exit 1
         ;;
     esac
+    ;;
+
+  actorhost-status)
+    shift
+    _actorhost_json="0"
+    _actorhost_filter=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --json)
+          _actorhost_json="1"; shift ;;
+        --host-type)
+          [[ -n "${2:-}" ]] || { err "--host-type requires value"; exit 1; }
+          _actorhost_filter="$2"; shift 2 ;;
+        --help|-h)
+          echo "Usage: $0 actorhost-status [--json] [--host-type TYPE]"
+          exit 0 ;;
+        *)
+          err "Unknown actorhost-status option: $1"; exit 1 ;;
+      esac
+    done
+    python3 - "$HARNESS_DIR" "$_actorhost_json" "$_actorhost_filter" "$0" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+harness_dir = Path(sys.argv[1])
+as_json = sys.argv[2] == "1"
+host_type_filter = sys.argv[3]
+script_harness_dir = Path(sys.argv[4]).resolve().parent
+for path in (harness_dir / "lib", script_harness_dir / "tools", script_harness_dir / "lib"):
+    value = str(path)
+    if value in sys.path:
+        sys.path.remove(value)
+    sys.path.insert(0, value)
+from monitor_bridge import build_snapshot  # noqa: E402
+from multi_task_status import CANONICAL_HOST_TYPES  # noqa: E402
+
+snapshot = build_snapshot()
+actors = snapshot.get("actor_fleet") if isinstance(snapshot.get("actor_fleet"), dict) else {}
+if host_type_filter:
+    actors = {
+        aid: entry for aid, entry in actors.items()
+        if str(entry.get("host_type") or "") == host_type_filter
+    }
+payload = {
+    "schema": "solar.actorhost_status.v1",
+    "observed_at": snapshot.get("observed_at"),
+    "canonical_host_types": list(CANONICAL_HOST_TYPES),
+    "actor_count": len(actors),
+    "actor_lease_counts": snapshot.get("actor_lease_counts", {}),
+    "actors": actors,
+}
+if as_json:
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    raise SystemExit(0)
+
+print("Solar ActorHost Status")
+print(f"canonical_host_types={','.join(payload['canonical_host_types'])}")
+print("┌────────────────────────────────────┬────────────────────┬──────────────────────────┬─────────────┬────────────┐")
+print("│ Actor                              │ Host               │ Host Type                │ Lease       │ Role       │")
+print("├────────────────────────────────────┼────────────────────┼──────────────────────────┼─────────────┼────────────┤")
+for aid, entry in sorted(actors.items()):
+    print(
+        "│ %-34s │ %-18s │ %-24s │ %-11s │ %-10s │" % (
+            aid[:34],
+            str(entry.get("host_id") or "N/A")[:18],
+            str(entry.get("host_type") or "N/A")[:24],
+            str(entry.get("lease_state") or "N/A")[:11],
+            str(entry.get("role") or "N/A")[:10],
+        )
+    )
+print("└────────────────────────────────────┴────────────────────┴──────────────────────────┴─────────────┴────────────┘")
+PY
     ;;
 
   pm-fleet|builder-pool|concurrency)
