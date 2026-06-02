@@ -12,7 +12,7 @@
         "multi_agent_coordination": 3
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 3, "singleton": false}
+      "concurrency": {"max_parallel": 6, "singleton": false}
     },
     "RootCauseDebugger": {
       "operator_type": "RootCauseDebugger",
@@ -93,7 +93,7 @@
         "research_synthesis": 3
       },
       "cost_hint": "high",
-      "concurrency": {"max_parallel": 3, "singleton": false}
+      "concurrency": {"max_parallel": 5, "singleton": false}
     },
     "ResearchScout": {
       "operator_type": "ResearchScout",
