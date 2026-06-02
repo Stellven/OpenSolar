@@ -475,26 +475,11 @@ project: github-trends-digest
 
 
 def write_digest(config: dict[str, Any], analysis: dict[str, Any], date_str: str) -> dict[str, Any]:
-    raw_dir = Path((config.get("output") or {}).get("raw_dir", Path.home() / "Knowledge/_raw/github-trends-digest")).expanduser()
-    run_dir = raw_dir / date_str
-    run_dir.mkdir(parents=True, exist_ok=True)
-    md = render_md(analysis, config, date_str)
-    html_text = render_html(analysis, config, date_str)
-    dispatch = create_wiki_dispatch(run_dir, date_str, config)
-    mail_enabled = os.environ.get("GITHUB_TRENDS_SEND_MAIL", "true").strip().lower() not in {"0", "false", "no", "off"}
-    mail_result = (
-        send_email(html_text, date_str)
-        if mail_enabled else
-        {"status": "skipped", "backend": "disabled", "reason": "GITHUB_TRENDS_SEND_MAIL=false"}
-    )
-    payload = {"date": date_str, "analysis": analysis, "wiki_dispatch": dispatch, "mail": mail_result}
-    (run_dir / "digest.md").write_text(md, encoding="utf-8")
-    (run_dir / "digest.html").write_text(html_text, encoding="utf-8")
-    (run_dir / "digest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (raw_dir / "latest.md").write_text(md, encoding="utf-8")
-    if mail_result.get("status") == "warn":
-        (run_dir / "digest.preview.html").write_text(html_text, encoding="utf-8")
-    return {"run_dir": str(run_dir), "digest_md": str(run_dir / "digest.md"), "digest_html": str(run_dir / "digest.html"), "wiki_dispatch": dispatch, "mail": mail_result}
+    return {
+        "status": "disabled",
+        "reason": "raw GitHub Trends Digest report generation was retired; use tech_hotspot_radar.py github-trend-report for AI Influence insight reports",
+        "date": date_str,
+    }
 
 
 def html_to_text(html_content: str) -> str:
@@ -606,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
     analysis = analyze(config)
     date_str = (args.date or now_utc().strftime("%Y-%m-%d"))[:10]
     digest = write_digest(config, analysis, date_str)
-    print(json.dumps({"ok": True, "collect": collected, "digest": digest}, ensure_ascii=False, indent=2))
+    print(json.dumps({"ok": True, "collect": collected, "analysis_windows": list((analysis.get("windows") or {}).keys()), "digest": digest}, ensure_ascii=False, indent=2))
     return 0
 
 

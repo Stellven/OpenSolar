@@ -58,20 +58,27 @@ def main() -> None:
             },
         }
         conn = mod.ensure_db(base / "state" / "github.sqlite")
-        mod.save_snapshots(conn, rows, config, "2026-05-23T00:00:00Z")
+        date_str = mod.now_utc().strftime("%Y-%m-%d")
+        mod.save_snapshots(conn, rows, config, mod.iso_z())
         analysis = mod.analyze(config)
         assert analysis["windows"]["daily"]
         assert analysis["windows"]["daily"][0]["category"] == "agent"
+        old_send_mail = os.environ.get("GITHUB_TRENDS_SEND_MAIL")
         old_backend = os.environ.get("GITHUB_TRENDS_MAIL_BACKEND")
+        os.environ.pop("GITHUB_TRENDS_SEND_MAIL", None)
         os.environ["GITHUB_TRENDS_MAIL_BACKEND"] = "preview"
-        digest = mod.write_digest(config, analysis, "2026-05-23")
+        digest = mod.write_digest(config, analysis, date_str)
+        if old_send_mail is None:
+            os.environ.pop("GITHUB_TRENDS_SEND_MAIL", None)
+        else:
+            os.environ["GITHUB_TRENDS_SEND_MAIL"] = old_send_mail
         if old_backend is None:
             os.environ.pop("GITHUB_TRENDS_MAIL_BACKEND", None)
         else:
             os.environ["GITHUB_TRENDS_MAIL_BACKEND"] = old_backend
-        assert Path(digest["digest_md"]).exists()
-        assert Path(digest["digest_html"]).exists()
-        assert Path(digest["wiki_dispatch"]).exists()
+        assert digest["status"] == "disabled"
+        assert "retired" in digest["reason"]
+        assert digest["date"] == date_str
 
     print("PASS github trends digest")
 
