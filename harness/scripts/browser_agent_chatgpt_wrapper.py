@@ -25,6 +25,8 @@ from browser_use.browser.session import BrowserSession
 DEFAULT_URL = "https://chatgpt.com/"
 DEFAULT_USER_DATA_DIR = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
 DEFAULT_PROFILE_DIRECTORY = "Profile 1"
+DEFAULT_BROWSER_CHANNEL = "chrome"
+DEFAULT_CHROME_EXECUTABLE = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 DEFAULT_ALLOWED_DOMAINS = ["chatgpt.com", "auth.openai.com", "challenges.cloudflare.com"]
 
 
@@ -44,6 +46,73 @@ def _headed_run_allowed() -> bool:
         "BROWSER_AGENT_ALLOW_HEADED",
         default=False,
     )
+
+
+def _browser_channel() -> str:
+    value = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_BROWSER_CHANNEL")
+        or os.environ.get("BROWSER_AGENT_BROWSER_CHANNEL")
+        or DEFAULT_BROWSER_CHANNEL
+    ).strip().lower()
+    return value or DEFAULT_BROWSER_CHANNEL
+
+
+def _system_chrome_version() -> str:
+    try:
+        result = subprocess.run(
+            [str(DEFAULT_CHROME_EXECUTABLE), "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return "148.0.0.0"
+    text = str(result.stdout or result.stderr or "").strip()
+    parts = text.split()
+    return parts[-1] if parts else "148.0.0.0"
+
+
+def _build_mac_chrome_user_agent(version: str) -> str:
+    clean_version = str(version or "").strip() or "148.0.0.0"
+    return (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        f"Chrome/{clean_version} Safari/537.36"
+    )
+
+
+def _browser_user_agent(*, browser_channel: str) -> str:
+    explicit = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_USER_AGENT")
+        or os.environ.get("BROWSER_AGENT_USER_AGENT")
+        or ""
+    ).strip()
+    if explicit:
+        return explicit
+    if browser_channel == "chrome":
+        return _build_mac_chrome_user_agent(_system_chrome_version())
+    return _build_mac_chrome_user_agent("148.0.0.0")
+
+
+def _challenge_grace_seconds() -> float:
+    raw = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_CHALLENGE_GRACE_SECONDS")
+        or os.environ.get("BROWSER_AGENT_CHALLENGE_GRACE_SECONDS")
+        or "20"
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 20.0
+    return max(0.0, value)
+
+
+def _challenge_persisted_too_long(challenge_since: float | None, *, now: float | None = None, grace_s: float | None = None) -> bool:
+    if challenge_since is None:
+        return False
+    deadline = challenge_since + (grace_s if grace_s is not None else _challenge_grace_seconds())
+    return (now if now is not None else time.time()) >= deadline
 
 CAPTURE_JS = r"""() => {
   const clean = (value) => String(value || "")
@@ -145,6 +214,25 @@ SET_PROMPT_JS = r"""(promptText) => {
     composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: prompt }));
     composer.dispatchEvent(new Event("change", { bubbles: true }));
     return JSON.stringify({ ok: true, mode: "textarea" });
+  }
+  const execInsert = () => {
+    try {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(composer);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      const inserted = document.execCommand && document.execCommand("insertText", false, prompt);
+      return !!inserted;
+    } catch (err) {
+      return false;
+    }
+  };
+  if (execInsert()) {
+    composer.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: prompt }));
+    composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: prompt }));
+    return JSON.stringify({ ok: true, mode: "contenteditable_execcommand" });
   }
   composer.innerHTML = "";
   for (const line of lines) {
@@ -656,13 +744,21 @@ async def _wait_for_ready(page, *, timeout_s: int = 60) -> dict:
     deadline = time.time() + timeout_s
     last_data = {}
     refresh_count = 0
+    challenge_since: float | None = None
+    challenge_grace_s = _challenge_grace_seconds()
     while time.time() < deadline:
         data = json.loads(await page.evaluate(CAPTURE_JS))
         last_data = data
         if data.get("login_wall"):
             raise RuntimeError("chatgpt_login_wall_detected")
         if data.get("challenge_wall"):
-            raise RuntimeError("chatgpt_cloudflare_challenge_detected")
+            if challenge_since is None:
+                challenge_since = time.time()
+            if _challenge_persisted_too_long(challenge_since, grace_s=challenge_grace_s):
+                raise RuntimeError("chatgpt_cloudflare_challenge_detected")
+            await asyncio.sleep(1.5)
+            continue
+        challenge_since = None
         if data.get("composer_ready"):
             return data
         remaining = deadline - time.time()
@@ -694,6 +790,34 @@ async def _wait_for_ready(page, *, timeout_s: int = 60) -> dict:
     )
 
 
+async def _ensure_prompt_visible(page, prompt: str) -> dict:
+    composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+    minimum_visible_chars = max(10, min(len(prompt.strip()), 80))
+    if int(composer_state.get("text_length") or 0) >= minimum_visible_chars:
+        return composer_state
+    try:
+        focused = json.loads(await page.evaluate(FOCUS_COMPOSER_JS))
+        if focused.get("ok"):
+            session_id = await page._ensure_session()
+            await page._client.send.Input.insertText({"text": prompt}, session_id=session_id)
+            await asyncio.sleep(0.8)
+    except Exception:
+        pass
+    return json.loads(await page.evaluate(COMPOSER_STATE_JS))
+
+
+async def _wait_for_prompt_submission(page, baseline_message_count: int, *, timeout_s: float = 12.0) -> dict:
+    deadline = time.time() + timeout_s
+    last_data = json.loads(await page.evaluate(CAPTURE_JS))
+    while time.time() < deadline:
+        data = json.loads(await page.evaluate(CAPTURE_JS))
+        last_data = data
+        if int(data.get("message_count") or 0) > baseline_message_count or data.get("is_generating"):
+            return data
+        await asyncio.sleep(1.0)
+    return last_data
+
+
 async def _submit_prompt(page, prompt: str) -> dict:
     baseline = json.loads(await page.evaluate(CAPTURE_JS))
     baseline_message_count = int(baseline.get("message_count") or 0)
@@ -707,8 +831,7 @@ async def _submit_prompt(page, prompt: str) -> dict:
                 if not submit_note.get("ok") and int(composer_state.get("text_length") or 0) > 0:
                     await page.press("Enter")
                     submit_note = {"mode": "enter_key_after_keyboard_insert", "js_error": submit_note.get("error")}
-                await asyncio.sleep(2.0)
-                post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+                post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
                 post_submit["_submit_note"] = {
                     "mode": "keyboard_insert_submit",
                     "keyboard": keyboard_note,
@@ -721,39 +844,38 @@ async def _submit_prompt(page, prompt: str) -> dict:
             if not set_note.get("ok"):
                 raise RuntimeError(f"set_prompt_failed:{set_note}")
             await asyncio.sleep(1.0)
-            composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
-            submit_note = json.loads(await page.evaluate(SUBMIT_JS))
-            if not submit_note.get("ok") and int(composer_state.get("text_length") or 0) > 0:
-                await page.press("Enter")
-                submit_note = {"mode": "enter_key_after_native_setter", "js_error": submit_note.get("error")}
-            await asyncio.sleep(2.0)
-            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
-            post_submit["_submit_note"] = {
-                "mode": "native_setter_submit",
-                "keyboard_first": keyboard_note,
-                "set_prompt": set_note,
-                "submit": submit_note,
-            }
-            post_submit["_composer_state_before_submit"] = composer_state
-            if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
-                return post_submit
+            composer_state = await _ensure_prompt_visible(page, prompt)
+            if int(composer_state.get("text_length") or 0) > 0:
+                submit_result = json.loads(await page.evaluate(SUBMIT_JS))
+                if not submit_result.get("ok"):
+                    await page.press("Meta+Enter")
+                    submit_note = {"mode": "meta_enter_after_native_setter", "js_error": submit_result.get("error")}
+                else:
+                    submit_note = {"mode": "js_submit_after_native_setter", **submit_result}
+                post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
+                post_submit["_submit_note"] = {
+                    "mode": "native_setter_submit",
+                    "keyboard_first": keyboard_note,
+                    "set_prompt": set_note,
+                    "submit": submit_note,
+                }
+                post_submit["_composer_state_before_submit"] = composer_state
+                if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
+                    return post_submit
             clipboard_note = await _clipboard_paste_and_submit(page, prompt)
-            await asyncio.sleep(2.0)
-            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
             post_submit["_submit_note"] = {"mode": "clipboard_paste_enter", "clipboard": clipboard_note}
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
             if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
             await page.press("Meta+Enter")
-            await asyncio.sleep(2.0)
-            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
             post_submit["_submit_note"] = {"mode": "clipboard_paste_meta_enter_retry", "clipboard": clipboard_note}
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
             if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
             submit_retry = json.loads(await page.evaluate(SUBMIT_JS))
-            await asyncio.sleep(2.0)
-            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
             post_submit["_submit_note"] = {
                 "mode": "clipboard_paste_submit_retry",
                 "clipboard": clipboard_note,
@@ -770,16 +892,7 @@ async def _submit_prompt(page, prompt: str) -> dict:
         result = json.loads(await page.evaluate(SET_PROMPT_JS, prompt))
         if not result.get("ok"):
             raise RuntimeError(result.get("error") or "prompt_injection_failed")
-    composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
-    if int(composer_state.get("text_length") or 0) < max(10, min(len(prompt.strip()), 80)):
-        try:
-            focused = json.loads(await page.evaluate(FOCUS_COMPOSER_JS))
-            if focused.get("ok"):
-                session_id = await page._ensure_session()
-                await page._client.send.Input.insertText({"text": prompt}, session_id=session_id)
-        except Exception:
-            pass
-        composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+    composer_state = await _ensure_prompt_visible(page, prompt)
     if int(composer_state.get("text_length") or 0) < 10:
         raise RuntimeError(f"prompt_injection_no_visible_text:{composer_state}")
     await asyncio.sleep(1.2)
@@ -792,14 +905,12 @@ async def _submit_prompt(page, prompt: str) -> dict:
         submit_note = {"mode": "js_submit", **submit_result}
     if "clipboard_first_error" in locals():
         submit_note["clipboard_first_error"] = clipboard_first_error
-    await asyncio.sleep(2.0)
-    post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+    post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
     if int(post_submit.get("message_count") or 0) <= baseline_message_count and not post_submit.get("is_generating"):
         try:
             clipboard_note = await _clipboard_paste_and_submit(page, prompt)
             submit_note = {**submit_note, "retry": "clipboard_paste_enter_after_no_message", "clipboard": clipboard_note}
-            await asyncio.sleep(2.0)
-            post_submit = json.loads(await page.evaluate(CAPTURE_JS))
+            post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
         except Exception as exc:
             submit_note = {**submit_note, "retry_error": f"{type(exc).__name__}: {exc}"}
     post_submit["_submit_note"] = submit_note
@@ -902,12 +1013,20 @@ async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: in
     stable = 0
     first_response_seen = False
     stable_required = int(os.environ.get("BROWSER_AGENT_STABLE_POLLS") or "8")
+    challenge_since: float | None = None
+    challenge_grace_s = _challenge_grace_seconds()
     while time.time() < deadline:
         data = json.loads(await page.evaluate(CAPTURE_JS))
         if data.get("login_wall"):
             raise RuntimeError("chatgpt_login_wall_detected")
         if data.get("challenge_wall"):
-            raise RuntimeError("chatgpt_cloudflare_challenge_detected")
+            if challenge_since is None:
+                challenge_since = time.time()
+            if _challenge_persisted_too_long(challenge_since, grace_s=challenge_grace_s):
+                raise RuntimeError("chatgpt_cloudflare_challenge_detected")
+            await asyncio.sleep(3)
+            continue
+        challenge_since = None
         assistant_count = int(data.get("assistant_count") or 0)
         latest_text = str(data.get("latest_assistant_text") or "").strip()
         if assistant_count > baseline_assistant_count and latest_text:
@@ -1227,6 +1346,8 @@ async def _run(prompt: str) -> int:
     ).strip().lower()
     if profile_strategy not in {"persistent", "isolated"}:
         profile_strategy = "persistent"
+    browser_channel = _browser_channel()
+    browser_user_agent = _browser_user_agent(browser_channel=browser_channel)
     allowed_domains = [
         item.strip()
         for item in str(os.environ.get("BROWSER_AGENT_ALLOWED_DOMAINS") or ",".join(DEFAULT_ALLOWED_DOMAINS)).split(",")
@@ -1255,6 +1376,8 @@ async def _run(prompt: str) -> int:
         "action": action,
         "profile_directory": profile_directory,
         "profile_strategy": profile_strategy,
+        "browser_channel": browser_channel,
+        "browser_user_agent": browser_user_agent,
         "headless": headless,
         "headed_allowed": headed_allowed,
         "allowed_domains": allowed_domains,
@@ -1283,6 +1406,8 @@ async def _run(prompt: str) -> int:
             user_data_dir=staged_dir,
             profile_directory=profile_directory,
             allowed_domains=allowed_domains,
+            channel=browser_channel,
+            user_agent=browser_user_agent,
         )
     )
     try:

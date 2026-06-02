@@ -92,7 +92,11 @@ def _load_profile_policy() -> dict[str, Any]:
 
 def _policy_key_for_purpose(purpose: str) -> str:
     lowered = str(purpose or "").strip().lower()
-    if lowered.startswith("hf-paper-l7-high-reasoning"):
+    if (
+        lowered.startswith("hf-paper-l7-high-reasoning")
+        or lowered.startswith("hf-paper-report-plan")
+        or lowered.startswith("hf-paper-report-section")
+    ):
         return "hf_paper_insight"
     if lowered.startswith("github-trend-report"):
         return "github_trend_report"
@@ -121,6 +125,20 @@ def _pick_profile_from_pool(purpose: str, allowed_profiles: list[str], selection
     return clean[index]
 
 
+def _enforce_no_default_profile_for_scoped_chatgpt(policy_key: str, policy: dict[str, Any], resolved_profile: str, purpose: str) -> None:
+    protected_keys = {"hf_paper_insight", "github_trend_report", "ai_influence_report"}
+    allow_default = bool(policy.get("allow_default_profile") or policy.get("allow_default_chatgpt_profile"))
+    if policy_key in protected_keys and not allow_default and resolved_profile == "Default":
+        raise RuntimeError(
+            "browser_agent_profile_policy_default_profile_forbidden:"
+            f"purpose={purpose or 'N/A'}:policy_key={policy_key}:actual=Default"
+        )
+
+
+def _is_protected_scoped_chatgpt(policy_key: str) -> bool:
+    return policy_key in {"hf_paper_insight", "github_trend_report", "ai_influence_report"}
+
+
 def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]:
     loaded = _load_profile_policy()
     if not loaded:
@@ -143,6 +161,8 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
     allowed_profiles = [str(item).strip() for item in (policy.get("allowed_profiles") or []) if str(item).strip()]
     expected_account_email = str(policy.get("expected_account_email") or "").strip()
     selection = str(policy.get("selection") or "hash").strip().lower()
+    profile_strategy = str(policy.get("profile_strategy") or "persistent").strip().lower()
+    user_data_dir = str(policy.get("user_data_dir") or "").strip()
     explicit_profile = str(env.get("BROWSER_AGENT_PROFILE_DIRECTORY") or "").strip()
     explicit_account = str(
         env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
@@ -173,12 +193,24 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
             "browser_agent_profile_policy_missing_account:"
             f"purpose={purpose or 'N/A'}:expected={expected_account_email}"
         )
+    _enforce_no_default_profile_for_scoped_chatgpt(key, policy, resolved_profile, purpose)
 
     if resolved_profile:
         env["BROWSER_AGENT_PROFILE_DIRECTORY"] = resolved_profile
     if resolved_account:
         env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = resolved_account
         env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = resolved_account
+    if profile_strategy:
+        env["BROWSER_AGENT_PROFILE_STRATEGY"] = profile_strategy
+        env["BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY"] = profile_strategy
+    if user_data_dir and not env.get("BROWSER_AGENT_USER_DATA_DIR"):
+        env["BROWSER_AGENT_USER_DATA_DIR"] = user_data_dir
+    if _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless")):
+        env["BROWSER_AGENT_HEADLESS"] = "false"
+        env["TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS"] = "false"
+        env["BROWSER_AGENT_CHATGPT_ALLOW_HEADED"] = "true"
+        env["TECH_HOTSPOT_BROWSER_CHATGPT_ALLOW_HEADED"] = "true"
+        env["BROWSER_AGENT_ALLOW_HEADED"] = "true"
     env["BROWSER_AGENT_CHATGPT_PROFILE_POLICY_KEY"] = key
 
     return {
@@ -189,6 +221,9 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
         "selected_account_email": resolved_account,
         "allowed_profiles": allowed_profiles,
         "selection": selection,
+        "profile_strategy": profile_strategy,
+        "user_data_dir_set": bool(env.get("BROWSER_AGENT_USER_DATA_DIR")),
+        "headless_forced": _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless")),
     }
 
 
@@ -201,9 +236,12 @@ def stage_policy(kind: str, expected: str) -> dict[str, Any]:
             "tool_mode": "none",
             "model": os.environ.get("CHATGPT_REPORT_PLANNER_MODEL") or os.environ.get("CHATGPT_MODEL") or "chatgpt-5.5",
             "instruction": (
-                "你是 ChatGPT Report Planner。你的任务不是写正文，而是输出可执行的报告规划。"
-                "必须规划：报告拆成几章、每章几节、每节写什么、素材约束、风格约束、证据使用规则、"
-                "禁止事项、最终输出格式。若 expected_output=json，必须只输出 JSON。"
+            "你是 ChatGPT Report Planner。你的任务不是写正文，而是输出可执行的报告规划。"
+            "必须规划：报告拆成几章、每章几节、每节写什么、素材约束、风格约束、证据使用规则、"
+            "禁止事项、最终输出格式。风格约束必须包含：禁止使用“更硬”；“信号”只能少量使用，"
+            "优先改成“迹象 / 线索 / 依据 / 变化 / 材料 / 观察点”。如果素材是大咖访谈、播客、圆桌、keynote 或具名专家演讲，"
+            "必须规划“访谈原意摘要与观点归纳”章节，先还原嘉宾观点、论证顺序、例子和保留意见，再规划趋势分析。"
+            "若 expected_output=json，必须只输出 JSON。"
             ),
         }
     if kind == "deep_writer":
@@ -214,9 +252,11 @@ def stage_policy(kind: str, expected: str) -> dict[str, Any]:
             "tool_mode": "deep_research",
             "model": os.environ.get("CHATGPT_REPORT_DEEP_MODEL") or os.environ.get("CHATGPT_MODEL") or "chatgpt-pro",
             "instruction": (
-                "你是 ChatGPT Report Deep Writer。你必须使用 Pro / Deep Research 模式处理长程研究写作。"
-                "如果界面提出研究澄清问题，应选择继续研究、扩大证据覆盖、保持技术分析深度，"
-                "不要请求人工介入。输出必须是可直接发布的深度研究章节或报告。"
+            "你是 ChatGPT Report Deep Writer。你必须使用 Pro / Deep Research 模式处理长程研究写作。"
+            "如果界面提出研究澄清问题，应选择继续研究、扩大证据覆盖、保持技术分析深度，"
+            "不要请求人工介入。输出必须是可直接发布的深度研究章节或报告。"
+            "文风必须克制、自然，禁止使用“更硬”；“信号”只能少量使用，优先写成迹象、线索、依据或变化。"
+            "禁止输出 `**判断：**`、`**证据链：**` 这类 Markdown 加粗标签；需要强调时用自然小标题或普通段落。"
             ),
         }
     return {
@@ -229,6 +269,10 @@ def stage_policy(kind: str, expected: str) -> dict[str, Any]:
             "你是 ChatGPT Report Chapter Writer。你只写当前指定章节，不重写整份报告规划。"
             "必须严格遵守 Planner 给出的章节目标、风格、约束和素材边界；必须把素材转成面向读者的判断，"
             "不要输出内部处理字段、video_id、transcript_status、raw id。"
+            "如果当前章节是访谈/对谈/演讲摘要，必须先忠实呈现嘉宾或主讲人的原始观点结构、论据、例子和边界，"
+            "明确区分嘉宾原意和报告作者判断，不要一上来改写成宏观趋势。"
+            "文风必须克制、自然，禁止使用“更硬”；“信号”只能少量使用，优先写成迹象、线索、依据或变化。"
+            "禁止输出 `**判断：**`、`**证据链：**` 这类 Markdown 加粗标签；需要强调时用自然小标题或普通段落。"
         ),
     }
 
