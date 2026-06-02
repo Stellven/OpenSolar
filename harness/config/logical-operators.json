@@ -363,8 +363,10 @@
       "operator_type": "DeepArchitect",
       "candidates": [
         {"actor_id": "mini-claude-opus-planner", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-claude-opus-planner-print", "priority": 2, "condition": "quota_ok"},
-        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 3, "condition": "quota_ok"}
+        {"actor_id": "mini-claude-opus-planner-2", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner-3", "priority": 3, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner-print", "priority": 4, "condition": "quota_ok"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 5, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"
@@ -435,7 +437,9 @@
       "operator_type": "ParallelExplorer",
       "candidates": [
         {"actor_id": "mini-claude-opus-planner", "priority": 1, "condition": "always"},
-        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 2, "condition": "quota_ok"}
+        {"actor_id": "mini-claude-opus-planner-2", "priority": 2, "condition": "always"},
+        {"actor_id": "mini-claude-opus-planner-3", "priority": 3, "condition": "always"},
+        {"actor_id": "mini-antigravity-gemini31-pro", "priority": 4, "condition": "quota_ok"}
       ],
       "selection_policy": "priority_first",
       "fallback_policy": "queue"
