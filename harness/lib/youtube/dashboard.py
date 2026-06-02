@@ -1,6 +1,7 @@
 """Dashboard aggregation for YouTube transcript runtime state."""
 from __future__ import annotations
 
+import datetime as dt
 import sqlite3
 from typing import Any
 
@@ -34,7 +35,7 @@ def aggregate(conn: sqlite3.Connection) -> dict[str, Any]:
         },
         "metadata_only_count": _count(conn, "SELECT COUNT(*) FROM youtube_transcript_jobs WHERE status = 'metadata_only'"),
         "report_eligible_count": _count(conn, "SELECT COUNT(*) FROM youtube_transcripts WHERE quality_tier IN ('T0','T1','T2')"),
-        "premium_cost_today": 0.0,
+        "premium_cost_today": _premium_cost_today(conn),
     }
 
 
@@ -44,3 +45,17 @@ def _browser_capture_success_rate(conn: sqlite3.Connection) -> float:
         return 0.0
     passed = _count(conn, "SELECT COUNT(*) FROM youtube_transcript_jobs WHERE job_type = 'browser_capture' AND status = 'succeeded'")
     return round(passed / total, 4)
+
+
+def _premium_cost_today(conn: sqlite3.Connection) -> float:
+    day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+    try:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(cost_usd), 0.0)
+               FROM youtube_premium_asr_calls
+               WHERE budget_day = ? AND status IN ('reserved', 'completed')""",
+            (day,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return 0.0
+    return round(float(row[0] if row else 0.0), 4)

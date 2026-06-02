@@ -117,16 +117,6 @@ def handle_job_failure(
 
     new_attempt = attempt_count + 1
 
-    # max_attempts reached → terminal
-    if new_attempt >= max_attempts:
-        return JobUpdate(
-            job_id=job_id,
-            new_status="failed",
-            next_retry_at=None,
-            error_code="max_attempts",
-            attempt_count=new_attempt,
-        )
-
     # no_caption → immediate retry with metadata_only fallback
     if error_code == "no_caption" and new_attempt >= max_attempts:
         return JobUpdate(
@@ -134,6 +124,17 @@ def handle_job_failure(
             new_status="metadata_only",
             next_retry_at=None,
             error_code=error_code,
+            attempt_count=new_attempt,
+        )
+
+    # max_attempts reached → terminal failure; caller may route to
+    # browser_capture/metadata_only based on job_type.
+    if new_attempt >= max_attempts:
+        return JobUpdate(
+            job_id=job_id,
+            new_status="failed",
+            next_retry_at=None,
+            error_code="max_attempts",
             attempt_count=new_attempt,
         )
 
