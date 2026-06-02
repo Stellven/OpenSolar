@@ -225,6 +225,16 @@ ACTORS_PATH = HARNESS_DIR / "config" / "agent-actors.json"
 HOSTS_PATH = HARNESS_DIR / "config" / "actor-hosts.json"
 LOGICAL_OPS_PATH = HARNESS_DIR / "config" / "logical-operators.json"
 ACTOR_LEASE_DIR = HARNESS_DIR / "run" / "actor-leases"
+CANONICAL_HOST_TYPES = (
+    "claude_code_session",
+    "tmux_pane",
+    "operator_pool",
+    "antigravity_managed_env",
+    "browser_profile",
+    "remote_shell",
+    "api_worker",
+    "local_process",
+)
 
 # Fields that must never be emitted in observability output.
 # Uses substring containment check; whitelist safe compound keys separately.
@@ -280,6 +290,131 @@ def load_hosts(path: Path = HOSTS_PATH) -> Dict[str, Any]:
 def load_logical_operator_bindings(path: Path = LOGICAL_OPS_PATH) -> Dict[str, Any]:
     data = _load_json(path)
     return data.get("bindings", {})
+
+
+def _operator_pane_matches(pane: str, configured: str) -> bool:
+    pane = str(pane or "").strip()
+    configured = str(configured or "").strip()
+    if not pane or not configured:
+        return False
+    if configured == pane:
+        return True
+    if configured.endswith("*"):
+        return pane.startswith(configured[:-1])
+    return False
+
+
+def _lease_state_for_actor(actor_id: str, lease_dir: Path = ACTOR_LEASE_DIR) -> str:
+    lease_data = _read_json(lease_dir / f"{actor_id}.json")
+    if not lease_data:
+        return "idle"
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    if lease_data.get("expires_at", "") > now_str:
+        return str(lease_data.get("state") or "leased")
+    return "stale"
+
+
+def _capability_match(
+    actor_cfg: Dict[str, Any],
+    required_capabilities: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    profile = actor_cfg.get("capability_profile")
+    if not isinstance(profile, dict):
+        profile = actor_cfg.get("capability") if isinstance(actor_cfg.get("capability"), dict) else {}
+    required = [str(item) for item in (required_capabilities or []) if str(item)]
+    observed = sorted(str(k) for k, v in profile.items() if isinstance(v, (int, float)) and v)
+    matched = sorted(set(required).intersection(observed))
+    return {
+        "required": required,
+        "matched": matched,
+        "missing": sorted(set(required).difference(observed)),
+        "observed": observed,
+    }
+
+
+def resolve_actorhost_status(
+    *,
+    actor_id: str = "",
+    pane: str = "",
+    operator_id: str = "",
+    actors_path: Path = ACTORS_PATH,
+    hosts_path: Path = HOSTS_PATH,
+    physical_operators_path: Path = PHYSICAL_OPERATORS_PATH,
+    lease_dir: Path = ACTOR_LEASE_DIR,
+    required_capabilities: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    """Resolve actor/host taxonomy using actor-hosts first, compat only as evidence."""
+    actors = load_actors(actors_path)
+    hosts = load_hosts(hosts_path)
+    resolved_actor_id = str(actor_id or operator_id or "").strip()
+    if pane.startswith("operator:") and not resolved_actor_id:
+        resolved_actor_id = pane.split(":", 1)[1].strip()
+
+    actor_cfg = actors.get(resolved_actor_id) if resolved_actor_id else {}
+    if isinstance(actor_cfg, dict) and actor_cfg:
+        host_id = str(actor_cfg.get("host_id") or "unknown")
+        host_cfg = hosts.get(host_id, {}) if isinstance(hosts, dict) else {}
+        host_type = str(host_cfg.get("host_type") or "unknown")
+        return _redact_secrets({
+            "actor_id": resolved_actor_id,
+            "host_id": host_id,
+            "host_type": host_type,
+            "lease_state": _lease_state_for_actor(resolved_actor_id, lease_dir),
+            "capability_match": _capability_match(actor_cfg, required_capabilities),
+            "compat_fallback": False,
+            "compat_maps_to": None,
+            "resolution_source": "actor_hosts",
+            "canonical_host_type": host_type in CANONICAL_HOST_TYPES,
+        })
+
+    physical = _load_json(physical_operators_path).get("operators", {})
+    if isinstance(physical, dict):
+        for op_id, op_cfg in physical.items():
+            if not isinstance(op_cfg, dict):
+                continue
+            if operator_id and str(op_id) != str(operator_id):
+                continue
+            if not operator_id and not _operator_pane_matches(pane, str(op_cfg.get("pane") or "")):
+                continue
+            compat = op_cfg.get("compat_maps_to")
+            if not isinstance(compat, dict):
+                continue
+            host_type = str(compat.get("host_type") or "unknown")
+            return _redact_secrets({
+                "actor_id": str(op_id),
+                "host_id": "N/A",
+                "host_type": host_type,
+                "lease_state": "unknown",
+                "capability_match": {
+                    "required": [str(item) for item in (required_capabilities or []) if str(item)],
+                    "matched": [],
+                    "missing": [str(item) for item in (required_capabilities or []) if str(item)],
+                    "observed": [],
+                },
+                "compat_fallback": True,
+                "compat_maps_to": compat,
+                "resolution_source": "physical_operators.compat_maps_to",
+                "canonical_host_type": host_type in CANONICAL_HOST_TYPES,
+            })
+
+    return {
+        "actor_id": resolved_actor_id or "N/A",
+        "host_id": "N/A",
+        "host_type": "unknown",
+        "lease_state": "unknown",
+        "capability_match": {
+            "required": [str(item) for item in (required_capabilities or []) if str(item)],
+            "matched": [],
+            "missing": [str(item) for item in (required_capabilities or []) if str(item)],
+            "observed": [],
+        },
+        "compat_fallback": False,
+        "compat_maps_to": None,
+        "resolution_source": "unresolved",
+        "canonical_host_type": False,
+    }
 
 
 def get_actor_status_entry(

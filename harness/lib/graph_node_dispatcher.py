@@ -211,6 +211,10 @@ try:
 except Exception:  # pragma: no cover - fail-open in partial test fixtures
     scan_effect = None  # type: ignore
 try:
+    from multi_task_status import resolve_actorhost_status  # noqa: E402
+except Exception:  # pragma: no cover - actorhost observability is additive
+    resolve_actorhost_status = None  # type: ignore
+try:
     from architecture_guard import dispatch_policy_block  # noqa: E402
 except Exception:  # pragma: no cover - architecture guard is additive
     dispatch_policy_block = None  # type: ignore
@@ -4353,8 +4357,9 @@ def _builder_operator_pool_workers(
         "thunderomlx",
         "gemini-3.5-flash",
     ]
-    return [
-        {
+    workers: list[dict[str, Any]] = []
+    for idx in range(max(0, slots)):
+        worker = {
             "pane": f"operator-pool:builder.{idx}",
             "models": models,
             "skills": worker_skills,
@@ -4367,15 +4372,28 @@ def _builder_operator_pool_workers(
             "unavailable_reason": "",
             "load": idx,
         }
-        for idx in range(max(0, slots))
-    ]
+        _flatten_actorhost_bridge(
+            worker,
+            {
+                "actor_id": "N/A",
+                "host_id": "operator-pool",
+                "host_type": "operator_pool",
+                "lease_state": "idle",
+                "capability_match": {"required": worker_capabilities, "matched": [], "missing": [], "observed": []},
+                "compat_fallback": False,
+                "compat_maps_to": None,
+                "resolution_source": "operator_pool_virtual",
+                "canonical_host_type": True,
+            },
+        )
+        workers.append(worker)
+    return workers
 
 
 def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
     if not _operator_pool_role_available("evaluator"):
         return []
-    return [
-        {
+    worker = {
             "pane": "operator-pool:evaluator.0",
             "models": ["operator-pool", "deepseek-v4-pro", "opus", "gpt-5.5"],
             "skills": ["review", "testing", "bash"],
@@ -4387,7 +4405,21 @@ def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
             "rate_limit_operator_blocks": [],
             "current_command": "",
         }
-    ]
+    _flatten_actorhost_bridge(
+        worker,
+        {
+            "actor_id": "N/A",
+            "host_id": "operator-pool",
+            "host_type": "operator_pool",
+            "lease_state": "idle",
+            "capability_match": {"required": ["review", "testing"], "matched": [], "missing": [], "observed": []},
+            "compat_fallback": False,
+            "compat_maps_to": None,
+            "resolution_source": "operator_pool_virtual",
+            "canonical_host_type": True,
+        },
+    )
+    return [worker]
 
 
 def _graph_queue_dispatch_role(payload: dict[str, Any], node: dict[str, Any], assignment: dict[str, Any]) -> str:
@@ -4424,6 +4456,55 @@ def _parse_pm_submit_output(stdout: str) -> dict[str, str]:
     if result_match:
         parsed["pm_result_path"] = result_match.group(1)
     return parsed
+
+
+def _actorhost_bridge(
+    *,
+    actor_id: str = "",
+    operator_id: str = "",
+    pane: str = "",
+    required_capabilities: list[str] | None = None,
+) -> dict[str, Any]:
+    if resolve_actorhost_status is None:
+        return {
+            "actor_id": actor_id or operator_id or "N/A",
+            "host_id": "N/A",
+            "host_type": "unknown",
+            "lease_state": "unknown",
+            "capability_match": {"required": required_capabilities or [], "matched": [], "missing": required_capabilities or [], "observed": []},
+            "compat_fallback": False,
+            "compat_maps_to": None,
+            "resolution_source": "resolver_unavailable",
+            "canonical_host_type": False,
+        }
+    try:
+        return resolve_actorhost_status(
+            actor_id=actor_id,
+            operator_id=operator_id,
+            pane=pane,
+            required_capabilities=required_capabilities or [],
+        )
+    except Exception as exc:
+        return {
+            "actor_id": actor_id or operator_id or "N/A",
+            "host_id": "N/A",
+            "host_type": "unknown",
+            "lease_state": "unknown",
+            "capability_match": {"required": required_capabilities or [], "matched": [], "missing": required_capabilities or [], "observed": []},
+            "compat_fallback": False,
+            "compat_maps_to": None,
+            "resolution_source": f"resolver_error:{type(exc).__name__}",
+            "canonical_host_type": False,
+        }
+
+
+def _flatten_actorhost_bridge(target: dict[str, Any], actorhost: dict[str, Any]) -> dict[str, Any]:
+    target["actorhost"] = actorhost
+    for key in ("actor_id", "host_id", "host_type", "lease_state"):
+        target[key] = actorhost.get(key)
+    target["capability_match"] = actorhost.get("capability_match")
+    target["compat_fallback"] = bool(actorhost.get("compat_fallback"))
+    return target
 
 
 def _submit_builder_to_operator_pool(
@@ -4532,8 +4613,14 @@ def _submit_builder_to_operator_pool(
     parsed = _parse_pm_submit_output(completed.stdout)
     operator_id = parsed.get("operator_id") or "unknown"
     operator_pane = f"operator:{operator_id}"
+    actorhost = _actorhost_bridge(
+        actor_id=operator_id,
+        operator_id=operator_id,
+        pane=operator_pane,
+        required_capabilities=list(node.get("required_capabilities") or []),
+    )
     if dry_run:
-        return {
+        return _flatten_actorhost_bridge({
             "ok": True,
             "node": node_id,
             "pane": operator_pane,
@@ -4543,7 +4630,7 @@ def _submit_builder_to_operator_pool(
             "pm_dispatch": parsed,
             "dry_run": True,
             "graph_updated": False,
-        }
+        }, actorhost)
 
     if pane:
         release_lease(pane, dispatch_id, "graph_dispatch_reassigned_to_operator_pool")
@@ -4564,6 +4651,7 @@ def _submit_builder_to_operator_pool(
             "node": node_id,
             "graph": graph_path,
             "pm_dispatch": parsed,
+            "actorhost": actorhost,
             "instruction_file": str(instruction_file),
             "fallback_pane": pane,
         },
@@ -4576,13 +4664,17 @@ def _submit_builder_to_operator_pool(
             "data": {
                 "node": node_id,
                 "operator_id": operator_id,
+                "actor_id": actorhost.get("actor_id"),
+                "host_id": actorhost.get("host_id"),
+                "host_type": actorhost.get("host_type"),
+                "lease_state": actorhost.get("lease_state"),
                 "pm_task_id": parsed.get("pm_task_id", ""),
                 "fallback_pane": pane,
                 "dispatch_id": dispatch_id,
             },
         },
     )
-    return {
+    return _flatten_actorhost_bridge({
         "ok": True,
         "node": node_id,
         "pane": operator_pane,
@@ -4592,7 +4684,7 @@ def _submit_builder_to_operator_pool(
         "pm_dispatch": parsed,
         "dry_run": False,
         "graph_updated": graph_updated,
-    }
+    }, actorhost)
 
 
 def _submit_eval_to_operator_pool(
@@ -4848,6 +4940,13 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
 
     text_payload = dict(payload, dispatch_id=dispatch_id, sprint_id=sid)
     text_payload = _ensure_execution_plan_payload(text_payload, graph_path=graph_path, sid=sid, node=node)
+    actorhost = _actorhost_bridge(
+        pane=pane,
+        required_capabilities=list(node.get("required_capabilities") or []),
+    )
+    text_payload["actorhost"] = actorhost
+    for key in ("actor_id", "host_id", "host_type", "lease_state"):
+        text_payload[key] = actorhost.get(key)
     # Research node branch: mark fan-out section isolation for R-prefixed nodes
     # from deepresearch DAG templates. No main-loop edits; this is a single
     # if-branch that enriches the payload before dispatch text generation.
@@ -4862,7 +4961,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
     if not dry_run:
         _inject_dispatch_context(instruction_file, sid=sid, pane=pane, dispatch_id=dispatch_id)
     if dry_run:
-        return {
+        return _flatten_actorhost_bridge({
             "ok": True,
             "node": node_id,
             "pane": pane,
@@ -4870,7 +4969,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "instruction_file": str(instruction_file),
             "dry_run": True,
             "graph_updated": False,
-        }
+        }, actorhost)
 
     sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=dispatch_id)
     graph_updated = False
@@ -4884,7 +4983,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
                 graph_updated = True
             except Exception:
                 graph_updated = False
-        return {
+        return _flatten_actorhost_bridge({
             "ok": True,
             "node": node_id,
             "pane": pane,
@@ -4892,7 +4991,7 @@ def dispatch_queue_item(item: dict[str, Any], dry_run: bool = False, ttl: int = 
             "instruction_file": str(instruction_file),
             "dry_run": dry_run,
             "graph_updated": graph_updated,
-        }
+        }, actorhost)
 
     if not dry_run:
         release_lease(pane, dispatch_id, "graph_dispatch_send_failed")
@@ -5097,7 +5196,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             or _pane_unavailable_reason(pane)
             or ("rate_limit_or_api_error" if quota_exhausted else "")
         )
-        workers.append({
+        worker = {
             "pane": pane,
             "models": models,
             "skills": worker_skills,
@@ -5112,7 +5211,12 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             "health": health,
             "unavailable_reason": unavailable_reason,
             "current_command": current_command,
-        })
+        }
+        _flatten_actorhost_bridge(
+            worker,
+            _actorhost_bridge(pane=pane, required_capabilities=worker_capabilities),
+        )
+        workers.append(worker)
     if not dry_run:
         workers.extend(_builder_operator_pool_workers(worker_skills, worker_capabilities))
     workers.sort(key=lambda item: _pane_execution_priority(str(item.get("pane") or "")))
