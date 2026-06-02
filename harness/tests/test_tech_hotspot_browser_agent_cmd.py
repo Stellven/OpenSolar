@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,6 +41,485 @@ def test_browser_agent_notebooklm_cmd_falls_back_to_bundled_wrapper(monkeypatch)
     assert cmd, "expected bundled wrapper fallback command"
     assert cmd[-1].endswith("browser_agent_notebooklm_wrapper.py")
     assert "browser-use/.venv/bin/python" in cmd[0]
+
+
+def test_call_browser_agent_chatgpt_text_prefers_process_env_over_config(monkeypatch, tmp_path):
+    wrapper = tmp_path / "fake_wrapper.py"
+    wrapper.write_text(
+        "import json, os\n"
+        "print(json.dumps({\n"
+        "  'profile_directory': os.environ.get('BROWSER_AGENT_PROFILE_DIRECTORY'),\n"
+        "  'headless': os.environ.get('BROWSER_AGENT_HEADLESS'),\n"
+        "  'account_email': os.environ.get('BROWSER_AGENT_TARGET_ACCOUNT_EMAIL'),\n"
+        "  'pad': 'x' * 700\n"
+        "}, ensure_ascii=False))\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TECH_HOTSPOT_BROWSER_CHATGPT_CMD", f"{sys.executable} {wrapper}")
+    monkeypatch.setenv("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
+    monkeypatch.setenv("BROWSER_AGENT_HEADLESS", "true")
+    monkeypatch.setenv("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "haogege1977@gmail.com")
+    ns = _load_namespace()
+    result = ns["call_browser_agent_chatgpt_text"](
+        "验证 env override",
+        {
+            "output": {"raw_dir": str(tmp_path)},
+            "youtube": {
+                "phase_report_reasoner": {
+                    "profile_directory": "Profile 1",
+                    "headless": False,
+                    "target_account_email": "someone@example.com",
+                }
+            },
+        },
+        purpose="hf-headless-env-override",
+        expected="json",
+    )
+    payload = json.loads(result["text"])
+    assert payload["profile_directory"] == "Default"
+    assert payload["headless"] == "true"
+    assert payload["account_email"] == "haogege1977@gmail.com"
+
+
+def test_hf_public_report_render_outputs_reader_facing_md_and_html():
+    ns = _load_namespace()
+    public_records = [
+        {
+            "paper_id": "2509.22186",
+            "packet_id": "pkt-123",
+            "title": "MinerU2.5",
+            "summary": "这是一篇关于高分辨率文档解析工程化的论文。",
+            "taxonomy": {
+                "domain": "systems",
+                "stack_layer": "inference",
+                "research_route": "applied_research",
+            },
+            "scores": {
+                "insight_report": 0.585,
+                "experiment": 0.715,
+                "open_project": 0.640,
+                "deep_research_seed": 0.675,
+            },
+            "assets": {
+                "linked_models": ["m1", "m2"],
+                "linked_datasets": ["d1"],
+                "linked_spaces": ["s1"],
+                "total_assets": 4,
+            },
+            "github": {
+                "full_name": "opendatalab/MinerU",
+                "url": "https://github.com/opendatalab/MinerU",
+            },
+            "reasoning": {
+                "mode": "premium_insight",
+                "trend_type": "real_trend",
+                "premium_insight_available": True,
+                "evidence_ids": ["2509.22186", "pkt-123"],
+            },
+            "why_matters": "这条线直接影响知识库、文档解析和企业工作流自动化。",
+            "recommended_action": "先做最小复现实验，再决定是否上主线观察。",
+            "research_implication": "解耦式 VLM 可能成为文档理解的新默认架构。",
+            "experiment_plan": ["对比现有 OCR pipeline", "测试长文档吞吐"],
+            "open_source_opportunity": "围绕 PDF 解析做 benchmark harness。",
+            "deep_research_question": "解耦式解析是否会成为文档 VLM 的主流范式？",
+            "hypotheses": ["高分辨率解析会先在企业文档工作流落地"],
+            "strategic_questions": ["是否值得持续跟踪 opendatalab 生态"],
+            "evidence_gap": ["缺少跨行业基准对比"],
+        }
+    ]
+    markdown = ns["_hf_render_public_report_markdown"](
+        date_str="2026-06-01",
+        report_variant="premium_insight_report",
+        premium_count=1,
+        fallback_count=0,
+        public_records=public_records,
+    )
+    html = ns["_hf_render_public_report_html"](
+        date_str="2026-06-01",
+        report_variant="premium_insight_report",
+        premium_count=1,
+        fallback_count=0,
+        public_records=public_records,
+    )
+    assert "## 一页判断" in markdown
+    assert "| 指标 | 值 |" in markdown
+    assert "#### 推荐动作" in markdown
+    assert "#### 实验计划" in markdown
+    assert "<!doctype html>" in html
+    assert "hf-hero" in html
+    assert "Top 论文洞察" in html
+    assert "opendatalab/MinerU" in html
+
+
+def test_hf_normalize_report_plan_assigns_unassigned_papers():
+    ns = _load_namespace()
+    public_records = [
+        {"paper_id": "p1"},
+        {"paper_id": "p2"},
+        {"paper_id": "p3"},
+    ]
+    plan = ns["hf_normalize_report_plan"](
+        {
+            "headline": "",
+            "executive_summary": "今天 HF 热点集中在两条可解释主线。",
+            "sections": [
+                {
+                    "section_id": "agents",
+                    "title": "Agent 框架化",
+                    "trend_label": "Agent",
+                    "thesis": "Agent 正在从 demo 进入工程化。",
+                    "why_now": "今天这组论文共同体现了平台化趋势。",
+                    "paper_ids": ["p1", "p2", "p2", "missing"],
+                }
+            ],
+            "closing_watchpoints": ["关注 repo 跟进速度"],
+        },
+        public_records,
+        date_str="2026-06-01",
+    )
+    assert plan["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01"
+    assert len(plan["sections"]) == 2
+    assert plan["sections"][0]["paper_ids"] == ["p1", "p2"]
+    assert plan["sections"][1]["section_id"] == "other-signals"
+    assert plan["sections"][1]["paper_ids"] == ["p3"]
+    assert plan["closing_watchpoints"] == ["关注 repo 跟进速度"]
+
+
+def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
+    ns = _load_namespace()
+    candidates = [
+        {
+            "public": {
+                "paper_id": "p1",
+                "packet_id": "pkt-1",
+                "title": "MinerU2.5",
+                "summary": "高分辨率文档解析成为工程化入口。",
+                "taxonomy": {"domain": "systems", "stack_layer": "inference", "research_route": "applied_research"},
+                "scores": {"insight_report": 0.7, "experiment": 0.8},
+                "assets": {"linked_models": [], "linked_datasets": [], "linked_spaces": [], "total_assets": 1},
+                "github": {"full_name": "org/repo1", "url": "https://github.com/org/repo1"},
+                "reasoning": {"mode": "fallback_report", "trend_type": "watchlist", "premium_insight_available": False},
+                "why_matters": "文档智能会影响知识工作流入口。",
+                "recommended_action": "跟踪解耦式架构的复现线索。",
+            },
+            "compiled": {"chapter": "公开摘要 A"},
+        },
+        {
+            "public": {
+                "paper_id": "p2",
+                "packet_id": "pkt-2",
+                "title": "Kronos",
+                "summary": "通用时间序列基础模型开始争夺标准接口。",
+                "taxonomy": {"domain": "time-series", "stack_layer": "foundation_model", "research_route": "model_system"},
+                "scores": {"insight_report": 0.75, "experiment": 0.65},
+                "assets": {"linked_models": [], "linked_datasets": [], "linked_spaces": [], "total_assets": 1},
+                "github": {"full_name": "org/repo2", "url": "https://github.com/org/repo2"},
+                "reasoning": {"mode": "premium_insight", "trend_type": "real_trend", "premium_insight_available": True},
+                "why_matters": "基础模型接口标准化会影响后续生态。",
+                "recommended_action": "观察是否快速形成 benchmark 竞争。",
+            },
+            "compiled": {"chapter": "公开摘要 B"},
+        },
+    ]
+    ns["hf_paper_insight_db_path"] = lambda config: tmp_path / "dummy.sqlite"
+    ns["hf_load_report_candidates"] = lambda store_path, limit, date_str, config, reasoning_mode: candidates
+    ns["hf_call_grouped_report_flow"] = lambda public_records, config, date_str, report_context=None: {
+        "ok": True,
+        "model": "chatgpt-5.5",
+        "plan": {
+            "headline": "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01",
+            "executive_summary": "今天 HF 热点可以拆成文档智能与基础模型接口两条主线。",
+            "closing_watchpoints": ["继续跟踪开源复现速度"],
+        },
+        "sections": [
+            {
+                "section_id": "doc-intel",
+                "title": "文档智能自动化",
+                "trend_type": "real_trend",
+                "section_summary": "文档理解开始从 OCR 升级为工作流级自动化入口。",
+                "trend_description": "这部分论文说明高分辨率解析能力正在向企业工作流渗透。",
+                "insight_analysis": "关键不只是识别精度，而是能否成为后续 agent 编排的前置层。",
+                "planning_recommendations": ["做最小 PDF 解析基准", "跟踪开源 benchmark 形成速度"],
+                "paper_commentary": [
+                    {
+                        "paper_id": "p1",
+                        "title": "MinerU2.5",
+                        "role": "文档智能入口样本",
+                        "takeaway": "高分辨率解析与解耦式架构是关键看点。",
+                        "evidence_ids": ["p1", "pkt-1"],
+                    }
+                ],
+                "evidence_ids": ["p1", "pkt-1"],
+            },
+            {
+                "section_id": "foundation-interfaces",
+                "title": "基础模型接口化",
+                "trend_type": "real_trend",
+                "section_summary": "时间序列基础模型开始争夺统一生态接口。",
+                "trend_description": "这部分论文说明基础模型竞争正在向行业标准位移。",
+                "insight_analysis": "如果接口先形成，后续生态锁定会快于纯论文迭代。",
+                "planning_recommendations": ["观察 benchmark 与 SDK 配套节奏"],
+                "paper_commentary": [
+                    {
+                        "paper_id": "p2",
+                        "title": "Kronos",
+                        "role": "接口标准竞争样本",
+                        "takeaway": "应关注其是否形成生态入口优势。",
+                        "evidence_ids": ["p2", "pkt-2"],
+                    }
+                ],
+                "evidence_ids": ["p2", "pkt-2"],
+            },
+        ],
+    }
+    result = ns["hf_write_public_report"](
+        {"output": {"raw_dir": str(tmp_path)}},
+        date_str="2026-06-01",
+        limit=5,
+        output_base=str(tmp_path),
+        reasoning_mode="browser_agent",
+    )
+    assert result["grouped_report_ok"] is True
+    assert result["report_variant"] == "premium_insight_report"
+    assert Path(result["plan_json"]).exists()
+    assert Path(result["sections_json"]).exists()
+    markdown = Path(result["report_md"]).read_text(encoding="utf-8")
+    html = Path(result["report_html"]).read_text(encoding="utf-8")
+    pack = json.loads(Path(result["pack_json"]).read_text(encoding="utf-8"))
+    assert "## 01. 文档智能自动化" in markdown
+    assert "## 02. 基础模型接口化" in markdown
+    assert "### 该部分论文分工" in markdown
+    assert "后续观察点" in markdown
+    assert "<!doctype html>" in html
+    assert "文档智能自动化" in html
+    assert "该部分论文分工" in html
+    assert pack["grouped_report_ok"] is True
+    assert pack["report_variant"] == "premium_insight_report"
+    assert pack["grouped_report_plan"]["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01"
+    assert pack["report_context"]["cadence"] == "weekly"
+    assert len(pack["grouped_report_sections"]) == 2
+
+
+def test_hf_weekly_priority_score_prefers_persistent_high_rank_signals():
+    ns = _load_namespace()
+    end_date = ns["dt"].date(2026, 6, 1)
+    strong = ns["hf_weekly_priority_score"](
+        {
+            "days_seen": 5,
+            "best_daily_rank": 2,
+            "best_weekly_rank": 3,
+            "best_monthly_rank": 8,
+            "last_daily_seen": "2026-06-01",
+        },
+        {
+            "insight_report": 0.82,
+            "experiment": 0.66,
+            "deep_research_seed": 0.71,
+            "research_signal": 0.64,
+            "open_project": 0.58,
+        },
+        end_date=end_date,
+        lookback_days=7,
+    )
+    weak = ns["hf_weekly_priority_score"](
+        {
+            "days_seen": 1,
+            "best_daily_rank": 15,
+            "best_weekly_rank": 0,
+            "best_monthly_rank": 0,
+            "last_daily_seen": "2026-05-27",
+        },
+        {
+            "insight_report": 0.31,
+            "experiment": 0.21,
+            "deep_research_seed": 0.28,
+            "research_signal": 0.22,
+            "open_project": 0.18,
+        },
+        end_date=end_date,
+        lookback_days=7,
+    )
+    assert strong > weak
+
+
+def test_hf_candidate_reasoning_plan_defaults_weekly_to_grouped_sections():
+    ns = _load_namespace()
+    plan = ns["hf_candidate_reasoning_plan"](
+        report_context={"cadence": "weekly"},
+        paper_id="p-core",
+        core_ids={"p-core", "p2"},
+        requested_mode="browser_agent",
+        config={},
+    )
+    assert plan["use_high_reasoning"] is False
+    assert plan["fallback_reason"] == "weekly_grouped_core_pool"
+    assert plan["strategy"] == "grouped_sections"
+
+    support_plan = ns["hf_candidate_reasoning_plan"](
+        report_context={"cadence": "weekly"},
+        paper_id="p-support",
+        core_ids={"p-core", "p2"},
+        requested_mode="browser_agent",
+        config={},
+    )
+    assert support_plan["use_high_reasoning"] is False
+    assert support_plan["fallback_reason"] == "weekly_supporting_pool"
+    assert support_plan["strategy"] == "grouped_sections"
+
+
+def test_hf_candidate_reasoning_plan_allows_weekly_per_paper_override():
+    ns = _load_namespace()
+    config = {"hf_paper_insight": {"reporting": {"high_reasoning_strategy": "per_paper"}}}
+    core_plan = ns["hf_candidate_reasoning_plan"](
+        report_context={"cadence": "weekly"},
+        paper_id="p-core",
+        core_ids={"p-core", "p2"},
+        requested_mode="browser_agent",
+        config=config,
+    )
+    assert core_plan["use_high_reasoning"] is True
+    assert core_plan["fallback_reason"] is None
+    assert core_plan["strategy"] == "per_paper"
+
+    support_plan = ns["hf_candidate_reasoning_plan"](
+        report_context={"cadence": "weekly"},
+        paper_id="p-support",
+        core_ids={"p-core", "p2"},
+        requested_mode="browser_agent",
+        config=config,
+    )
+    assert support_plan["use_high_reasoning"] is False
+    assert support_plan["fallback_reason"] == "weekly_supporting_pool"
+    assert support_plan["strategy"] == "per_paper"
+
+
+def test_hf_missing_value_handles_lists_without_typeerror():
+    ns = _load_namespace()
+    assert ns["_hf_missing_value"](None) is True
+    assert ns["_hf_missing_value"]("") is True
+    assert ns["_hf_missing_value"]("  ") is True
+    assert ns["_hf_missing_value"]([]) is True
+    assert ns["_hf_missing_value"]({}) is True
+    assert ns["_hf_missing_value"](["section"]) is False
+    assert ns["_hf_missing_value"]({"headline": "ok"}) is False
+
+
+def test_hf_clean_public_text_scrubs_internal_ids():
+    ns = _load_namespace()
+    raw = "这是一条判断。依据：2605.30263, pkt-a3c9e8b0828b405c [evidence: 2605.30263, pkt-a3c9e8b0828b405c]"
+    cleaned = ns["hf_clean_public_text"](raw)
+    assert "2605.30263" not in cleaned
+    assert "pkt-a3c9e8b0828b405c" not in cleaned
+    assert "evidence" not in cleaned.lower()
+
+
+def test_hf_clean_public_text_repairs_empty_evidence_sentences():
+    ns = _load_namespace()
+    raw = (
+        "核心判断一：多模态模型正在补空间短板，证据来自 2605.30263、pkt-a3c9e8b0828b405c 及对应材料。"
+        " 关注的是长程交互状态管理。"
+        " 核心依据来自 与 。"
+        " - 将 放入观察池。"
+        " 【evidence_ids: 2605.30263, pkt-a3c9e8b0828b405c】"
+    )
+    cleaned = ns["hf_clean_public_text"](raw)
+    assert "2605.30263" not in cleaned
+    assert "pkt-a3c9e8b0828b405c" not in cleaned
+    assert "evidence_ids" not in cleaned
+    assert "证据来自" not in cleaned
+    assert "核心依据来自" not in cleaned
+    assert "该论文关注的是长程交互状态管理。" in cleaned
+    assert "将该论文放入观察池。" in cleaned
+
+
+def test_grouped_report_render_hides_internal_ids_and_labels():
+    ns = _load_namespace()
+    grouped_report = {
+        "plan": {
+            "headline": "HF 论文周报规划：测试标题",
+            "executive_summary": "本期观察。依据：2605.30263, pkt-a3c9e8b0828b405c",
+            "closing_watchpoints": ["跟踪 minWM。依据：2605.30263, pkt-a3c9e8b0828b405c"],
+        },
+        "sections": [
+            {
+                "title": "测试章节",
+                "trend_type": "watchlist",
+                "section_summary": "章节摘要。依据：2605.30263, pkt-a3c9e8b0828b405c",
+                "trend_description": "趋势描述。依据：2605.30263, pkt-a3c9e8b0828b405c",
+                "insight_analysis": "洞察分析。依据：2605.30263, pkt-a3c9e8b0828b405c",
+                "planning_recommendations": ["做实验"],
+                "paper_commentary": [
+                    {
+                        "paper_id": "2605.30263",
+                        "title": "minWM",
+                        "role": "主轴论文。依据：2605.30263",
+                        "takeaway": "最值得看。依据：pkt-a3c9e8b0828b405c",
+                        "evidence_ids": ["2605.30263", "pkt-a3c9e8b0828b405c"],
+                    }
+                ],
+                "evidence_ids": ["2605.30263", "pkt-a3c9e8b0828b405c"],
+            }
+        ],
+    }
+    public_records = [{"title": "minWM"}]
+    markdown = ns["_hf_render_grouped_report_markdown"](
+        date_str="2026-06-01",
+        report_variant="premium_insight_report",
+        premium_count=1,
+        fallback_count=0,
+        public_records=public_records,
+        grouped_report=grouped_report,
+        report_context={"window_label": "2026-05-26 ~ 2026-06-01"},
+    )
+    assert "premium_insight_report" not in markdown
+    assert "pkt-a3c9e8b0828b405c" not in markdown
+    assert "2605.30263" not in markdown
+    assert "正式洞察周报" in markdown
+
+
+def test_grouped_report_render_repairs_empty_cleanup_shells():
+    ns = _load_namespace()
+    grouped_report = {
+        "plan": {
+            "headline": "HF 论文周报规划：测试标题",
+            "executive_summary": "核心判断一：多模态模型正在补空间短板，证据来自 2605.30263、pkt-a3c9e8b0828b405c 及对应材料。",
+            "closing_watchpoints": ["将 放入观察池。"],
+        },
+        "sections": [
+            {
+                "title": "测试章节",
+                "trend_type": "watchlist",
+                "section_summary": "章节摘要。",
+                "trend_description": "这部分材料目前更适合作为观察项。 关注的是长程交互状态管理。核心依据来自 与 。",
+                "insight_analysis": "该判断依据 与 。",
+                "planning_recommendations": ["将 放入观察池。", "【evidence_ids: 2605.30263, pkt-a3c9e8b0828b405c】"],
+                "paper_commentary": [],
+            }
+        ],
+    }
+    markdown = ns["_hf_render_grouped_report_markdown"](
+        date_str="2026-06-01",
+        report_variant="premium_insight_report",
+        premium_count=1,
+        fallback_count=0,
+        public_records=[{"title": "minWM"}],
+        grouped_report=grouped_report,
+        report_context={"window_label": "2026-05-26 ~ 2026-06-01"},
+    )
+    assert "证据来自" not in markdown
+    assert "核心依据来自" not in markdown
+    assert "该判断依据" not in markdown
+    assert "【evidence_ids" not in markdown
+    assert "该论文关注的是长程交互状态管理。" in markdown
+    assert "将该论文放入观察池。" in markdown
+
+
+def test_hf_internal_report_tokens_ignores_normal_cli_and_debug_words():
+    ns = _load_namespace()
+    clean = "本周值得关注的是 terminal agent、CLI tooling 与 debug workflow 的工程趋势。"
+    leaked = "本轮因 rate limit 与 materialize-hf-paper-insights 失败，请稍后重试。"
+    assert ns["hf_internal_report_tokens"](clean) == []
+    assert ns["hf_internal_report_tokens"](leaked) == ["rate_limit", "materialize_command"]
 
 
 def test_ai_influence_html_render_uses_reader_facing_sources():

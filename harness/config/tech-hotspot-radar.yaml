@@ -29,7 +29,6 @@ output:
   legacy_raw_dirs:
     youtube: /Users/lisihao/Knowledge/_raw/youtube-influence-digest
     social: /Users/lisihao/Knowledge/_raw/ai-influence-daily-digest
-    github: /Users/lisihao/Knowledge/_raw/github-trends-digest
 
 fetch:
   timeout_seconds: 20
@@ -58,6 +57,12 @@ youtube:
     frontdoor: chatgpt
     operator: browser_agent
     chatgpt_project: 杂项
+    profile_directory: Profile 1
+    target_account_email: haogege1977@gmail.com
+    headless: false
+    scrub_client_state: true
+    open_project_first: true
+    require_project: true
     timeout_seconds: 1200
     max_prompt_chars: 180000
   ai_influence_report_flow:
@@ -1113,6 +1118,16 @@ github:
   enabled: true
   github_token_env: GITHUB_TOKEN
   snapshot_append_only: true
+  external_sources:
+    trendshift:
+      enabled: true
+      base_url: https://trendshift.io
+      periods: [daily, weekly, monthly]
+      limit: 25
+      collect_topics: true
+      topic_limit: 25
+      max_topics: 0
+      role: external_rank_cross_signal
   trend_buckets:
     - agent_runtime
     - agent_skill
@@ -1203,3 +1218,24 @@ huggingface_papers:
       severity: medium
     repo_archived_deleted:
       severity: high
+
+hf_paper_insight:
+  reporting:
+    cadence: weekly
+    lookback_days: 7
+    merge_daily_hotspots: true
+    core_paper_limit: 12
+    supporting_paper_limit: 24
+  high_reasoning:
+    mode: browser_agent
+    model: chatgpt-5.5
+    reasoning_effort: high
+    operator_kind: chapter_writer
+    profile_directory: Profile 1
+    target_account_email: haogege1977@gmail.com
+    headless: true
+    scrub_client_state: false
+    open_project_first: false
+    require_project: false
+    force_new_chat: true
+    require_isolated_conversation: true
