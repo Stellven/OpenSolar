@@ -1850,11 +1850,11 @@
       "aliases": [
         "mini-reasonix-deepseek-v4-builder",
         "reasonix-deepseek-v4",
-        "deepseek-v4-builder"
+        "deepseek-v4-advisory"
       ],
-      "role": "builder",
+      "role": "evaluator",
       "display_meta": {
-        "display_name": "Reasonix DeepSeek V4 Builder",
+        "display_name": "Reasonix DeepSeek V4 Advisory Reviewer",
         "tmux_session": "solar-harness-multi-task",
         "tmux_window": null,
         "tmux_pane_index": null
@@ -1883,10 +1883,10 @@
         "path": "actors/mini-reasonix-deepseek-v4-builder/evidence"
       },
       "capability": {
-        "planning": 3,
-        "coding": 5,
-        "debugging": 4,
-        "testing": 4,
+        "planning": 4,
+        "coding": 0,
+        "debugging": 2,
+        "testing": 1,
         "research": 3,
         "long_context": 4,
         "speed": 4,
@@ -1894,11 +1894,11 @@
         "reliability": 4
       },
       "capability_profile": {
-        "architecture_reasoning": 3,
-        "code_impl": 5,
-        "root_cause_debug": 4,
-        "test_generation": 4,
-        "test_execution": 3,
+        "architecture_reasoning": 4,
+        "code_impl": 0,
+        "root_cause_debug": 3,
+        "test_generation": 1,
+        "test_execution": 0,
         "research_synthesis": 3,
         "academic_critique": 3,
         "browser_use": 0,
@@ -1908,12 +1908,12 @@
         "speed": 4
       },
       "risk_profile": {
-        "allowed_write_scope": "harness",
-        "allowed_shell_scope": "allowed",
+        "allowed_write_scope": "denied",
+        "allowed_shell_scope": "denied",
         "allowed_network": "allowed",
         "allowed_secrets": "secret_ref_only",
         "destructive_actions": "denied",
-        "git_commit": "allowed",
+        "git_commit": "denied",
         "git_push": "denied",
         "payment_or_external_action": "denied",
         "requires_human_for": [
@@ -1928,13 +1928,20 @@
         "reserve_ratio": 0.1,
         "effort": "medium",
         "prefer_for": [
-          "implementation",
-          "fast-patch",
-          "debugging",
-          "tests",
-          "refactor"
+          "prd-review",
+          "requirements-review",
+          "acceptance-review",
+          "architecture-review",
+          "decision-review",
+          "counterargument",
+          "root-cause"
         ],
         "avoid_for": [
+          "implementation",
+          "code-edit",
+          "repo-modification",
+          "tests",
+          "test-execution",
           "final-quality-gate",
           "critical-security-review",
           "bulk-extraction"
@@ -1946,11 +1953,11 @@
         "on_exhausted": "disable_and_fallback"
       },
       "policy": {
-        "write_files": "allowed",
-        "run_shell": "allowed",
+        "write_files": "denied",
+        "run_shell": "denied",
         "network": "allowed",
         "secrets_access": "secret_ref_only",
-        "git_commit": "allowed"
+        "git_commit": "denied"
       },
       "evidence": {
         "last_smoke_at": "2026-05-30T22:40:00Z",
@@ -1961,20 +1968,142 @@
         "provenance": "added for Reasonix DeepSeek V4 physical operator on 2026-05-30"
       },
       "persona_binding": {
-        "persona_id": "lab-builder",
-        "persona_file": "personas/lab-builder.md",
+        "persona_id": "evaluator",
+        "persona_file": "personas/evaluator.md",
         "knobs_override": {}
       },
-      "fallback_ladder": [
-        {
-          "actor_id": "mini-claude-sonnet-builder",
-          "condition": "unavailable"
-        },
-        {
-          "actor_id": "mini-claude-sonnet-builder-print",
-          "condition": "quota_exhausted"
-        }
-      ]
+      "fallback_ladder": []
+    },
+    "mini-reasonix-deepseek-v4-pro-prd-evaluator": {
+      "actor_id": "mini-reasonix-deepseek-v4-pro-prd-evaluator",
+      "host_id": "mini",
+      "operator_alias": "mini-reasonix-deepseek-v4-pro-prd-evaluator",
+      "aliases": [
+        "mini-reasonix-deepseek-v4-pro-prd-evaluator",
+        "reasonix-deepseek-v4-pro-prd",
+        "deepseek-v4-pro-evaluator"
+      ],
+      "role": "evaluator",
+      "display_meta": {
+        "display_name": "Reasonix DeepSeek V4 Pro PRD/Eval Reviewer",
+        "tmux_session": "solar-harness-multi-task",
+        "tmux_window": null,
+        "tmux_pane_index": null
+      },
+      "lease": {
+        "acquired_at": null,
+        "expires_at": null,
+        "renewable": true,
+        "preemptible": true,
+        "heartbeat_timeout_sec": 120,
+        "lease_id": null,
+        "holder_sprint": null
+      },
+      "mailbox": {
+        "inbox": "actors/mini-reasonix-deepseek-v4-pro-prd-evaluator/inbox",
+        "outbox": "actors/mini-reasonix-deepseek-v4-pro-prd-evaluator/outbox",
+        "logs": "actors/mini-reasonix-deepseek-v4-pro-prd-evaluator/logs",
+        "state_json": "actors/mini-reasonix-deepseek-v4-pro-prd-evaluator/state.json",
+        "heartbeat_json": "actors/mini-reasonix-deepseek-v4-pro-prd-evaluator/heartbeat.json"
+      },
+      "context_packet_ref": {
+        "path": null,
+        "packet_id": null
+      },
+      "evidence_ledger_ref": {
+        "path": "actors/mini-reasonix-deepseek-v4-pro-prd-evaluator/evidence"
+      },
+      "capability": {
+        "planning": 4,
+        "coding": 0,
+        "debugging": 2,
+        "testing": 1,
+        "research": 3,
+        "long_context": 4,
+        "speed": 4,
+        "cost_efficiency": 5,
+        "reliability": 4
+      },
+      "capability_profile": {
+        "architecture_reasoning": 4,
+        "code_impl": 0,
+        "root_cause_debug": 3,
+        "test_generation": 1,
+        "test_execution": 0,
+        "research_synthesis": 3,
+        "academic_critique": 3,
+        "browser_use": 0,
+        "gui_use": 0,
+        "long_context": 4,
+        "multi_agent_coordination": 2,
+        "speed": 4
+      },
+      "risk_profile": {
+        "allowed_write_scope": "denied",
+        "allowed_shell_scope": "denied",
+        "allowed_network": "allowed",
+        "allowed_secrets": "secret_ref_only",
+        "destructive_actions": "denied",
+        "git_commit": "denied",
+        "git_push": "denied",
+        "payment_or_external_action": "denied",
+        "requires_human_for": [
+          "git_push",
+          "payment_or_external_action"
+        ]
+      },
+      "cost_profile": {
+        "cost_tier": "low",
+        "token_budget_class": "medium",
+        "quota_period": "api_balance",
+        "reserve_ratio": 0.1,
+        "effort": "high",
+        "prefer_for": [
+          "prd-review",
+          "requirements-review",
+          "acceptance-review",
+          "architecture-review",
+          "decision-review",
+          "counterargument",
+          "root-cause"
+        ],
+        "avoid_for": [
+          "implementation",
+          "code-edit",
+          "repo-modification",
+          "tests",
+          "test-execution",
+          "final-quality-gate",
+          "critical-security-review",
+          "bulk-extraction"
+        ]
+      },
+      "quota": {
+        "quota_type": "api_balance",
+        "period": "api_balance",
+        "on_exhausted": "disable_and_fallback"
+      },
+      "policy": {
+        "write_files": "denied",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "evidence": {
+        "last_smoke_at": "2026-06-02T00:00:00Z",
+        "last_smoke_result": "reasonix CLI available; advisory-only routing validated by pytest",
+        "last_task_at": null,
+        "last_task_id": null,
+        "last_task_result": null,
+        "provenance": "added for DeepSeek V4 Pro PRD/eval advisory routing on 2026-06-02"
+      },
+      "persona_binding": {
+        "persona_id": "evaluator",
+        "persona_file": "personas/evaluator.md",
+        "knobs_override": {}
+      },
+      "fallback_ladder": []
     },
     "browser_agent_session": {
       "actor_id": "browser_agent_session",

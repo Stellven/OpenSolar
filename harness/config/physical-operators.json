@@ -1826,6 +1826,184 @@
         "disabled_at": "2026-05-31T01:10:53Z"
       }
     },
+    "mini-reasonix-deepseek-v4-pro-prd-evaluator": {
+      "display_name": "Mac mini Reasonix DeepSeek V4 Pro PRD/Eval reviewer",
+      "plane": "headless",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "deepseek-advisory",
+      "role": "evaluator",
+      "persona": "evaluator",
+      "provider": "deepseek",
+      "vendor": "DeepSeek",
+      "backend": "command",
+      "model": "deepseek-v4-pro",
+      "model_config": "Reasonix DeepSeek V4 Pro;effort=high;wrapper=reasonix_operator.py;prd-eval-advisory",
+      "base_url": "reasonix-cli",
+      "command_path": "/opt/homebrew/bin/reasonix",
+      "auth_mode": "api_key",
+      "key_ref": "deepseek_api_key",
+      "billing_surface": "usage_credit",
+      "billing_pool": "deepseek_api_credit",
+      "launch_cmd_kind": "print_once",
+      "quota_cycle": "api_balance",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "enabled_at": "2026-06-02T00:00:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "planner",
+        "evaluator"
+      ],
+      "task_classes": [
+        "analysis",
+        "review",
+        "advisory"
+      ],
+      "strengths": [
+        "requirements-review",
+        "prd-critique",
+        "acceptance-review",
+        "architecture-reasoning",
+        "counterargument"
+      ],
+      "preferred_for": [
+        "prd-review",
+        "requirements-review",
+        "acceptance-review",
+        "architecture-review",
+        "decision-review",
+        "counterargument",
+        "root-cause",
+        "evaluator",
+        "planner",
+        "deepseek",
+        "reasonix"
+      ],
+      "avoid_for": [
+        "final-quality-gate",
+        "critical-security-review",
+        "browser-research",
+        "multimodal",
+        "bulk-extraction",
+        "code-edit",
+        "repo-modification",
+        "implementation",
+        "tests",
+        "test-execution"
+      ],
+      "cost_tier": "low",
+      "latency_tier": "low",
+      "context_tier": "high",
+      "max_concurrency": 2,
+      "fallback_profile": "evaluator",
+      "operator_class": "AdvisoryReview",
+      "model_binding": {
+        "provider": "deepseek",
+        "model_id": "deepseek-v4-pro",
+        "alias": "deepseek",
+        "config": {
+          "reasonix_model": "deepseek-v4-pro",
+          "reasoning_effort": "high",
+          "cache_first": true
+        }
+      },
+      "auth": {
+        "mode": "api_key",
+        "account_label": "deepseek_reasonix",
+        "secret_ref": "secret://deepseek_api_key",
+        "key_env": "DEEPSEEK_API_KEY",
+        "expose_raw_key_to_pane": false
+      },
+      "quota": {
+        "quota_type": "api_balance",
+        "period": "api_balance",
+        "reserve_for": [
+          "PRD_REVIEW",
+          "REQUIREMENTS_REVIEW",
+          "ACCEPTANCE_REVIEW",
+          "ARCHITECTURE_REVIEW",
+          "DECISION_REVIEW",
+          "ADVISORY"
+        ],
+        "on_exhausted": "disable_and_fallback"
+      },
+      "capability": {
+        "planning": 4,
+        "coding": 0,
+        "debugging": 2,
+        "testing": 1,
+        "research": 3,
+        "long_context": 4,
+        "speed": 4,
+        "cost_efficiency": 5,
+        "reliability": 4
+      },
+      "capability_profile": {
+        "architecture_reasoning": 4,
+        "code_impl": 0,
+        "root_cause_debug": 3,
+        "test_generation": 1,
+        "test_execution": 0,
+        "research_synthesis": 3,
+        "academic_critique": 3,
+        "browser_use": 0,
+        "gui_use": 0,
+        "long_context": 4,
+        "multi_agent_coordination": 2,
+        "speed": 4
+      },
+      "routing": {
+        "operator_class": "AdvisoryReview",
+        "primary_task_types": [
+          "PRD_REVIEW",
+          "REQUIREMENTS_REVIEW",
+          "ACCEPTANCE_REVIEW",
+          "ARCHITECTURE_REVIEW",
+          "DECISION_REVIEW",
+          "ADVISORY"
+        ],
+        "avoid_task_types": [
+          "implementation",
+          "debugging",
+          "fast-patch",
+          "tests",
+          "test-execution",
+          "refactor",
+          "final-quality-gate",
+          "critical-security-review",
+          "browser-research",
+          "bulk-extraction"
+        ],
+        "fallback_operator_classes": [
+          "Verifier",
+          "DeepArchitect"
+        ]
+      },
+      "policy": {
+        "write_files": "denied",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "state": {
+        "availability": "enabled",
+        "runtime_state": "idle",
+        "last_heartbeat_at": null,
+        "last_success_at": null,
+        "last_error": null
+      },
+      "command": "set -a; source \"$HOME/.solar/brain-router/.env\" 2>/dev/null || true; source \"$HARNESS_DIR/model-config.sh\" 2>/dev/null || true; set +a; PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/reasonix_operator.py\"",
+      "launch_cmd": "REASONIX_MODEL=deepseek-v4-pro REASONIX_EFFORT=high PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/reasonix_operator.py\"",
+      "builder_pool": {
+        "enabled": false,
+        "disabled_reason": "reasonix_no_verified_file_execution_surface",
+        "disabled_at": "2026-06-02T00:00:00Z"
+      }
+    },
     "op.browser.webwright.playwright.01": {
       "display_name": "Webwright Playwright Task Operator",
       "plane": "interactive_browser",
@@ -3192,18 +3370,18 @@
       }
     },
     "mini-reasonix-deepseek-v4-flash-builder-1": {
-      "display_name": "Mac mini Reasonix DeepSeek V4 Flash builder pool slot 1",
+      "display_name": "Mac mini Reasonix DeepSeek V4 Flash advisory reviewer slot 1",
       "plane": "headless",
       "owner_host": "lisihao@100.122.223.55",
       "pane": "solar-harness-multi-task:*",
-      "profile": "deepseek-builder",
-      "role": "builder",
-      "persona": "builder",
+      "profile": "deepseek-advisory",
+      "role": "evaluator",
+      "persona": "evaluator",
       "provider": "deepseek",
       "vendor": "DeepSeek",
       "backend": "command",
       "model": "deepseek-v4-flash",
-      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;builder-pool",
+      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;advisory-only",
       "base_url": "reasonix-cli",
       "auth_mode": "api_key",
       "key_ref": "deepseek",
@@ -3215,21 +3393,18 @@
       "available": false,
       "health_status": "disabled",
       "roles": [
-        "builder"
+        "planner",
+        "evaluator"
       ],
       "task_classes": [
         "analysis",
         "review",
-        "advisory",
-        "implementation",
-        "documentation",
-        "planning"
+        "advisory"
       ],
       "strengths": [
         "reasoning",
         "critique",
         "analysis",
-        "implementation",
         "fast-iteration"
       ],
       "preferred_for": [
@@ -3241,6 +3416,11 @@
         "reasonix"
       ],
       "avoid_for": [
+        "code-edit",
+        "repo-modification",
+        "implementation",
+        "tests",
+        "test-execution",
         "bulk-extraction",
         "critical-security-review"
       ],
@@ -3250,8 +3430,8 @@
       "max_concurrency": 1,
       "fallback_profile": "evaluator",
       "policy": {
-        "write_files": "allowed",
-        "run_shell": "allowed",
+        "write_files": "denied",
+        "run_shell": "denied",
         "network": "allowed",
         "git_commit": "denied"
       },
@@ -3268,29 +3448,29 @@
         "group": "deepseek-v4-flash",
         "slot": 1,
         "priority": 6,
-        "disabled_reason": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "disabled_reason": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
         "disabled_at": "2026-06-01T20:50:00Z"
       },
       "state": {
         "availability": "disabled",
         "runtime_state": "idle",
-        "last_error": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "last_error": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
         "last_error_at": "2026-06-01T20:50:00Z"
       }
     },
     "mini-reasonix-deepseek-v4-flash-builder-2": {
-      "display_name": "Mac mini Reasonix DeepSeek V4 Flash builder pool slot 2",
+      "display_name": "Mac mini Reasonix DeepSeek V4 Flash advisory reviewer slot 2",
       "plane": "headless",
       "owner_host": "lisihao@100.122.223.55",
       "pane": "solar-harness-multi-task:*",
-      "profile": "deepseek-builder",
-      "role": "builder",
-      "persona": "builder",
+      "profile": "deepseek-advisory",
+      "role": "evaluator",
+      "persona": "evaluator",
       "provider": "deepseek",
       "vendor": "DeepSeek",
       "backend": "command",
       "model": "deepseek-v4-flash",
-      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;builder-pool",
+      "model_config": "Reasonix CLI;model=deepseek-v4-flash;effort=medium;advisory-only",
       "base_url": "reasonix-cli",
       "auth_mode": "api_key",
       "key_ref": "deepseek",
@@ -3302,21 +3482,18 @@
       "available": false,
       "health_status": "disabled",
       "roles": [
-        "builder"
+        "planner",
+        "evaluator"
       ],
       "task_classes": [
         "analysis",
         "review",
-        "advisory",
-        "implementation",
-        "documentation",
-        "planning"
+        "advisory"
       ],
       "strengths": [
         "reasoning",
         "critique",
         "analysis",
-        "implementation",
         "fast-iteration"
       ],
       "preferred_for": [
@@ -3328,6 +3505,11 @@
         "reasonix"
       ],
       "avoid_for": [
+        "code-edit",
+        "repo-modification",
+        "implementation",
+        "tests",
+        "test-execution",
         "bulk-extraction",
         "critical-security-review"
       ],
@@ -3337,8 +3519,8 @@
       "max_concurrency": 1,
       "fallback_profile": "evaluator",
       "policy": {
-        "write_files": "allowed",
-        "run_shell": "allowed",
+        "write_files": "denied",
+        "run_shell": "denied",
         "network": "allowed",
         "git_commit": "denied"
       },
@@ -3355,13 +3537,13 @@
         "group": "deepseek-v4-flash",
         "slot": 2,
         "priority": 5,
-        "disabled_reason": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "disabled_reason": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
         "disabled_at": "2026-06-01T20:50:00Z"
       },
       "state": {
         "availability": "disabled",
         "runtime_state": "idle",
-        "last_error": "disabled_by_policy_remove_deepseek_from_builder_future",
+        "last_error": "reasonix_no_verified_file_execution_surface_disabled_for_builder_policy",
         "last_error_at": "2026-06-01T20:50:00Z"
       }
     },

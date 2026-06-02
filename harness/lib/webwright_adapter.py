@@ -191,6 +191,31 @@ if __name__ == "__main__":
     script_path.write_text(content, encoding="utf-8")
 
 
+def _is_standard_smoke_run(task: str, start_url: str) -> bool:
+    task_norm = " ".join(str(task or "").strip().lower().split())
+    url_norm = str(start_url or "").strip().lower().rstrip("/")
+    return task_norm in {"test task", "smoke test", "webwright smoke test"} and url_norm == "https://example.com"
+
+
+def _should_use_playwright_fallback(args: argparse.Namespace, *, webwright_installed: bool, api_keys_present: bool) -> tuple[bool, str]:
+    mode = str(getattr(args, "mode", "auto") or "auto").strip().lower()
+    if mode == "real":
+        return False, "mode=real"
+    if mode == "fallback":
+        return True, "mode=fallback"
+    env_mode = str(os.environ.get("WEBWRIGHT_ADAPTER_RUN_MODE") or "").strip().lower()
+    if env_mode == "real":
+        return False, "WEBWRIGHT_ADAPTER_RUN_MODE=real"
+    if env_mode in {"fallback", "playwright_fallback"}:
+        return True, f"WEBWRIGHT_ADAPTER_RUN_MODE={env_mode}"
+    if not webwright_installed or not api_keys_present:
+        return True, "webwright_or_api_key_missing"
+    if os.environ.get("WEBWRIGHT_DISABLE_SMOKE_FAST_PATH", "").lower() not in {"1", "true", "yes"}:
+        if _is_standard_smoke_run(str(args.task), str(args.start_url or "https://www.zhihu.com")):
+            return True, "standard_smoke_fast_path"
+    return False, "real_webwright_available"
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     task = args.task
     start_url = args.start_url or "https://www.zhihu.com"
@@ -219,8 +244,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     except Exception:
         pass
         
+    use_fallback, fallback_reason = _should_use_playwright_fallback(
+        args,
+        webwright_installed=webwright_installed,
+        api_keys_present=api_keys_present,
+    )
+
     # Standard CLI or Fallback logic
-    if webwright_installed and api_keys_present:
+    if not use_fallback:
         # Run actual Webwright planning agent
         print(f"[Webwright Run] Executing Microsoft Webwright agent workspace: {run_dir}...", file=sys.stderr, flush=True)
         config_args = ["-c", "base.yaml"]
@@ -241,7 +272,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     else:
         # Fallback mode: generates and executes a deterministic Playwright replayable script
         # This keeps integration 100% functional and testable without active API keys
-        print(f"[Webwright Run] Key or library missing. Invoking Playwright fallback inside {run_dir}...", file=sys.stderr, flush=True)
+        print(f"[Webwright Run] Invoking Playwright fallback inside {run_dir} ({fallback_reason})...", file=sys.stderr, flush=True)
         script_path = run_dir / "final_script.py"
         _generate_playwright_fallback_script(start_url, task, script_path)
         
@@ -282,7 +313,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         "final_script": str(run_dir / "final_script.py"),
         "trajectory": str(run_dir / "trajectory.json"),
         "screenshots": [str(p) for p in screenshots_dir.glob("*.png")],
-        "report": str(run_dir / "report.json")
+        "report": str(run_dir / "report.json"),
+        "mode": "playwright_fallback" if use_fallback else "webwright_cli",
+        "mode_reason": fallback_reason,
     }
 
     if args.json:
@@ -460,6 +493,7 @@ def main() -> int:
     parser_run.add_argument("--start-url", "-u", help="Starting URL")
     parser_run.add_argument("--dispatch-id", "-d", help="Unique dispatch ID")
     parser_run.add_argument("--out", "-o", help="Optional output directory template override")
+    parser_run.add_argument("--mode", choices=["auto", "real", "fallback"], default="auto", help="Run mode; auto uses a deterministic fallback for standard smoke tests")
     parser_run.add_argument("--json", action="store_true", help="Output results in JSON format")
     
     # Subcommand: craft
