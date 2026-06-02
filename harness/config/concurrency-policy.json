@@ -45,8 +45,8 @@
         "priority": 55
       },
       "deepseek-v4-flash": {
-        "desired": 2,
-        "priority": 85
+        "desired": 0,
+        "priority": 10
       },
       "codex-gpt-5.5-medium": {
         "desired": 2,
@@ -57,8 +57,8 @@
         "priority": 96
       },
       "antigravity-gemini-3.5-flash": {
-        "desired": 2,
-        "priority": 70
+        "desired": 0,
+        "priority": 10
       }
     }
   },
@@ -73,9 +73,7 @@
           "evaluator"
         ],
         "preferred_groups": [
-          "deepseek-v4-flash",
           "codex-gpt-5.5-medium",
-          "antigravity-gemini-3.5-flash",
           "thunderomlx"
         ],
         "reason": "Independent planning work may borrow capable non-planner operators when the canonical planner pool is blocked."
@@ -87,8 +85,6 @@
           "builder"
         ],
         "preferred_groups": [
-          "deepseek-v4-flash",
-          "antigravity-gemini-3.5-flash",
           "codex-gpt-5.5-medium"
         ],
         "reason": "Independent evaluator work may borrow builder operators when evaluator pool is temporarily blocked."
