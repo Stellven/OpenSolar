@@ -30,16 +30,16 @@ def _make_bindings(tmpdir, actors_tmp=None):
     ap.write_text(json.dumps({"actors": actors}))
     return bp, ap
 
-def test_all_16_operators():
-    assert len(P0_LOGICAL_OPERATORS) == 16
+def test_all_17_operators():
+    assert len(P0_LOGICAL_OPERATORS) == 17
     expected = {
         "DeepArchitect", "RootCauseDebugger", "ImplementationWorker", "PatchWorker",
         "TestDesigner", "TestRunner", "BenchmarkRunner", "ParallelExplorer",
-        "ResearchScout", "ResearchSynthesizer", "Critic", "Verifier",
+        "ResearchScout", "ResearchSynthesizer", "Critic", "Verifier", "VerifierLite",
         "SecurityGate", "QuotaBroker", "ContextCompressor", "ArtifactCurator",
     }
     assert P0_LOGICAL_OPERATORS == expected
-    print("PASS: all_16_operators")
+    print("PASS: all_17_operators")
 
 def test_binding_changes_actor():
     with tempfile.TemporaryDirectory() as td:
@@ -118,7 +118,7 @@ def test_all_operators_bound():
         print("PASS: all_operators_bound")
 
 if __name__ == "__main__":
-    test_all_16_operators()
+    test_all_17_operators()
     test_binding_changes_actor()
     test_fallback_candidate_ordering()
     test_quota_blocked_fallback()

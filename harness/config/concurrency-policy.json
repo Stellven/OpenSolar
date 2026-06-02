@@ -223,6 +223,15 @@
         "trigger_backlog": 3,
         "backlog_per_step": 2,
         "step": 1
+      },
+      "VerifierLite": {
+        "metric": "reviewing_handoff_ready",
+        "base": 3,
+        "min": 1,
+        "max": 5,
+        "trigger_backlog": 3,
+        "backlog_per_step": 2,
+        "step": 1
       }
     },
     "builder_pool_targets": {
