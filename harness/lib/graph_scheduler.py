@@ -2357,6 +2357,94 @@ def epic_child_activation(graph: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _epic_node_for_child(epic_graph: dict[str, Any], child_sprint_id: str) -> dict[str, Any] | None:
+    nodes = epic_graph.get("nodes") if isinstance(epic_graph.get("nodes"), list) else []
+    for node in nodes:
+        if isinstance(node, dict) and str(node.get("child_sprint_id") or "") == child_sprint_id:
+            return node
+    return None
+
+
+def child_sprint_dependency_blockers(
+    child_sprint_id: str,
+    epic_graph: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return unmet parent-epic dependencies for a child sprint."""
+    if not child_sprint_id or not isinstance(epic_graph, dict):
+        return []
+    child_node = _epic_node_for_child(epic_graph, child_sprint_id)
+    if not child_node:
+        return []
+    epic_ids = _node_map(epic_graph)
+    blockers: list[dict[str, Any]] = []
+    for dep_id in child_node.get("depends_on") or []:
+        dep_key = str(dep_id or "")
+        dep_node = epic_ids.get(dep_key)
+        dep_status = node_status(epic_graph, dep_key) if dep_node else "missing"
+        if dep_status not in (PASS_STATUSES | {"completed", "eval_passed"}):
+            blockers.append({
+                "node": dep_key,
+                "child_sprint_id": (dep_node or {}).get("child_sprint_id"),
+                "current_status": dep_status,
+                "required_status": "passed",
+            })
+    return blockers
+
+
+def activation_route_decision(
+    graph: dict[str, Any],
+    *,
+    graph_path: str | Path | None = None,
+    child_status: dict[str, Any] | None = None,
+    epic_graph: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compute a graph-backed autopilot route decision without mutating queues."""
+    child_status = child_status if isinstance(child_status, dict) else {}
+    sprint_id = str(graph.get("sprint_id") or child_status.get("sprint_id") or child_status.get("id") or "")
+    try:
+        validation = validate_graph(graph)
+    except Exception as exc:
+        validation = {"ok": False, "errors": [str(exc)], "warnings": []}
+    parent_blockers = [] if not validation.get("ok") else child_sprint_dependency_blockers(sprint_id, epic_graph)
+    external_blockers = [] if not validation.get("ok") else blocked_external_prerequisites(graph)
+    ready = [] if not validation.get("ok") or parent_blockers or external_blockers else ready_nodes(graph)
+    phase = str(child_status.get("phase") or "").strip()
+    target_role = str(child_status.get("target_role") or child_status.get("handoff_to") or "").strip()
+    if not target_role and phase == "planning_complete":
+        target_role = "builder_main"
+    route_role = "builder_main" if target_role == "builder_main" or phase == "planning_complete" else "planner"
+
+    blocked_reason = ""
+    if not validation.get("ok"):
+        blocked_reason = "task_graph_validation_failed"
+    elif parent_blockers:
+        blocked_reason = "parent_dependency_blocked"
+    elif external_blockers:
+        blocked_reason = "external_prerequisite_blocked"
+    elif not ready:
+        blocked_reason = "no_ready_nodes"
+
+    return {
+        "ok": True,
+        "sprint_id": sprint_id,
+        "graph_path": str(graph_path or ""),
+        "phase": phase,
+        "route_role": route_role,
+        "target_role": target_role,
+        "ready_nodes": [str(node.get("id") or "") for node in ready],
+        "ready_count": len(ready),
+        "can_dispatch": bool(ready) and not blocked_reason and target_role == "builder_main",
+        "blocked_reason": blocked_reason,
+        "validation": {
+            "ok": bool(validation.get("ok")),
+            "errors": validation.get("errors") or [],
+            "warnings": validation.get("warnings") or [],
+        },
+        "parent_blockers": parent_blockers,
+        "external_blockers": external_blockers,
+    }
+
+
 def doctor_graph(graph: dict[str, Any], repair: bool = False) -> dict[str, Any]:
     """Detect and optionally repair graph state drift.
 

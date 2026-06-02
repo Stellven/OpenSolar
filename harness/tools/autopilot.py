@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import importlib
 import json
 import os
 import subprocess
@@ -37,9 +38,12 @@ from pathlib import Path
 
 HOME = Path.home()
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness"))
+SCRIPT_HARNESS_DIR = Path(__file__).resolve().parent.parent
 
 # Pull in sibling modules from lib/
-sys.path.insert(0, str(HARNESS_DIR / "lib"))
+for _lib_dir in [HARNESS_DIR / "lib", SCRIPT_HARNESS_DIR / "lib"]:
+    if str(_lib_dir) not in sys.path:
+        sys.path.insert(0, str(_lib_dir))
 from pane_lease import pane_state, release, reap, list_leases  # noqa: E402
 from task_queue import next_free_worker, enqueue, pop, depth   # noqa: E402
 from graph_node_dispatcher import dispatch_queue_item          # noqa: E402
@@ -440,6 +444,115 @@ def drain_queue(sprint_id: str) -> dict:
     return {"ok": True, "sprint_id": sprint_id, "dispatched": len(dispatched), "items": dispatched}
 
 
+# ── graph-backed child activation ─────────────────────────────────────────────
+
+def _status_path_for_sprint(sprint_id: str) -> Path:
+    return HARNESS_DIR / "sprints" / f"{sprint_id}.status.json"
+
+
+def _graph_path_for_sprint(sprint_id: str) -> Path:
+    return HARNESS_DIR / "sprints" / f"{sprint_id}.task_graph.json"
+
+
+def _load_json_if_exists(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _script_lib_module(module_name: str):
+    script_lib = str(SCRIPT_HARNESS_DIR / "lib")
+    if script_lib in sys.path:
+        sys.path.remove(script_lib)
+    sys.path.insert(0, script_lib)
+    loaded = sys.modules.get(module_name)
+    loaded_path = Path(str(getattr(loaded, "__file__", ""))) if loaded else None
+    expected_root = SCRIPT_HARNESS_DIR / "lib"
+    if loaded and loaded_path and expected_root in loaded_path.parents:
+        return loaded
+    sys.modules.pop(module_name, None)
+    return importlib.import_module(module_name)
+
+
+def _epic_graph_path_for_status(status: dict) -> Path | None:
+    epic_id = str(status.get("epic_id") or "").strip()
+    if not epic_id:
+        return None
+    path = HARNESS_DIR / "sprints" / f"{epic_id}.task_graph.json"
+    return path if path.exists() else None
+
+
+def _record_activation_history(status_path: Path, decision: dict, *, dry_run: bool) -> dict:
+    status = _load_json_if_exists(status_path)
+    if not status:
+        return {"ok": False, "reason": "status_missing", "path": str(status_path)}
+    event = {
+        "ts": _now(),
+        "event": "autopilot_graph_activation_decision",
+        "by": "autopilot",
+        "route_role": decision.get("route_role"),
+        "target_role": decision.get("target_role"),
+        "phase": decision.get("phase"),
+        "blocked_reason": decision.get("blocked_reason") or "",
+        "ready_nodes": decision.get("ready_nodes") or [],
+        "can_dispatch": bool(decision.get("can_dispatch")),
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return {"ok": True, "dry_run": True, "event": event, "path": str(status_path)}
+    history = status.get("history")
+    if not isinstance(history, list):
+        history = []
+    history.append(event)
+    status["history"] = history
+    status["updated_at"] = event["ts"]
+    status_path.write_text(json.dumps(status, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"ok": True, "dry_run": False, "event": event, "path": str(status_path)}
+
+
+def activate_graph(
+    sprint_id: str,
+    *,
+    graph_path: Path | None = None,
+    workers_path: Path | None = None,
+    max_parallel: int | None = None,
+    dry_run: bool = False,
+) -> dict:
+    """Activate ready child task_graph nodes using scheduler evidence."""
+    graph_scheduler = _script_lib_module("graph_scheduler")
+
+    graph_path = graph_path or _graph_path_for_sprint(sprint_id)
+    status_path = _status_path_for_sprint(sprint_id)
+    status = _load_json_if_exists(status_path)
+    graph = graph_scheduler.load_graph(graph_path)
+    epic_path = _epic_graph_path_for_status(status)
+    epic_graph = _load_json_if_exists(epic_path) if epic_path else {}
+    decision = graph_scheduler.activation_route_decision(
+        graph,
+        graph_path=graph_path,
+        child_status=status,
+        epic_graph=epic_graph,
+    )
+    history = _record_activation_history(status_path, decision, dry_run=dry_run)
+    enqueue_result: dict = {"ok": True, "skipped": True, "reason": decision.get("blocked_reason") or "dry_run_or_no_workers"}
+    if decision.get("can_dispatch") and workers_path and not dry_run:
+        workers = _load_json_if_exists(workers_path)
+        worker_list = workers.get("workers") if isinstance(workers.get("workers"), list) else []
+        enqueue_result = graph_scheduler.enqueue_ready(graph, str(graph_path), worker_list, max_parallel=max_parallel)
+        graph_scheduler.save_graph(graph_path, graph)
+    return {
+        "ok": bool(decision.get("ok")),
+        "sprint_id": sprint_id,
+        "decision": decision,
+        "history": history,
+        "enqueue": enqueue_result,
+    }
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -466,6 +579,13 @@ def main() -> int:
     rt = sub.add_parser("runtime-debt")
     rt.add_argument("--sprint")
     rt.add_argument("--repair", action="store_true")
+
+    ag = sub.add_parser("activate-graph")
+    ag.add_argument("--sprint", required=True)
+    ag.add_argument("--graph")
+    ag.add_argument("--workers")
+    ag.add_argument("--max-parallel", type=int)
+    ag.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()
 
@@ -506,6 +626,16 @@ def main() -> int:
     elif args.cmd == "runtime-debt":
         result = runtime_debt_actions(getattr(args, "sprint", None), repair=bool(args.repair))
         print(json.dumps(result, indent=2))
+
+    elif args.cmd == "activate-graph":
+        result = activate_graph(
+            args.sprint,
+            graph_path=Path(args.graph) if args.graph else None,
+            workers_path=Path(args.workers) if args.workers else None,
+            max_parallel=args.max_parallel,
+            dry_run=bool(args.dry_run),
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
 
     else:
         ap.print_help()
