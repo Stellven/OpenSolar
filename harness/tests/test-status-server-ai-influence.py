@@ -87,20 +87,30 @@ def main() -> None:
             json.dumps(
                 {
                     "date": "2026-06-01",
-                    "report_variant": "fallback_report",
+                    "report_variant": "premium_insight_report",
                     "premium_insight_count": 0,
-                    "fallback_count": 2,
+                    "fallback_count": 24,
+                    "report_context": {
+                        "cadence": "weekly",
+                        "window_label": "2026-05-26 ~ 2026-06-01",
+                    },
+                    "collection_summary": {
+                        "daily_unique_papers": 24,
+                    },
+                    "grouped_report_sections": [{}, {}, {}, {}, {}],
                     "papers": [{"paper_id": "p1"}, {"paper_id": "p2"}],
                 },
                 ensure_ascii=False,
             ),
         )
         hf_item = status._huggingface_papers_item(hf_dir)
-        assert hf_item["status"] == "warn"
-        assert hf_item["subtitle"] == "论文热点基础快报"
-        assert hf_item["metrics"]["报告类型"] == "fallback_report"
-        assert hf_item["metrics"]["高级洞察"] == 0
-        assert hf_item["metrics"]["基础摘要"] == 2
+        assert hf_item["status"] == "ok"
+        assert hf_item["title"] == "Hugging Face 论文周报 — 2026-05-26 ~ 2026-06-01"
+        assert hf_item["subtitle"] == "论文热点周报"
+        assert hf_item["metrics"]["报告形态"] == "高级洞察报告"
+        assert hf_item["metrics"]["报告周期"] == "2026-05-26 ~ 2026-06-01"
+        assert hf_item["metrics"]["窗口去重"] == 24
+        assert hf_item["metrics"]["分组章节"] == 5
         assert hf_item["primary"]["artifact"] == "report_html"
         assert any(a["artifact"] == "report_html" for a in hf_item["artifacts"])
         assert any(r["artifact"] == "report_html" for r in hf_item["resources"])

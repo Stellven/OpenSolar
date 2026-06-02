@@ -8747,6 +8747,56 @@ def hf_report_context(date_str: str, config: dict[str, Any] | None, *, requested
     }
 
 
+def hf_report_collection_summary(
+    config: dict[str, Any] | None,
+    *,
+    report_context: dict[str, Any],
+    public_records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    summary = {
+        "cadence": str(report_context.get("cadence") or "daily"),
+        "window_start": str(report_context.get("window_start") or report_context.get("date") or ""),
+        "window_end": str(report_context.get("window_end") or report_context.get("date") or ""),
+        "window_label": str(report_context.get("window_label") or report_context.get("date") or ""),
+        "selected_papers": len(public_records),
+        "core_papers": sum(1 for record in public_records if bool(((record.get("weekly_signal") or {}).get("is_core")))),
+        "daily_rows": 0,
+        "daily_unique_papers": 0,
+        "weekly_snapshot_unique_papers": 0,
+        "monthly_snapshot_unique_papers": 0,
+    }
+    output = (config or {}).get("output") or {}
+    db_path = Path(output.get("database") or (Path.home() / ".solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite")).expanduser()
+    if not db_path.exists():
+        return summary
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.row_factory = sqlite3.Row
+        start = str(report_context.get("window_start") or report_context.get("date") or "")
+        end = str(report_context.get("window_end") or report_context.get("date") or "")
+        summary["daily_rows"] = int(conn.execute(
+            "SELECT count(*) AS c FROM hf_daily_papers WHERE paper_date BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["c"] or 0)
+        summary["daily_unique_papers"] = int(conn.execute(
+            "SELECT count(DISTINCT paper_id) AS c FROM hf_daily_papers WHERE paper_date BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["c"] or 0)
+        summary["weekly_snapshot_unique_papers"] = int(conn.execute(
+            "SELECT count(DISTINCT paper_id) AS c FROM hf_paper_period_snapshots WHERE period='weekly' AND substr(snapshot_at, 1, 10) BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["c"] or 0)
+        summary["monthly_snapshot_unique_papers"] = int(conn.execute(
+            "SELECT count(DISTINCT paper_id) AS c FROM hf_paper_period_snapshots WHERE period='monthly' AND substr(snapshot_at, 1, 10) BETWEEN ? AND ?",
+            (start, end),
+        ).fetchone()["c"] or 0)
+    except sqlite3.Error:
+        return summary
+    finally:
+        conn.close()
+    return summary
+
+
 def hf_candidate_reasoning_plan(
     *,
     report_context: dict[str, Any],
@@ -10181,6 +10231,7 @@ def hf_write_public_report(
     public_records = [c["public"] for c in candidates]
     premium_count = sum(1 for r in public_records if bool(((r.get("reasoning") or {}).get("premium_insight_available"))))
     fallback_count = max(0, len(public_records) - premium_count)
+    collection_summary = hf_report_collection_summary(config, report_context=report_context, public_records=public_records)
     base_report_variant = "premium_insight_report" if public_records and premium_count == len(public_records) else "fallback_report"
     grouped_report: dict[str, Any] | None = None
     grouped_report_error_kind = ""
@@ -10257,6 +10308,7 @@ def hf_write_public_report(
         "report_variant": report_variant,
         "premium_insight_count": premium_count,
         "fallback_count": fallback_count,
+        "collection_summary": collection_summary,
         "grouped_report_ok": bool(grouped_report),
         "grouped_report_model": (grouped_report or {}).get("model") or "",
         "grouped_report_error": grouped_report_error_kind,

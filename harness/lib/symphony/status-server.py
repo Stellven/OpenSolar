@@ -1124,11 +1124,31 @@ def _huggingface_papers_item(run_dir: Path) -> dict:
     pack_json = pack_path if pack_path.exists() else legacy_json_path
     papers_count = len(_huggingface_pack_papers(pack_path)) if pack_path.exists() else _legacy_huggingface_papers_count(legacy_json_path)
     pack_meta = _huggingface_pack_meta(pack_path) if pack_path.exists() else {}
+    report_context = pack_meta.get("report_context") if isinstance(pack_meta.get("report_context"), dict) else {}
+    collection_summary = pack_meta.get("collection_summary") if isinstance(pack_meta.get("collection_summary"), dict) else {}
+    cadence = str(report_context.get("cadence") or "daily").strip().lower()
+    window_label = str(report_context.get("window_label") or date_str).strip() or date_str
+    grouped_sections = len(pack_meta.get("grouped_report_sections") or []) if isinstance(pack_meta.get("grouped_report_sections"), list) else 0
     report_variant = str(pack_meta.get("report_variant") or ("premium_insight_report" if report_md_path.exists() and papers_count else "fallback_report"))
     premium_count = int(pack_meta.get("premium_insight_count") or 0)
     fallback_count = int(pack_meta.get("fallback_count") or max(0, papers_count - premium_count))
     primary_label = "report_html" if report_html_path.exists() else ("report_md" if report_md_path.exists() else "trending_papers_md")
     item_status = "ok" if report_md.exists() and report_variant == "premium_insight_report" else ("warn" if report_md.exists() else "warn")
+    report_label = _ai_influence_display_value(report_variant)
+    title = f"Hugging Face 论文周报 — {window_label}" if cadence == "weekly" else f"Hugging Face 论文热点 — {date_str}"
+    subtitle = "论文热点周报" if cadence == "weekly" else ("论文热点深度洞察" if report_variant == "premium_insight_report" else "论文热点基础快报")
+    metrics = {
+        "收录论文": papers_count,
+        "报告形态": report_label,
+    }
+    if cadence == "weekly":
+        metrics["报告周期"] = window_label
+        metrics["窗口去重"] = int(collection_summary.get("daily_unique_papers") or papers_count)
+        if grouped_sections:
+            metrics["分组章节"] = grouped_sections
+    else:
+        metrics["高级洞察"] = premium_count
+        metrics["基础摘要"] = fallback_count
 
     artifacts = []
     if report_html_path.exists():
@@ -1163,17 +1183,12 @@ def _huggingface_papers_item(run_dir: Path) -> dict:
         "module_label": "HF Papers",
         "module_title": "Hugging Face 论文热点",
         "date": date_str,
-        "title": f"Hugging Face 论文热点 — {date_str}",
-        "subtitle": "论文热点深度洞察" if report_variant == "premium_insight_report" else "论文热点基础快报",
+        "title": title,
+        "subtitle": subtitle,
         "status": item_status,
         "primary": _ai_influence_public_artifact(primary_label, report_html_path if report_html_path.exists() else report_md, report_id),
         "artifacts": artifacts,
-        "metrics": {
-            "收录论文": papers_count,
-            "报告类型": report_variant,
-            "高级洞察": premium_count,
-            "基础摘要": fallback_count,
-        },
+        "metrics": metrics,
         "filters": {
             "themes": ["Hugging Face Papers"],
             "technologies": ["HuggingFace", "Paper"],
@@ -1330,27 +1345,52 @@ def _ai_influence_group_summary(key: str, items: list[dict]) -> dict:
     if key == "huggingface_papers":
         rows = []
         total_papers = 0
+        total_unique = 0
+        weekly_count = 0
+        legacy_count = 0
         for item in items:
             report_dir = Path(str(item.get("_report_dir") or ""))
             pack_path = report_dir / "hf-paper-insight-pack.json"
             legacy_json_path = report_dir / "trending-papers.json"
             pack_meta = _huggingface_pack_meta(pack_path) if pack_path.exists() else {}
+            report_context = pack_meta.get("report_context") if isinstance(pack_meta.get("report_context"), dict) else {}
+            collection_summary = pack_meta.get("collection_summary") if isinstance(pack_meta.get("collection_summary"), dict) else {}
+            cadence = str(report_context.get("cadence") or "daily").strip().lower()
+            if cadence == "weekly":
+                weekly_count += 1
+            else:
+                legacy_count += 1
             papers = _huggingface_pack_papers(pack_path)
             papers_count = len(papers) if pack_path.exists() else _legacy_huggingface_papers_count(legacy_json_path)
             total_papers += papers_count
+            total_unique += int(collection_summary.get("daily_unique_papers") or papers_count)
             top_titles = "、".join(str(p.get("title") or p.get("paper_id") or "N/A") for p in papers[:3]) if papers else "N/A"
             rows.append({
-                "date": item.get("date") or "N/A",
+                "date": str(report_context.get("window_label") or item.get("date") or "N/A"),
                 "papers": str(papers_count),
-                "variant": str(pack_meta.get("report_variant") or item.get("_report_variant") or "fallback_report"),
+                "variant": _ai_influence_display_value(pack_meta.get("report_variant") or item.get("_report_variant") or "fallback_report"),
+                "window_unique": str(collection_summary.get("daily_unique_papers") or papers_count),
                 "top_titles": top_titles,
             })
+        mixed_mode = weekly_count > 0 and legacy_count > 0
+        weekly_mode = weekly_count > 0
+        if mixed_mode:
+            headline = f"{weekly_count} 份 Hugging Face 周报，另有 {legacy_count} 份历史快报，共覆盖 {total_unique} 篇窗口去重论文。"
+            metrics = {"周报": weekly_count, "历史快报": legacy_count, "收录论文": total_papers, "窗口去重": total_unique}
+        elif weekly_mode:
+            headline = f"{weekly_count} 份 Hugging Face 周报，共覆盖 {total_unique} 篇窗口去重论文。"
+            metrics = {"周报": weekly_count, "收录论文": total_papers, "窗口去重": total_unique}
+        else:
+            headline = f"{len(items)} 份 Hugging Face 论文洞察，共收录 {total_papers} 篇论文分析。"
+            metrics = {"快报": len(items), "论文数": total_papers}
+        columns = ["报告周期", "收录论文", "报告形态", "窗口去重", "代表论文"] if weekly_mode else ["日期", "收录论文", "报告类型", "代表论文"]
+        row_map = [("date", "报告周期"), ("papers", "收录论文"), ("variant", "报告形态"), ("window_unique", "窗口去重"), ("top_titles", "代表论文")] if weekly_mode else [("date", "日期"), ("papers", "收录论文"), ("variant", "报告类型"), ("top_titles", "代表论文")]
         return {
-            "headline": f"{len(items)} 份 Hugging Face 论文洞察，共收录 {total_papers} 篇论文分析。",
-            "metrics": {"快报": len(items), "论文数": total_papers},
-            "columns": ["日期", "收录论文", "报告类型", "代表论文"],
+            "headline": headline,
+            "metrics": metrics,
+            "columns": columns,
             "rows": rows[:24],
-            "row_map": [("date", "日期"), ("papers", "收录论文"), ("variant", "报告类型"), ("top_titles", "代表论文")],
+            "row_map": row_map,
         }
     rows = []
     total_inputs = 0
