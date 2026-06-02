@@ -208,14 +208,18 @@ def load_profiles() -> dict[str, Any]:
             builder_limit = int(concurrency_policy.effective_max_parallel(4, scope="builder"))
             defaults = data.setdefault("defaults", {})
             if isinstance(defaults, dict):
-                defaults["max_workers"] = builder_limit
+                default_workers = int(defaults.get("max_workers", builder_limit) or builder_limit)
+                defaults["max_workers"] = concurrency_policy.effective_global_max_workers(default_workers)
                 defaults["concurrency_level"] = concurrency_policy.active_level()
-            for spec in (data.get("profiles") or {}).values():
+            for name, spec in (data.get("profiles") or {}).items():
                 if not isinstance(spec, dict):
                     continue
                 role = str(spec.get("role") or "").strip().lower()
+                base_limit = int(spec.get("max_parallel", 1) or 1)
+                effective_limit = int(concurrency_policy.effective_profile_max_parallel(str(name), base_limit))
                 if role == "builder":
-                    spec["max_parallel"] = builder_limit
+                    effective_limit = min(effective_limit, builder_limit)
+                spec["max_parallel"] = max(1, effective_limit)
         except Exception:
             pass
         return data
@@ -228,6 +232,17 @@ def load_profiles() -> dict[str, Any]:
         except Exception:
             pass
     return _apply_concurrency_knob(json.loads(json.dumps(DEFAULT_PROFILE_CONFIG)))
+
+
+def effective_scheduler_max_workers(default: int) -> int:
+    try:
+        if str(HARNESS_DIR / "lib") not in sys.path:
+            sys.path.insert(0, str(HARNESS_DIR / "lib"))
+        import concurrency_policy  # type: ignore
+
+        return max(1, int(concurrency_policy.effective_global_max_workers(default)))
+    except Exception:
+        return max(1, int(default or 1))
 
 
 def load_physical_operators() -> dict[str, Any]:
@@ -2077,6 +2092,34 @@ def active_tasks() -> list[dict[str, Any]]:
     return [row for row in list_task_rows() if str(row.get("effective_status") or row.get("status", "")).lower() in ACTIVE_TASK_STATUSES]
 
 
+def active_parallel_counts(tasks: list[dict[str, Any]] | None = None) -> dict[str, dict[str, int]]:
+    tasks = tasks if tasks is not None else active_tasks()
+    by_profile: dict[str, int] = {}
+    by_role: dict[str, int] = {}
+    for task in tasks:
+        profile = normalize_profile_name(str(task.get("profile") or task.get("name") or ""))
+        role = str(task.get("role") or "").strip().lower()
+        if profile:
+            by_profile[profile] = by_profile.get(profile, 0) + 1
+        if role:
+            by_role[role] = by_role.get(role, 0) + 1
+    return {"profile": by_profile, "role": by_role}
+
+
+def profile_parallel_limit_reached(profile: dict[str, Any], counts: dict[str, dict[str, int]] | None = None) -> dict[str, Any]:
+    counts = counts or active_parallel_counts()
+    name = normalize_profile_name(str(profile.get("name") or ""))
+    limit = max(1, int(profile.get("max_parallel", 1) or 1))
+    active = int((counts.get("profile") or {}).get(name, 0))
+    return {
+        "ok": active < limit,
+        "profile": name or "N/A",
+        "active": active,
+        "limit": limit,
+        "reason": "profile_parallel_limit_reached" if active >= limit else "ready",
+    }
+
+
 def task_inventory(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     counts: dict[str, int] = {}
     status_counts: dict[str, int] = {}
@@ -3033,7 +3076,7 @@ def launch_node(graph_path: Path, graph: dict[str, Any], node: dict[str, Any], a
 
 def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
     RUN_DIR.mkdir(parents=True, exist_ok=True)
-    max_workers = max(1, int(args.max_workers))
+    max_workers = effective_scheduler_max_workers(max(1, int(args.max_workers)))
     recovered_quota_failures = 0
     for graph_path in graph_files(args.graph):
         try:
@@ -3051,7 +3094,9 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
         guard["ok"] = True
         guard["reason"] = "recent_quota_or_rate_limit_bypassed_for_fallback"
         guard["recovered_quota_failures"] = recovered_quota_failures
-    slots = max(0, max_workers - len(active_tasks()))
+    active_rows = active_tasks()
+    slots = max(0, max_workers - len(active_rows))
+    parallel_counts = active_parallel_counts(active_rows)
     launched: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     summaries: list[dict[str, Any]] = []
@@ -3091,6 +3136,17 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
             except Exception as exc:
                 skipped.append({"graph": str(graph_path), "node": node.get("id"), "reason": "capability_error", "error": str(exc)})
                 continue
+            parallel_guard = profile_parallel_limit_reached(profile, parallel_counts)
+            if not parallel_guard.get("ok"):
+                skipped.append({
+                    "graph": str(graph_path),
+                    "node": node.get("id"),
+                    "reason": parallel_guard.get("reason"),
+                    "profile": parallel_guard.get("profile"),
+                    "active": parallel_guard.get("active"),
+                    "limit": parallel_guard.get("limit"),
+                })
+                continue
             if capability.get("status") != "ok":
                 skipped.append({
                     "graph": str(graph_path),
@@ -3106,6 +3162,14 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
             launched.append(launch_node(graph_path, graph, node, args, dry_run=args.dry_run))
             if not args.dry_run:
                 slots -= 1
+                profile_name = normalize_profile_name(str(profile.get("name") or ""))
+                role = str(profile.get("role") or "").strip().lower()
+                if profile_name:
+                    parallel_counts.setdefault("profile", {})
+                    parallel_counts["profile"][profile_name] = int(parallel_counts["profile"].get(profile_name, 0)) + 1
+                if role:
+                    parallel_counts.setdefault("role", {})
+                    parallel_counts["role"][role] = int(parallel_counts["role"].get(role, 0)) + 1
 
     if not summaries:
         summaries = cached_status_summaries_for_graphs(graph_files(args.graph))
@@ -3124,7 +3188,7 @@ def schedule_once(args: argparse.Namespace) -> dict[str, Any]:
 def status_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     """Read current worker and DAG state without dispatching new work."""
     RUN_DIR.mkdir(parents=True, exist_ok=True)
-    max_workers = max(1, int(getattr(args, "max_workers", DEFAULT_MAX_WORKERS)))
+    max_workers = effective_scheduler_max_workers(max(1, int(getattr(args, "max_workers", DEFAULT_MAX_WORKERS))))
     memory_reserve_gb = float(getattr(args, "memory_reserve_gb", DEFAULT_MEMORY_RESERVE_GB))
     cooldown_sec = int(getattr(args, "cooldown_sec", DEFAULT_COOLDOWN))
     quota_backoff_sec = int(getattr(args, "quota_backoff_sec", DEFAULT_QUOTA_BACKOFF))
