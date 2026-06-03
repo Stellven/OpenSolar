@@ -59,6 +59,6 @@ def test_profile_registry_defaults(tmp_path: Path) -> None:
 
 def test_profile_registry_supports_nested_profile_ids(tmp_path: Path) -> None:
     registry = ProfileRegistry(root=tmp_path)
-    meta = registry.write_meta("chatgpt/haogege1977", {"status": "healthy"})
-    assert meta["profile_id"] == "chatgpt/haogege1977"
-    assert registry.meta_path("chatgpt/haogege1977").exists()
+    meta = registry.write_meta("chatgpt/example-user", {"status": "healthy"})
+    assert meta["profile_id"] == "chatgpt/example-user"
+    assert registry.meta_path("chatgpt/example-user").exists()

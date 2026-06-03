@@ -40,9 +40,9 @@ def test_browser_profile_control_profile_init(tmp_path: Path) -> None:
             "--service",
             "chatgpt",
             "--profile",
-            "haogege1977",
+            "example-user",
             "--account",
-            "haogege1977@gmail.com",
+            "browser-agent@example.com",
             "--headed",
         ],
         text=True,
@@ -52,5 +52,5 @@ def test_browser_profile_control_profile_init(tmp_path: Path) -> None:
     )
     payload = json.loads(proc.stdout)
     assert payload["ok"] is True
-    assert payload["profile_id"] == "chatgpt/haogege1977"
+    assert payload["profile_id"] == "chatgpt/example-user"
     assert payload["meta"]["headed_required_for_first_login"] is True
