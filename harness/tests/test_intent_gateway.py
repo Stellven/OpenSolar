@@ -176,8 +176,40 @@ def test_capture_research_implementation_trigger_invokes_requirement_writer(tmp_
     assert rewritten["requirement_enhancement"]["trigger_phrase"] == "研究实现"
     assert ir["source_inputs"]["enhanced_requirement"]["operator"] == "GPTRequirementWriter"
     assert "基于原始需求扩写" in ir["source_inputs"]["enhanced_requirement"]["content"]
+    assert ir["source_inputs"]["enhanced_requirement"]["sections"][0]["heading"] == "需求概述"
+    assert ir["source_inputs"]["enhanced_requirement"]["compile_segments"][0]["heading"] == "需求概述"
     assert trace["stages"][1]["stage"] == "requirement_enhancement"
     assert (base / "gpt_requirement_writer_output.md").exists()
+
+
+def test_requirement_writer_trigger_phrases_are_configurable(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    env["SOLAR_GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES"] = "实验实现,研究落地"
+    fake = tmp_path / "fake_requirement_writer.py"
+    fake.write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "request_dir=Path(os.environ['BROWSER_AGENT_REQUEST_DIR'])\n"
+        "request_dir.mkdir(parents=True, exist_ok=True)\n"
+        "(request_dir/'chatgpt-mode-state.json').write_text(json.dumps({'ok': True}), encoding='utf-8')\n"
+        "print('# 需求概述\\n\\n配置化触发词命中。')\n",
+        encoding="utf-8",
+    )
+    env["SOLAR_GPT_REQUIREMENT_WRITER_CMD"] = f"{sys.executable} {fake}"
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "capture", "--text", "实验实现 一个新链路。", "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    base = tmp_path / "intents" / payload["intent_id"]
+    rewritten = json.loads((base / "rewritten_intent.json").read_text())
+    assert rewritten["requirement_enhancement"]["trigger_phrase"] == "实验实现"
+    assert "实验实现" in rewritten["requirement_enhancement"]["configured_phrases"]
 
 
 def test_bind_copies_requirement_writer_artifacts_when_present(tmp_path):

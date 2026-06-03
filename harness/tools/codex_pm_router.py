@@ -183,19 +183,48 @@ def _extract_effective_request_text(text: str) -> dict[str, str]:
             "goal_text": whole,
             "problem_text": whole,
             "raw_user_text": whole,
+            "enhanced_requirement_text": "",
+            "enhanced_requirement_sections": [],
         }
 
     objective = _collapse_goal_text(_extract_markdown_section(text, "Rewritten Objective"))
     problem = _collapse_goal_text(_extract_markdown_section(text, "Problem"))
-    enhanced_requirement = _collapse_goal_text(_extract_markdown_section(text, "Enhanced Requirement Design"))
+    enhanced_requirement_block = _extract_markdown_section(text, "Enhanced Requirement Design")
+    enhanced_requirement = _collapse_goal_text(enhanced_requirement_block)
     raw_user_intent = _collapse_goal_text(_extract_markdown_section(text, "Raw User Intent"))
     effective = enhanced_requirement or raw_user_intent or problem or objective or whole
     goal = enhanced_requirement or objective or problem or raw_user_intent or effective
+    sections: list[dict[str, str]] = []
+    current_heading = ""
+    body_lines: list[str] = []
+    for line in enhanced_requirement_block.splitlines():
+        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if match:
+            if current_heading:
+                sections.append(
+                    {
+                        "heading": current_heading,
+                        "content": _collapse_goal_text("\n".join(body_lines)),
+                    }
+                )
+            current_heading = match.group(2).strip()
+            body_lines = []
+            continue
+        body_lines.append(line)
+    if current_heading:
+        sections.append(
+            {
+                "heading": current_heading,
+                "content": _collapse_goal_text("\n".join(body_lines)),
+            }
+        )
     return {
         "effective_text": effective,
         "goal_text": goal,
         "problem_text": problem or effective,
         "raw_user_text": raw_user_intent or effective,
+        "enhanced_requirement_text": enhanced_requirement,
+        "enhanced_requirement_sections": sections,
     }
 
 
@@ -1332,6 +1361,8 @@ def build_pm_intake(
     goal_text = effective_text["goal_text"] or compile_text
     problem_text = effective_text["problem_text"] or compile_text
     raw_user_text = effective_text["raw_user_text"] or compile_text
+    enhanced_requirement_text = effective_text.get("enhanced_requirement_text") or ""
+    enhanced_requirement_sections = effective_text.get("enhanced_requirement_sections") or []
     request_type = classify_request_type(compile_text, papers)
     canonical_request_type = CLASS_TO_CANONICAL[request_type]
     lane_hint = choose_lane_hint(request_type, compile_text)
@@ -1358,6 +1389,20 @@ def build_pm_intake(
         "logs": logs,
         "repo_context": repo_context,
     }
+    if enhanced_requirement_text:
+        source_inputs["enhanced_requirement_text"] = enhanced_requirement_text
+    if enhanced_requirement_sections:
+        source_inputs["enhanced_requirement_sections"] = enhanced_requirement_sections
+        source_inputs["compile_segments"] = [
+            {
+                "kind": "enhanced_requirement_section",
+                "heading": str(section.get("heading") or ""),
+                "text": (
+                    f"{section.get('heading')}\n{section.get('content')}".strip()
+                ),
+            }
+            for section in enhanced_requirement_sections
+        ]
     prd_view = _make_prd_view(
         canonical_request_type,
         normalized_goal,

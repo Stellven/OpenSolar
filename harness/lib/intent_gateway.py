@@ -25,7 +25,7 @@ HARNESS_DIR = Path(os.environ.get("SOLAR_HARNESS_DIR", Path(__file__).resolve().
 SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", Path.home() / ".solar" / "harness" / "sprints"))
 INTENTS_DIR = Path(os.environ.get("SOLAR_INTENT_GATEWAY_DIR", Path.home() / ".solar" / "harness" / "intents"))
 
-GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES = (
+DEFAULT_GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES = (
     "研究实现",
     "分析论文并实现",
     "调研并实现",
@@ -48,6 +48,55 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _load_trigger_phrases_from_file(path_text: str) -> list[str]:
+    path = Path(path_text).expanduser()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict):
+        phrases = data.get("phrases")
+        if isinstance(phrases, list):
+            return [str(item).strip() for item in phrases if str(item).strip()]
+    if isinstance(data, list):
+        return [str(item).strip() for item in data if str(item).strip()]
+    raise RuntimeError(f"invalid_requirement_writer_trigger_file:{path}")
+
+
+def load_requirement_writer_trigger_phrases() -> list[str]:
+    raw_file = str(os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_TRIGGER_FILE") or "").strip()
+    if raw_file:
+        return _load_trigger_phrases_from_file(raw_file)
+    raw = str(os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES") or "").strip()
+    if raw:
+        items = [item.strip() for item in re.split(r"[\n,|]+", raw) if item.strip()]
+        if items:
+            return items
+    return list(DEFAULT_GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES)
+
+
+def parse_markdown_sections(markdown_text: str) -> list[dict[str, Any]]:
+    sections: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    body_lines: list[str] = []
+    for line in str(markdown_text or "").splitlines():
+        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if match:
+            if current is not None:
+                current["content"] = "\n".join(body_lines).strip()
+                sections.append(current)
+            heading = match.group(2).strip()
+            current = {
+                "level": len(match.group(1)),
+                "heading": heading,
+                "slug": slug(heading, 48).lower(),
+            }
+            body_lines = []
+            continue
+        body_lines.append(line)
+    if current is not None:
+        current["content"] = "\n".join(body_lines).strip()
+        sections.append(current)
+    return [section for section in sections if section.get("heading")]
 
 
 def read_text_arg(args: argparse.Namespace) -> str:
@@ -81,8 +130,8 @@ def extract_research_artifact(args: argparse.Namespace) -> dict[str, Any] | None
 
 def requirement_writer_trigger(raw_text: str) -> dict[str, Any]:
     clean = str(raw_text or "").strip()
-    lowered = clean.lower()
-    for phrase in GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES:
+    phrases = load_requirement_writer_trigger_phrases()
+    for phrase in phrases:
         if phrase in clean:
             return {
                 "triggered": True,
@@ -90,6 +139,7 @@ def requirement_writer_trigger(raw_text: str) -> dict[str, Any]:
                 "phrase": phrase,
                 "required": True,
                 "reason": f"matched:{phrase}",
+                "configured_phrases": phrases,
             }
     if (
         any(token in clean for token in ("论文", "paper", "research", "调研", "研究"))
@@ -101,6 +151,7 @@ def requirement_writer_trigger(raw_text: str) -> dict[str, Any]:
             "phrase": "research+implementation",
             "required": False,
             "reason": "mixed_research_and_implementation_markers",
+            "configured_phrases": phrases,
         }
     return {
         "triggered": False,
@@ -108,6 +159,7 @@ def requirement_writer_trigger(raw_text: str) -> dict[str, Any]:
         "phrase": "",
         "required": False,
         "reason": "no_trigger",
+        "configured_phrases": phrases,
     }
 
 
@@ -151,6 +203,7 @@ def invoke_requirement_writer(raw_intent: dict[str, Any], base: Path, *, trigger
         )
     output_md = base / "gpt_requirement_writer_output.md"
     output_md.write_text(stdout.rstrip() + "\n", encoding="utf-8")
+    sections = parse_markdown_sections(stdout)
     report = {
         "ok": True,
         "operator": "GPTRequirementWriter",
@@ -158,6 +211,7 @@ def invoke_requirement_writer(raw_intent: dict[str, Any], base: Path, *, trigger
         "request_dir": str(request_dir),
         "output_markdown": str(output_md),
         "stdout_length": len(stdout),
+        "sections": sections,
     }
     write_json(base / "gpt_requirement_writer_output.json", report)
     return {
@@ -167,6 +221,7 @@ def invoke_requirement_writer(raw_intent: dict[str, Any], base: Path, *, trigger
         "output_markdown": str(output_md),
         "request_dir": str(request_dir),
         "report_json": str(base / "gpt_requirement_writer_output.json"),
+        "sections": sections,
     }
 
 
@@ -287,6 +342,7 @@ def rewrite_from_requirement_writer(
             "trigger_phrase": trigger.get("phrase") or "",
             "required": bool(trigger.get("required")),
             "operator": "GPTRequirementWriter",
+            "configured_phrases": trigger.get("configured_phrases") or [],
         },
         "model_rewrite": model_rewrite_meta,
     }
@@ -358,6 +414,7 @@ def build_requirement_ir(
             "source_url": research.get("source_url", ""),
         }
     if enhancement and enhancement.get("ok"):
+        enhanced_sections = enhancement.get("sections") if isinstance(enhancement.get("sections"), list) else []
         source_inputs["enhanced_requirement"] = {
             "operator": "GPTRequirementWriter",
             "trigger": enhancement.get("trigger") or {},
@@ -365,6 +422,17 @@ def build_requirement_ir(
             "report_json": enhancement.get("report_json") or "",
             "request_dir": enhancement.get("request_dir") or "",
             "content": enhancement.get("markdown") or "",
+            "sections": enhanced_sections,
+            "compile_segments": [
+                {
+                    "heading": str(section.get("heading") or ""),
+                    "level": int(section.get("level") or 0),
+                    "text": (
+                        f"{section.get('heading')}\n{section.get('content')}".strip()
+                    ),
+                }
+                for section in enhanced_sections
+            ],
         }
     return {
         "schema_version": "solar.requirement_ir.v1",

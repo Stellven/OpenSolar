@@ -270,6 +270,8 @@ def test_build_pm_intake_prefers_enhanced_requirement_design_section():
     requirement_ir = payload["requirement_ir"]
     assert "章节化增强" in requirement_ir["normalized_goal"]
     assert requirement_ir["user_intent"] == "研究实现 一个需求编译链路。"
+    assert requirement_ir["source_inputs"]["enhanced_requirement_sections"][0]["heading"] == "需求概述"
+    assert requirement_ir["source_inputs"]["compile_segments"][0]["kind"] == "enhanced_requirement_section"
 
 
 def test_validate_compiled_package_rejects_raw_metadata_pollution():

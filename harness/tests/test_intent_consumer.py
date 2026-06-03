@@ -233,3 +233,4 @@ def test_consumer_includes_enhanced_requirement_design_when_present(tmp_path):
     rendered = intent_consumer.build_consumer_text(raw, rewritten, ir)
     assert "## Enhanced Requirement Design" in rendered
     assert "这是增强版章节化需求设计" in rendered
+    assert "Requirement compiler should prefer the enhanced requirement design above as the compile input" in rendered
