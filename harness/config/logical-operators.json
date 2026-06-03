@@ -302,6 +302,21 @@
         "singleton": false
       }
     },
+    "GPTRequirementWriter": {
+      "operator_type": "GPTRequirementWriter",
+      "description": "Routes raw user requirements to a ChatGPT Thinking High browser agent that expands them into chaptered requirement designs for downstream requirement compilation.",
+      "primary_role": "planner",
+      "required_capabilities": {
+        "research_synthesis": 4,
+        "long_context": 5,
+        "browser_use": 2
+      },
+      "cost_hint": "high",
+      "concurrency": {
+        "max_parallel": 2,
+        "singleton": false
+      }
+    },
     "WebwrightPlaywright": {
       "operator_type": "WebwrightPlaywright",
       "description": "Runs deterministic Playwright/Webwright browser automation for browser research, UI inspection, and web artifact collection.",
@@ -1107,6 +1122,28 @@
       "candidates": [
         {
           "actor_id": "mini-chatgpt-deep-research",
+          "priority": 1,
+          "condition": "always"
+        },
+        {
+          "actor_id": "browser_agent_session",
+          "priority": 2,
+          "condition": "quota_ok"
+        },
+        {
+          "actor_id": "mini-claude-opus-planner",
+          "priority": 3,
+          "condition": "always"
+        }
+      ],
+      "selection_policy": "priority_first",
+      "fallback_policy": "queue"
+    },
+    "GPTRequirementWriter": {
+      "operator_type": "GPTRequirementWriter",
+      "candidates": [
+        {
+          "actor_id": "mini-chatgpt-requirement-writer",
           "priority": 1,
           "condition": "always"
         },

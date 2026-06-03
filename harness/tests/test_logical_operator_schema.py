@@ -4,8 +4,8 @@ Tests for logical-operators schema and fixture.
 
 Sprint: sprint-20260523-lease-based-model-fleet-runtime / N2
 Validates:
-  - Schema defines all 16 P0 logical operator types in the enum
-  - Fixture contains entries for all 16 types
+  - Schema defines all logical operator types in the enum
+  - Fixture contains entries for all logical types
   - Binding table maps every logical operator type to at least one candidate actor_id
   - All candidate actor_ids in bindings exist in agent-actors.json
   - DAG node schema accepts logical_operator
@@ -47,6 +47,7 @@ OPERATOR_TYPES = [
     "DeepResearchBrowser",
     "DeepResearchGemini",
     "DeepResearchChatGPT",
+    "GPTRequirementWriter",
     "WebwrightPlaywright",
     "BrowserUseMcp",
     "YoutubeTranscriptExtractor",
@@ -76,17 +77,17 @@ class TestLogicalOperatorSchemaEnum:
             "logical-operators schema missing $defs/logical_operator_type"
         )
 
-    def test_enum_contains_all_16_types(self):
+    def test_enum_contains_all_declared_types(self):
         schema = _load_lo_schema()
         enum_vals = schema["$defs"]["logical_operator_type"].get("enum", [])
         missing = set(OPERATOR_TYPES) - set(enum_vals)
         assert not missing, f"logical_operator_type enum missing: {missing}"
 
-    def test_enum_has_exactly_24_entries(self):
+    def test_enum_has_expected_entries(self):
         schema = _load_lo_schema()
         enum_vals = schema["$defs"]["logical_operator_type"].get("enum", [])
-        assert len(enum_vals) == 24, (
-            f"Expected 24 logical operator types, got {len(enum_vals)}: {enum_vals}"
+        assert len(enum_vals) == len(OPERATOR_TYPES), (
+            f"Expected {len(OPERATOR_TYPES)} logical operator types, got {len(enum_vals)}: {enum_vals}"
         )
 
     @pytest.mark.parametrize("op_type", OPERATOR_TYPES)

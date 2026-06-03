@@ -1837,6 +1837,84 @@
       },
       "deprecated": true
     },
+    "mini-chatgpt-requirement-writer": {
+      "display_name": "GPT Requirement Writer Browser Agent",
+      "plane": "interactive_browser",
+      "owner_host": "lisihao@100.122.223.55",
+      "pane": "solar-harness-multi-task:*",
+      "profile": "browser-agent",
+      "role": "planner",
+      "persona": "builder",
+      "provider": "openai",
+      "vendor": "OpenAI",
+      "backend": "command",
+      "model": "chatgpt-5.5",
+      "model_config": "ChatGPT Web UI Thinking high requirement writer; raw requirement first; project=杂项",
+      "base_url": "https://chatgpt.com",
+      "auth_mode": "oauth",
+      "key_ref": "chatgpt_browser_profile",
+      "quota_cycle": "webapp-account",
+      "quota_refresh_at": "unknown",
+      "quota_guard_state": "ok",
+      "enabled": true,
+      "disabled_reason": "",
+      "enabled_at": "2026-06-03T00:00:00Z",
+      "available": true,
+      "health_status": "ok",
+      "roles": [
+        "planner",
+        "knowledge-extractor"
+      ],
+      "task_classes": [
+        "requirement-design",
+        "prd-planning",
+        "spec-authoring",
+        "browser-research"
+      ],
+      "strengths": [
+        "chatgpt-thinking-high",
+        "chaptered-requirements",
+        "raw-requirement-grounding",
+        "browser-agent"
+      ],
+      "preferred_for": [
+        "raw-requirement-expansion",
+        "requirement-design",
+        "chaptered-prd"
+      ],
+      "avoid_for": [
+        "direct-code-edit",
+        "cheap-background"
+      ],
+      "cost_tier": "high",
+      "latency_tier": "high",
+      "context_tier": "high",
+      "max_concurrency": 1,
+      "fallback_profile": "builder",
+      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" CHATGPT_MODEL=\"${CHATGPT_MODEL:-chatgpt-5.5}\" CHATGPT_REQUIREMENT_WRITER_MODEL=\"${CHATGPT_REQUIREMENT_WRITER_MODEL:-${CHATGPT_MODEL:-chatgpt-5.5}}\" CHATGPT_REASONING_EFFORT=\"${CHATGPT_REASONING_EFFORT:-high}\" BROWSER_AGENT_CHATGPT_MODEL_MODE=\"${BROWSER_AGENT_CHATGPT_MODEL_MODE:-thinking}\" BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE=\"${BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE:-true}\" BROWSER_AGENT_CHATGPT_PROJECT_NAME=\"${BROWSER_AGENT_CHATGPT_PROJECT_NAME:-杂项}\" BROWSER_AGENT_PROFILE_DIRECTORY=\"${BROWSER_AGENT_PROFILE_DIRECTORY:-Profile 1}\" BROWSER_AGENT_PROFILE_STRATEGY=\"${BROWSER_AGENT_PROFILE_STRATEGY:-persistent}\" BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY=\"${BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY:-persistent}\" BROWSER_AGENT_TARGET_ACCOUNT_EMAIL=\"${BROWSER_AGENT_TARGET_ACCOUNT_EMAIL:-browser-agent@example.com}\" BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL=\"${BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL:-browser-agent@example.com}\" BROWSER_AGENT_USER_DATA_DIR=\"${BROWSER_AGENT_USER_DATA_DIR:-/Users/lisihao/Library/Application Support/Google/Chrome}\" BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE=\"${BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE:-/Users/lisihao/.solar/harness/browser-agent-chatgpt-local.json}\" python3 \"$HARNESS_DIR/tools/chatgpt_requirement_writer_operator.py\"",
+      "policy": {
+        "write_files": "artifact_dir_only",
+        "run_shell": "restricted_operator_command",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "flow_control": {
+        "success_cooldown_seconds": 180,
+        "rate_limit_cooldown_seconds": 3600,
+        "auth_cooldown_seconds": 21600,
+        "defer_on_cooldown": true,
+        "defer_on_auth": true
+      },
+      "state": {
+        "availability": "enabled",
+        "runtime_state": "idle",
+        "cooldown_until": null,
+        "last_heartbeat_at": null,
+        "last_success_at": null,
+        "last_error": null
+      }
+    },
     "mini-youtube-transcript-extractor": {
       "display_name": "YouTube Transcript Extractor Browser Agent",
       "plane": "interactive_browser",

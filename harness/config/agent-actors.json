@@ -2460,6 +2460,123 @@
         }
       ]
     },
+    "mini-chatgpt-requirement-writer": {
+      "actor_id": "mini-chatgpt-requirement-writer",
+      "host_id": "mini",
+      "operator_alias": "mini-chatgpt-requirement-writer",
+      "aliases": [
+        "mini-chatgpt-requirement-writer"
+      ],
+      "role": "planner",
+      "display_meta": {
+        "display_name": "GPT Requirement Writer",
+        "tmux_session": "solar-harness-multi-task",
+        "tmux_window": null,
+        "tmux_pane_index": null
+      },
+      "lease": {
+        "acquired_at": null,
+        "expires_at": null,
+        "renewable": true,
+        "preemptible": true,
+        "heartbeat_timeout_sec": 120,
+        "lease_id": null,
+        "holder_sprint": null
+      },
+      "mailbox": {
+        "inbox": "actors/mini-chatgpt-requirement-writer/inbox",
+        "outbox": "actors/mini-chatgpt-requirement-writer/outbox",
+        "logs": "actors/mini-chatgpt-requirement-writer/logs",
+        "state_json": "actors/mini-chatgpt-requirement-writer/state.json",
+        "heartbeat_json": "actors/mini-chatgpt-requirement-writer/heartbeat.json"
+      },
+      "context_packet_ref": {
+        "path": null,
+        "packet_id": null
+      },
+      "evidence_ledger_ref": {
+        "path": "actors/mini-chatgpt-requirement-writer/evidence"
+      },
+      "capability": {
+        "research": 5,
+        "browser": 2,
+        "multimodal": 2,
+        "reliability": 4
+      },
+      "capability_profile": {
+        "architecture_reasoning": 4,
+        "code_impl": 1,
+        "root_cause_debug": 2,
+        "test_generation": 1,
+        "test_execution": 1,
+        "research_synthesis": 4,
+        "academic_critique": 3,
+        "browser_use": 2,
+        "gui_use": 1,
+        "long_context": 5,
+        "multi_agent_coordination": 2,
+        "speed": 2
+      },
+      "risk_profile": {
+        "allowed_write_scope": "project",
+        "allowed_shell_scope": "denied",
+        "allowed_network": "allowed",
+        "allowed_secrets": "secret_ref_only",
+        "destructive_actions": "denied",
+        "git_commit": "denied",
+        "git_push": "denied",
+        "payment_or_external_action": "denied",
+        "requires_human_for": [
+          "payment_or_external_action"
+        ]
+      },
+      "cost_profile": {
+        "cost_tier": "high",
+        "token_budget_class": "large",
+        "quota_period": "monthly",
+        "reserve_ratio": 0.2,
+        "effort": "heavy",
+        "prefer_for": [
+          "requirement-design",
+          "spec-authoring",
+          "chaptered-prd"
+        ],
+        "avoid_for": [
+          "code-implementation"
+        ]
+      },
+      "quota": {
+        "quota_type": "webapp-account",
+        "period": "unknown",
+        "on_exhausted": "disable_and_fallback"
+      },
+      "policy": {
+        "write_files": "artifact_dir_only",
+        "run_shell": "denied",
+        "network": "allowed",
+        "secrets_access": "secret_ref_only",
+        "git_commit": "denied"
+      },
+      "evidence": {
+        "last_smoke_at": null,
+        "last_smoke_result": null,
+        "last_task_at": null,
+        "last_task_id": null,
+        "last_task_result": null,
+        "provenance": "generated from physical-operators.json:mini-chatgpt-requirement-writer at 2026-06-03T19:55:00Z for raw-requirement requirement writer routing"
+      },
+      "persona_binding": {
+        "persona_id": "builder",
+        "persona_file": "personas/builder.md",
+        "knobs_override": {}
+      },
+      "fallback_ladder": [
+        {
+          "actor_id": "mini-claude-opus-planner",
+          "condition": "quota_exhausted"
+        }
+      ]
+    },
     "mini-youtube-transcript-extractor": {
       "actor_id": "mini-youtube-transcript-extractor",
       "host_id": "mini",
