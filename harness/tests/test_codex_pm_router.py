@@ -331,9 +331,21 @@ def test_build_pm_intake_maps_enhanced_requirement_sections_to_dag_semantics():
     by_id = {node["id"]: node for node in payload["compiled_artifacts"]["task_dag"]["nodes"]}
     assert "implementation" in by_id["S2"]["semantic_focus"]
     assert any(item["heading"] == "功能需求" for item in by_id["S2"]["section_semantic_hints"])
+    assert "implementation-plan.md" in by_id["S2"]["outputs"]
+    assert "section-functional-requirements" in by_id["S2"]["signals"]
+    assert any(item["target"] == "implementation-plan.md" for item in by_id["S2"]["validation"])
+    assert "quality" in by_id["S3"]["semantic_focus"]
+    assert "quality-checklist.md" in by_id["S3"]["outputs"]
+    assert any(item["target"] == "quality-checklist.md" for item in by_id["S3"]["validation"])
     assert "verification" in by_id["S4"]["semantic_focus"]
     assert any(item["heading"] == "验收标准" for item in by_id["S4"]["section_semantic_hints"])
+    assert "acceptance-matrix.json" in by_id["S4"]["outputs"]
+    assert "acceptance-traceability" in by_id["S4"]["signals"]
+    assert any(item["target"] == "acceptance-matrix.json" for item in by_id["S4"]["validation"])
     assert "risk_review" in by_id["S1"]["semantic_focus"]
+    assert "risk-register.md" in by_id["S1"]["outputs"]
+    assert any(item["target"] == "risk-register.md" for item in by_id["S1"]["validation"])
+    assert "verification" in by_id["S4"]["semantic_template_overrides"]["applied"]
     assert requirement_ir["section_semantic_plan"]["section_count"] == 5
 
 

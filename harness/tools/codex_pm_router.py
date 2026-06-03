@@ -150,6 +150,45 @@ NODE_FAMILY_HINTS = {
     "ArtifactCurator": {"design", "verification", "risk_review"},
 }
 
+SEMANTIC_NODE_TEMPLATE_OVERRIDES = {
+    "implementation": {
+        "signals": ["section-functional-requirements", "implementation-coverage"],
+        "outputs": ["implementation-plan.md"],
+        "validation": [{"kind": "artifact", "target": "implementation-plan.md", "required": True}],
+        "acceptance": ["Functional requirement coverage is explicit and mapped into execution scope."],
+    },
+    "quality": {
+        "signals": ["section-non-functional-requirements", "quality-constraints"],
+        "outputs": ["quality-checklist.md"],
+        "validation": [{"kind": "artifact", "target": "quality-checklist.md", "required": True}],
+        "acceptance": ["Non-functional requirements are translated into verifiable quality checks."],
+    },
+    "verification": {
+        "signals": ["section-acceptance", "acceptance-traceability"],
+        "outputs": ["acceptance-matrix.json"],
+        "validation": [{"kind": "artifact", "target": "acceptance-matrix.json", "required": True}],
+        "acceptance": ["Acceptance criteria are traceable to explicit verification evidence."],
+    },
+    "risk_review": {
+        "signals": ["section-risk", "constraint-review"],
+        "outputs": ["risk-register.md"],
+        "validation": [{"kind": "artifact", "target": "risk-register.md", "required": True}],
+        "acceptance": ["Risk, constraints, and open questions are explicitly reviewed."],
+    },
+    "interface_contract": {
+        "signals": ["section-interface-contract", "schema-boundary"],
+        "outputs": ["interface-contract-notes.md"],
+        "validation": [{"kind": "artifact", "target": "interface-contract-notes.md", "required": True}],
+        "acceptance": ["Interface and data-contract implications are explicit."],
+    },
+    "design": {
+        "signals": ["section-design-context", "scope-structure"],
+        "outputs": ["design-brief.md"],
+        "validation": [{"kind": "artifact", "target": "design-brief.md", "required": True}],
+        "acceptance": ["Sectioned design intent and scope boundaries are explicit."],
+    },
+}
+
 
 def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -328,6 +367,29 @@ def _build_section_semantic_hints(sections: list[dict[str, Any]]) -> list[dict[s
             }
         )
     return hints
+
+
+def _append_unique_items(target: list[Any], additions: list[Any]) -> list[Any]:
+    existing = {json.dumps(item, ensure_ascii=False, sort_keys=True) for item in target}
+    merged = list(target)
+    for item in additions:
+        key = json.dumps(item, ensure_ascii=False, sort_keys=True)
+        if key in existing:
+            continue
+        merged.append(item)
+        existing.add(key)
+    return merged
+
+
+def _append_unique_strings(target: list[str], additions: list[str]) -> list[str]:
+    existing = set(target)
+    merged = list(target)
+    for item in additions:
+        if item in existing:
+            continue
+        merged.append(item)
+        existing.add(item)
+    return merged
 
 
 def _looks_like_raw_metadata_pollution(text: str) -> bool:
@@ -678,7 +740,36 @@ def _annotate_task_graph_with_section_semantics(
         ]
         if matches:
             enriched["section_semantic_hints"] = matches
-            enriched["semantic_focus"] = sorted({item["node_family"] for item in matches})
+            focus_families = sorted({item["node_family"] for item in matches})
+            enriched["semantic_focus"] = focus_families
+            enriched["semantic_template_applied"] = True
+            template_overrides: dict[str, Any] = {
+                "families": focus_families,
+                "applied": [],
+            }
+            for family in focus_families:
+                override = SEMANTIC_NODE_TEMPLATE_OVERRIDES.get(family)
+                if not override:
+                    continue
+                template_overrides["applied"].append(family)
+                enriched["signals"] = _append_unique_strings(
+                    [str(item) for item in (enriched.get("signals") or [])],
+                    list(override.get("signals") or []),
+                )
+                enriched["outputs"] = _append_unique_strings(
+                    [str(item) for item in (enriched.get("outputs") or [])],
+                    list(override.get("outputs") or []),
+                )
+                enriched["validation"] = _append_unique_items(
+                    [item for item in (enriched.get("validation") or []) if isinstance(item, dict)],
+                    [item for item in (override.get("validation") or []) if isinstance(item, dict)],
+                )
+                enriched["acceptance"] = _append_unique_strings(
+                    [str(item) for item in (enriched.get("acceptance") or [])],
+                    list(override.get("acceptance") or []),
+                )
+            if template_overrides["applied"]:
+                enriched["semantic_template_overrides"] = template_overrides
         nodes.append(enriched)
     annotated["nodes"] = nodes
     annotated["section_semantic_plan"] = {
