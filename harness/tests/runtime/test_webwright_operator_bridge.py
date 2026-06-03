@@ -60,15 +60,15 @@ print(json.dumps({{"ok": True, "artifacts": {{}}, "mode": "fake"}}))
     state_path = tmp_path / "seed" / "storageState.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text('{"cookies":[]}', encoding="utf-8")
-    profile_id = "chatgpt/haogege1977"
-    meta_dir = profile_root / "chatgpt" / "haogege1977"
+    profile_id = "chatgpt/example-user"
+    meta_dir = profile_root / "chatgpt" / "example-user"
     meta_dir.mkdir(parents=True, exist_ok=True)
     (meta_dir / "meta.json").write_text(
         json.dumps(
             {
                 "profile_id": profile_id,
                 "storage_state_ref": str(state_path),
-                "allowed_account_identifiers": ["haogege1977@gmail.com"],
+                "allowed_account_identifiers": ["browser-agent@example.com"],
             },
             ensure_ascii=False,
             indent=2,

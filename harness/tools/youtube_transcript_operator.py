@@ -201,7 +201,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
     if "BROWSER_AGENT_HEADLESS" not in env:
         env["BROWSER_AGENT_HEADLESS"] = "false"
     env.setdefault("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
-    env.setdefault("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "haogege1977@gmail.com")
+    env.setdefault("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "browser-agent@example.com")
     env.update({
         "BROWSER_AGENT_REQUEST_DIR": str(request_dir),
         "BROWSER_AGENT_YT_TIMEOUT": str(request.get("timeout_seconds") or 300),
