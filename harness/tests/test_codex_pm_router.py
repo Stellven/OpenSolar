@@ -421,6 +421,84 @@ def test_build_pm_intake_upgrades_standard_dag_when_semantic_families_are_heavy(
     ]
 
 
+def test_build_pm_intake_upgrades_research_dag_when_semantic_families_are_heavy():
+    router = _load_router()
+    consumer_text = """# RawIntent Consumer Request - research semantic dag upgrade
+
+## Rewritten Objective
+
+把研究实现需求编译成更细粒度的 research DAG。
+
+## Problem
+
+当前 research DAG 对接口、验证和实现含义的拆分不够细。
+
+## Enhanced Requirement Design
+
+# 需求概述
+
+需要基于论文研究，形成可落地的实现建议与验证闭环。
+
+## 接口与数据契约
+
+- 输出 IR、contract、task_graph 的边界
+- 明确接口兼容和数据约束
+
+## 风险与约束
+
+- 研究结论不能越过证据边界
+- 落地前必须显式暴露风险
+
+## 验收标准
+
+- 要有 adoption decision
+- 要有 verifier closeout
+
+## 非功能需求
+
+- 结果必须可验证
+- 结果必须留有证据链
+
+## 功能需求
+
+- 输出实现建议、PRD 含义和 DAG 含义
+
+## Raw User Intent
+
+研究实现 某篇论文的系统设计并落地。
+"""
+    payload = router.build_pm_intake(
+        consumer_text,
+        papers=["paper-a"],
+        sprint_id="sprint-test",
+        target_system="solar-harness",
+    )
+    dag = payload["compiled_artifacts"]["task_dag"]
+    by_id = {node["id"]: node for node in dag["nodes"]}
+    assert payload["classification"] == router.RESEARCH
+    assert payload["dag_variant"] == "research_parallel_implications"
+    assert dag["research_mode"] is True
+    assert dag["semantic_upgrade"]["enabled"] is True
+    assert dag["semantic_upgrade"]["mode"] == "section_family_research_parallel"
+    assert dag["quality_gates"]["parallelism"]["min_ready_width"] == 1
+    assert by_id["R4"]["depends_on"] == ["R2", "R3"]
+    assert by_id["R5"]["depends_on"] == ["R2", "R3"]
+    assert by_id["R6"]["depends_on"] == ["R3", "R4", "R5"]
+    assert by_id["R7"]["depends_on"] == ["R4", "R5", "R6"]
+    assert by_id["R8"]["depends_on"] == ["R7"]
+    assert by_id["R5"]["logical_operator"] == "ResearchSynthesizer"
+    assert by_id["R6"]["logical_operator"] == "Critic"
+    assert by_id["R7"]["logical_operator"] == "Verifier"
+    assert by_id["R8"]["logical_operator"] == "ArtifactCurator"
+    assert "interface_contract" in by_id["R5"]["semantic_focus"]
+    assert "risk_review" in by_id["R6"]["semantic_focus"]
+    assert "verification" in by_id["R7"]["semantic_focus"]
+    assert "interface_implications.md" in by_id["R5"]["outputs"]
+    assert "research_risk_review.md" in by_id["R6"]["outputs"]
+    assert "research_verifier_decision.yaml" in by_id["R7"]["outputs"]
+    assert "final_prd_implications.md" in by_id["R8"]["outputs"]
+
+
 def test_validate_compiled_package_rejects_raw_metadata_pollution():
     router = _load_router()
     payload = router.build_pm_intake("正常需求：补齐 requirement compiler 的 closeout gate。", sprint_id="sprint-test")

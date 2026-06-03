@@ -618,6 +618,8 @@ def _node_enrichment(request_type: str, lane_hint: str, node: dict[str, Any]) ->
         "R4": "synthesis.md",
         "R5": "critique.md",
         "R6": "final_prd_implications.md",
+        "R7": "research_verifier_decision.yaml",
+        "R8": "final_prd_implications.md",
     }.get(node["id"], "artifact.md")
     enriched = dict(node)
     enriched.setdefault("type", node_type_map.get(node["logical_operator"], "spec"))
@@ -1648,6 +1650,135 @@ def _upgrade_standard_graph_for_section_semantics(
     return upgraded
 
 
+def _upgrade_research_graph_for_section_semantics(
+    graph: dict[str, Any],
+    section_hints: list[dict[str, Any]],
+    request_type: str,
+) -> dict[str, Any]:
+    if request_type != RESEARCH:
+        return graph
+    if str(graph.get("dag_variant") or "").strip().lower() != "research":
+        return graph
+    family_counts = _section_family_counts(section_hints)
+    if not family_counts.get("verification"):
+        return graph
+    if not family_counts.get("interface_contract"):
+        return graph
+    if not (family_counts.get("risk_review") or family_counts.get("quality")):
+        return graph
+
+    upgraded = {
+        "dag_variant": "research_parallel_implications",
+        "research_mode": True,
+        "semantic_upgrade": {
+            "enabled": True,
+            "mode": "section_family_research_parallel",
+            "trigger_families": sorted(
+                [
+                    family
+                    for family in ("interface_contract", "quality", "risk_review", "verification")
+                    if family_counts.get(family)
+                ]
+            ),
+            "family_counts": family_counts,
+        },
+        "evidence_policy": {
+            "ledger_required": True,
+            "unsupported_claim_guard": True,
+            "citation_required": True,
+        },
+        "required_gates": ["G_SOURCE", "G_EVIDENCE", "G_SYNTHESIS", "G_REVIEW"],
+        "quality_gates": {
+            "parallelism": {
+                "min_ready_width": 1,
+            }
+        },
+        "nodes": [
+            {
+                "id": "R1",
+                "goal": "Ingest papers, links, and source metadata into the research run.",
+                "logical_operator": "ResearchScout",
+                "depends_on": [],
+                "gate": "G_SOURCE",
+                "acceptance": ["Source manifest is recorded."],
+                "estimated_cost": 1,
+            },
+            {
+                "id": "R2",
+                "goal": "Extract claims, findings, and technical levers from the research corpus.",
+                "logical_operator": "ResearchScout",
+                "depends_on": ["R1"],
+                "gate": "G_EVIDENCE",
+                "acceptance": ["Claims ledger is produced."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "R3",
+                "goal": "Scan contradictions, risk boundaries, and unsupported assumptions across the corpus.",
+                "logical_operator": "Critic",
+                "depends_on": ["R2"],
+                "gate": "G_EVIDENCE",
+                "acceptance": ["Contradictions, risk boundaries, and evidence gaps are enumerated."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "R4",
+                "goal": "Synthesize core research findings into actionable system and implementation insights.",
+                "logical_operator": "ResearchSynthesizer",
+                "depends_on": ["R2", "R3"],
+                "gate": "G_SYNTHESIS",
+                "acceptance": ["Core synthesis is drafted with evidence-backed implications."],
+                "estimated_cost": 3,
+            },
+            {
+                "id": "R5",
+                "goal": "Derive interface, contract, and implementation-implication slices from the research evidence.",
+                "logical_operator": "ResearchSynthesizer",
+                "depends_on": ["R2", "R3"],
+                "gate": "G_SYNTHESIS",
+                "outputs": ["interface_implications.md"],
+                "validation": [{"kind": "artifact", "target": "interface_implications.md", "required": True}],
+                "acceptance": ["Interface and implementation implication slices are explicit."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "R6",
+                "goal": "Perform explicit risk, verification, and adoption critique across all synthesis branches.",
+                "logical_operator": "Critic",
+                "depends_on": ["R3", "R4", "R5"],
+                "gate": "G_REVIEW",
+                "outputs": ["research_risk_review.md"],
+                "validation": [{"kind": "artifact", "target": "research_risk_review.md", "required": True}],
+                "acceptance": ["Risk, verification, and adoption critique is explicit and evidence-backed."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "R7",
+                "goal": "Perform independent verifier review and record the adoption decision.",
+                "logical_operator": "Verifier",
+                "depends_on": ["R4", "R5", "R6"],
+                "gate": "G_REVIEW",
+                "outputs": ["research_verifier_decision.yaml"],
+                "validation": [{"kind": "artifact", "target": "research_verifier_decision.yaml", "required": True}],
+                "acceptance": ["Verifier decision is grounded in synthesis, interface, and critique branches."],
+                "estimated_cost": 2,
+            },
+            {
+                "id": "R8",
+                "goal": "Compile final PRD, DAG, and implementation implications after research closeout.",
+                "logical_operator": "ArtifactCurator",
+                "depends_on": ["R7"],
+                "gate": "G_REVIEW",
+                "outputs": ["final_prd_implications.md"],
+                "validation": [{"kind": "artifact", "target": "final_prd_implications.md", "required": True}],
+                "acceptance": ["Final implementation implications package is produced."],
+                "estimated_cost": 1,
+            },
+        ],
+    }
+    return upgraded
+
+
 def build_pm_intake(
     text: str,
     *,
@@ -1675,6 +1806,7 @@ def build_pm_intake(
     priority = choose_priority(compile_text, request_type)
     task_graph = build_task_graph_skeleton(request_type, lane_hint, compile_text)
     task_graph = _upgrade_standard_graph_for_section_semantics(task_graph, section_semantic_hints, request_type)
+    task_graph = _upgrade_research_graph_for_section_semantics(task_graph, section_semantic_hints, request_type)
     if _is_code_understanding_request(compile_text, repo_context):
         task_graph = _adapt_graph_for_code_understanding(task_graph, request_type)
     task_graph["nodes"] = [_node_enrichment(request_type, lane_hint, node) for node in task_graph["nodes"]]
