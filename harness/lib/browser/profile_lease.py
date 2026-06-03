@@ -37,9 +37,10 @@ def _normalise_profile_id(profile_id: str) -> str:
     clean = str(profile_id or "").strip()
     if not clean:
         raise ValueError("profile_id is required")
-    if "/" in clean or "\\" in clean or ".." in clean:
+    path = Path(clean)
+    if path.is_absolute() or ".." in path.parts or any(part in {"", "."} for part in path.parts):
         raise ValueError(f"invalid profile_id: {profile_id!r}")
-    return clean
+    return path.as_posix()
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -106,7 +107,11 @@ class ProfileLease:
         self.default_ttl_seconds = int(default_ttl_seconds)
 
     def lease_path(self, profile_id: str) -> Path:
-        return self.root / f"{_normalise_profile_id(profile_id)}.json"
+        normalized = _normalise_profile_id(profile_id)
+        parts = Path(normalized).parts
+        if not parts:
+            raise ValueError("profile_id is required")
+        return self.root.joinpath(*parts[:-1], f"{parts[-1]}.json")
 
     def _lock_path(self, profile_id: str) -> Path:
         return self.lease_path(profile_id).with_suffix(".json.lock")
@@ -166,6 +171,7 @@ class ProfileLease:
         now = _now_iso()
         lease_path = self.lease_path(profile)
         lock_path = self._lock_path(profile)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
 
         lock_fh = open(lock_path, "a")
         try:
@@ -216,6 +222,7 @@ class ProfileLease:
         """Release a lease if the task id matches."""
         profile = _normalise_profile_id(profile_id)
         lock_path = self._lock_path(profile)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_fh = open(lock_path, "a")
         try:
             fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -251,9 +258,9 @@ class ProfileLease:
             return 0
 
         removed = 0
-        for lease_file in sorted(self.root.glob("*.json")):
+        for lease_file in sorted(self.root.rglob("*.json")):
             try:
-                profile_id = lease_file.stem
+                profile_id = lease_file.relative_to(self.root).with_suffix("").as_posix()
                 current = self._read(profile_id)
             except Exception:
                 continue
@@ -264,8 +271,8 @@ class ProfileLease:
 
     def list_active(self) -> list[dict[str, Any]]:
         active: list[dict[str, Any]] = []
-        for lease_file in sorted(self.root.glob("*.json")):
-            record = self._read(lease_file.stem)
+        for lease_file in sorted(self.root.rglob("*.json")):
+            record = self._read(lease_file.relative_to(self.root).with_suffix("").as_posix())
             if not record or record.is_expired:
                 continue
             active.append(record.to_dict())

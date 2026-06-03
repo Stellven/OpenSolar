@@ -72,3 +72,19 @@ def test_profile_lease_expire(tmp_path: Path) -> None:
     time.sleep(0.05)
     assert manager.expire("profile-expire") == 1
     assert manager.list_active() == []
+
+
+def test_profile_lease_supports_nested_profile_ids(tmp_path: Path) -> None:
+    manager = ProfileLease(root=tmp_path / "leases")
+    lease = manager.acquire(
+        profile_id="chatgpt/haogege1977",
+        task_id="task-nested",
+        runtime="browser_use",
+        mode="exclusive",
+        ttl_seconds=60,
+    )
+    assert lease["acquired"] is True
+    active = manager.list_active()
+    assert len(active) == 1
+    assert active[0]["profile_id"] == "chatgpt/haogege1977"
+    assert manager.release("chatgpt/haogege1977", "task-nested")["released"] is True
