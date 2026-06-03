@@ -18,13 +18,21 @@ from typing import Any
 
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
+REPORTS_DIR = HARNESS_DIR / "reports"
 
 
 def discover_eval_files(sprints_dir: Path | str, sid: str) -> list[Path]:
     """Find research_eval.*.json files matching the given sprint ID prefix."""
     sprints_dir = Path(sprints_dir)
-    pattern = str(sprints_dir / f"{sid}*research_eval*.json")
-    return sorted(Path(p) for p in glob.glob(pattern))
+    patterns = [str(sprints_dir / f"{sid}*research_eval*.json")]
+    if sid:
+        patterns.append(str(REPORTS_DIR / sid / "*research_eval*.json"))
+        patterns.append(str(REPORTS_DIR / f"{sid}*" / "*research_eval*.json"))
+    paths: list[Path] = []
+    for pattern in patterns:
+        paths.extend(Path(p) for p in glob.glob(pattern))
+    unique = sorted({str(path): path for path in paths}.values())
+    return unique
 
 
 def load_eval(path: Path) -> dict[str, Any]:
@@ -623,7 +631,7 @@ def generate_markdown_report(sprints_dir: Path | str | None, sid: str) -> str:
     gate_items = quality_gates.get("items") or []
     if gate_items:
         lines.extend([
-            "## DeepResearch Quality Gates",
+            "## DeepDive Quality Gates",
             "",
             "| Node | Status | Verdict | Auto Run | Errors |",
             "|------|--------|---------|----------|--------|",
