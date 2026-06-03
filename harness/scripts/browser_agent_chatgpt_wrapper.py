@@ -18,6 +18,7 @@ if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
 import browser_job_runtime as bjrt
+from browser import runtime_control as brtc
 from browser_use.browser.profile import BrowserProfile
 from browser_use.browser.session import BrowserSession
 
@@ -1399,6 +1400,32 @@ async def _run(prompt: str) -> int:
     _write_json(request_dir / "wrapper-meta.json", meta)
     if not headless and not headed_allowed:
         raise RuntimeError("browser_agent_headed_run_requires_explicit_opt_in")
+    control_ctx = brtc.initialize_runtime_contract(
+        request_dir=request_dir,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="chatgpt",
+        profile_directory=profile_directory,
+        user_data_dir=str(user_data_dir),
+        staged_user_data_dir=str(staged_dir),
+        account_identifier=account_email or None,
+        explicit_profile_id=str(os.environ.get("BROWSER_AGENT_PROFILE_ID") or "").strip() or None,
+        task_id=str(os.environ.get("TASK_ID") or request_dir.name),
+        control_modes={
+            "browser_use_session": True,
+            "playwright_cdp_attach": False,
+            "webwright_bridge": False,
+        },
+        metadata={
+            "request_dir": str(request_dir),
+            "target_url": target_url,
+            "action": action,
+            "headless": headless,
+        },
+    )
+    final_error_text: str | None = None
+    final_page_state: dict | None = None
+    logged_in_verified = False
 
     browser = BrowserSession(
         browser_profile=BrowserProfile(
@@ -1412,6 +1439,11 @@ async def _run(prompt: str) -> int:
     )
     try:
         await asyncio.wait_for(browser.start(), timeout=40)
+        brtc.update_runtime_endpoint(
+            control_ctx,
+            cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+            browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
+        )
         if action in {"run", "submit"}:
             page = await asyncio.wait_for(browser.new_page(), timeout=15)
         else:
@@ -1440,6 +1472,14 @@ async def _run(prompt: str) -> int:
                 pass
             raise
         _write_json(request_dir / "ready-state.json", ready)
+        final_page_state = {
+            "url": ready.get("url"),
+            "conversation_id": ready.get("conversation_id"),
+            "message_count": ready.get("message_count"),
+            "assistant_count": ready.get("assistant_count"),
+            "login_wall": ready.get("login_wall"),
+            "challenge_wall": ready.get("challenge_wall"),
+        }
         if action == "run" and not open_project_first and (force_new_chat or int(ready.get("message_count") or 0) > 0):
             new_chat_step = json.loads(await page.evaluate(NEW_CHAT_JS))
             await asyncio.sleep(1.5)
@@ -1467,6 +1507,14 @@ async def _run(prompt: str) -> int:
                     "url": final_data.get("url"),
                     "conversation_id": final_data.get("conversation_id"),
                 }, ensure_ascii=False))
+                final_page_state = {
+                    "url": final_data.get("url"),
+                    "conversation_id": final_data.get("conversation_id"),
+                    "message_count": final_data.get("message_count"),
+                    "assistant_count": final_data.get("assistant_count"),
+                    "login_wall": final_data.get("login_wall"),
+                    "challenge_wall": final_data.get("challenge_wall"),
+                }
                 return 0
             if action == "collect":
                 try:
@@ -1495,6 +1543,15 @@ async def _run(prompt: str) -> int:
                     "message_count": final_data.get("message_count"),
                     "checked_at": bjrt._now(),
                 })
+                final_page_state = {
+                    "url": final_data.get("url"),
+                    "conversation_id": final_data.get("conversation_id"),
+                    "message_count": final_data.get("message_count"),
+                    "assistant_count": final_data.get("assistant_count"),
+                    "login_wall": final_data.get("login_wall"),
+                    "challenge_wall": final_data.get("challenge_wall"),
+                }
+                logged_in_verified = True
                 print(latest)
                 return 0
             _write_json(request_dir / f"{action}-state.json", {
@@ -1509,6 +1566,14 @@ async def _run(prompt: str) -> int:
                 "url": final_data.get("url"),
                 "conversation_id": final_data.get("conversation_id"),
             }, ensure_ascii=False))
+            final_page_state = {
+                "url": final_data.get("url"),
+                "conversation_id": final_data.get("conversation_id"),
+                "message_count": final_data.get("message_count"),
+                "assistant_count": final_data.get("assistant_count"),
+                "login_wall": final_data.get("login_wall"),
+                "challenge_wall": final_data.get("challenge_wall"),
+            }
             return 0
         if open_project_first and project_name:
             project_open = await _open_project_new_chat(page, project_name)
@@ -1612,9 +1677,24 @@ async def _run(prompt: str) -> int:
                 "submitted_at": bjrt._now(),
             }
             _write_json(request_dir / "submitted-run.json", submitted)
+            final_page_state = {
+                "url": submitted.get("url"),
+                "conversation_id": submitted.get("conversation_id"),
+                "message_count": submitted.get("message_count"),
+                "assistant_count": submitted.get("assistant_count"),
+            }
+            logged_in_verified = True
             print(json.dumps(submitted, ensure_ascii=False))
             return 0
         final_data = await _wait_for_answer(page, baseline_assistant_count, timeout_s=timeout_s)
+        final_page_state = {
+            "url": final_data.get("url"),
+            "conversation_id": final_data.get("conversation_id"),
+            "message_count": final_data.get("message_count"),
+            "assistant_count": final_data.get("assistant_count"),
+            "login_wall": final_data.get("login_wall"),
+            "challenge_wall": final_data.get("challenge_wall"),
+        }
         latest = await _write_conversation_artifacts(
             page,
             request_dir,
@@ -1633,7 +1713,11 @@ async def _run(prompt: str) -> int:
                 raise RuntimeError(f"chatgpt_project_archive_failed: {project_result.get('error')}")
 
         print(latest)
+        logged_in_verified = True
         return 0
+    except Exception as exc:
+        final_error_text = str(exc)
+        raise
     finally:
         try:
             await asyncio.wait_for(browser.stop(), timeout=20)
@@ -1642,6 +1726,19 @@ async def _run(prompt: str) -> int:
         _kill_browser_profile_processes(staged_dir)
         if cleanup_dir is not None:
             shutil.rmtree(cleanup_dir, ignore_errors=True)
+        brtc.finalize_runtime_contract(
+            control_ctx,
+            success=logged_in_verified and not final_error_text,
+            error_text=final_error_text,
+            page_state=final_page_state,
+            logged_in_state_verified=logged_in_verified,
+            details={
+                "provider": "browser_agent_chatgpt",
+                "action": action,
+                "request_dir": str(request_dir),
+            },
+            requires_precise_page_control=False,
+        )
 
 
 def main() -> int:
