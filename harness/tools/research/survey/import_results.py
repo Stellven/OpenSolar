@@ -182,6 +182,104 @@ def _section_lines(block: str, heading: str) -> list[str]:
     return lines
 
 
+def _infer_source_type_from_fields(title: str, url: str, publisher: str) -> str:
+    lowered = " ".join([title, url, publisher]).lower()
+    if "github.com" in lowered:
+        return "code"
+    if any(token in lowered for token in ("paperswithcode", "benchmark", "leaderboard")):
+        return "benchmark"
+    if any(token in lowered for token in ("arxiv.org", "openreview", "doi.org", "/program/20", "/papers/")):
+        return "paper"
+    if any(token in lowered for token in ("caisconf.org", "eurekalert", "official", "conference homepage", "workshops index", "accepted papers index")):
+        return "official_doc"
+    return "web"
+
+
+def _infer_research_angles_from_context(category: str, title: str, summary: str, source_type: str) -> list[str]:
+    text = " ".join([category, title, summary]).lower()
+    inferred: list[str] = []
+    if re.search(r"official|会议信号|主页|workshop|accepted|history|lineage|evolution|演进|谱系", text):
+        inferred.append("literature_lineage")
+    if re.search(r"planning|protocol|specification|taxonomy|tool|orchestration|multi-agent|方法|分类|机制|runtime", text):
+        inferred.append("method_taxonomy")
+    if re.search(r"evaluation|benchmark|reliability|评测|评估|diagnostic|metric", text):
+        inferred.append("evaluation_protocol")
+    if re.search(r"risk|safety|limitation|controversy|contradiction|failure|争议|反证|失败", text):
+        inferred.append("controversy")
+    if re.search(r"engineering|deployment|system|inference|code|repo|observability|伸缩|工程|部署|架构", text):
+        inferred.append("engineering")
+    if source_type == "code" and "engineering" not in inferred:
+        inferred.append("engineering")
+    if source_type == "paper" and "method_taxonomy" not in inferred:
+        inferred.append("method_taxonomy")
+    if source_type == "benchmark" and "evaluation_protocol" not in inferred:
+        inferred.append("evaluation_protocol")
+    if source_type == "official_doc" and "literature_lineage" not in inferred:
+        inferred.append("literature_lineage")
+    return inferred or ["engineering"]
+
+
+def parse_gemini_deep_search_markdown(markdown: str) -> list[dict[str, Any]]:
+    text = str(markdown or "")
+    lines = text.splitlines()
+    records: list[dict[str, Any]] = []
+    category = ""
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx].strip()
+        if line.startswith("类别 "):
+            category = line
+            idx += 1
+            continue
+        if not line or line.startswith("#") or line.startswith("## "):
+            idx += 1
+            continue
+        if idx + 3 >= len(lines):
+            idx += 1
+            continue
+        source_line = lines[idx + 1].strip()
+        summary_line = lines[idx + 2].strip()
+        url_line = lines[idx + 3].strip()
+        if not source_line.startswith("来源/作者:") or not summary_line.startswith("核心价值:") or not url_line.startswith("URL:"):
+            idx += 1
+            continue
+        title = line
+        publisher = source_line.split(":", 1)[1].strip()
+        summary = summary_line.split(":", 1)[1].strip()
+        url = url_line.split(":", 1)[1].strip().strip("<>")
+        source_type = _infer_source_type_from_fields(title, url, publisher)
+        research_angles = _infer_research_angles_from_context(category, title, summary, source_type)
+        records.append({
+            "title": title,
+            "url": url,
+            "publisher": publisher,
+            "published": "",
+            "source_type": source_type,
+            "research_angles": research_angles,
+            "summary": [summary],
+            "key_claims": [summary],
+            "quotes": [],
+            "content": "\n".join([
+                f"Title: {title}",
+                f"URL: {url}",
+                f"Publisher: {publisher or 'N/A'}",
+                "Published: N/A",
+                f"Research Angles: {', '.join(research_angles)}",
+                "",
+                "Summary:",
+                f"- {summary}",
+                "",
+                "Key Claims:",
+                f"- {summary}",
+                "",
+                "Relevant Quotes:",
+                "> N/A",
+            ]),
+        })
+        idx += 4
+    return records
+
+
 def diagnose_survey_search_markdown(markdown: str) -> dict[str, Any]:
     text = markdown or ""
     blocks = re.split(r"(?im)^##\s+Source\s+\d+\s*:\s*", text)
@@ -273,7 +371,9 @@ def parse_survey_search_markdown(markdown: str) -> list[dict[str, Any]]:
             "quotes": quotes,
             "content": content,
         })
-    return records
+    if records:
+        return records
+    return parse_gemini_deep_search_markdown(text)
 
 
 def import_survey_search_results(
@@ -291,6 +391,14 @@ def import_survey_search_results(
     min_finalized: int | None = None,
     min_chars: int = 1200,
     require_complete: bool = False,
+    narrative_backend: str = "",
+    narrative_model: str = "",
+    narrative_fallback_models: list[str] | None = None,
+    narrative_command: str = "",
+    narrative_timeout: int = 0,
+    narrative_max_budget_usd: float = 0.0,
+    narrative_min_chars: int = 0,
+    narrative_require_hitl: bool = False,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -418,6 +526,14 @@ def import_survey_search_results(
             min_finalized=min_finalized,
             min_chars=min_chars,
             require_complete=require_complete,
+            narrative_backend=narrative_backend,
+            narrative_model=narrative_model,
+            narrative_fallback_models=narrative_fallback_models,
+            narrative_command=narrative_command,
+            narrative_timeout=narrative_timeout,
+            narrative_max_budget_usd=narrative_max_budget_usd,
+            narrative_min_chars=narrative_min_chars,
+            narrative_require_hitl=narrative_require_hitl,
         )
     (root / "survey_import_search_results.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
