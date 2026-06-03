@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -24,6 +25,8 @@ FORBIDDEN_PATTERNS = [
     re.compile(r"Evidence Map", re.I),
     re.compile(r"Source Map", re.I),
 ]
+
+REPORT_SUFFIXES = {".md", ".json", ".jsonl", ".html"}
 
 
 def _read_text(path: Path) -> str:
@@ -177,6 +180,104 @@ def _write_hitl(path: Path, payload: dict[str, Any], output_path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _first_heading(path: Path) -> str:
+    text = _read_text(path)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()
+    return ""
+
+
+def _status_projection_status(root: Path, chief_payload: dict[str, Any]) -> str:
+    chief_ok = bool(chief_payload.get("ok"))
+    survey_eval = _read_json(root / "survey_eval.json")
+    if chief_ok and survey_eval.get("ok") is True:
+        return "passed"
+    if chief_ok:
+        return "partial"
+    return "failed"
+
+
+def _status_projection_title(root: Path, target: Path) -> str:
+    summary = _read_json(root / "survey_final_summary.json")
+    title = str(summary.get("title") or "").strip()
+    if title:
+        return title
+    return _first_heading(target) or root.name
+
+
+def _status_projection_counts(root: Path) -> dict[str, Any]:
+    gap = _read_json(root / "survey_source_gap.json")
+    factual = _read_json(root / "survey_section_factual_audit.json")
+    scorecard = _read_json(root / "survey_section_scorecard.json")
+    human_summary = _read_json(root / "survey_human_final_summary.json")
+    human_metrics = _read_json(root / "survey_human_execution_metrics.json")
+    return {
+        "source_count": int(gap.get("source_count") or 0),
+        "evidence_count": int(gap.get("evidence_count") or 0),
+        "claim_count": int(gap.get("claim_count") or 0),
+        "section_count": int(scorecard.get("section_count") or human_summary.get("chapter_count") or 0),
+        "citation_accuracy": float(factual.get("section_grounding_accuracy") or 0.0),
+        "execution_metrics": human_metrics if human_metrics else {},
+        "topic": str(gap.get("brief") or "").strip(),
+    }
+
+
+def _publish_status_projection(root: Path, target: Path, chief_payload: dict[str, Any]) -> dict[str, str]:
+    harness_dir = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness"))).expanduser()
+    reports_dir = harness_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    root_resolved = root.resolve()
+    reports_resolved = reports_dir.resolve()
+    destination = root
+    try:
+        root_resolved.relative_to(reports_resolved)
+    except ValueError:
+        destination = reports_dir / root.name
+        destination.mkdir(parents=True, exist_ok=True)
+        for item in root.iterdir():
+            if item.is_file() and item.suffix.lower() in REPORT_SUFFIXES:
+                shutil.copy2(item, destination / item.name)
+
+    report_target = destination / target.name
+    title = _status_projection_title(root, report_target if report_target.exists() else target)
+    counts = _status_projection_counts(root)
+    manifest = {
+        "run_id": destination.name,
+        "status": _status_projection_status(root, chief_payload),
+        "title": title,
+        "task_title": title,
+        "topic": counts["topic"],
+        "output_dir": str(destination),
+        "final_md": str(report_target if report_target.exists() else target),
+        "source_count": counts["source_count"],
+        "evidence_count": counts["evidence_count"],
+        "claim_count": counts["claim_count"],
+        "section_count": counts["section_count"],
+        "citation_accuracy": counts["citation_accuracy"],
+        "execution_metrics": counts["execution_metrics"],
+        "chief_editor_final": str(report_target if report_target.exists() else target),
+        "human_final_md": str(destination / "human_final.md") if (destination / "human_final.md").exists() else "",
+    }
+    manifest_path = destination / f"{destination.name}-research_eval.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {
+        "status_projection_dir": str(destination),
+        "status_projection_eval_json": str(manifest_path),
+        "status_projection_report": str(report_target if report_target.exists() else target),
+    }
+
+
 def run_chief_editor(
     output_dir: str | Path,
     *,
@@ -325,5 +426,7 @@ def run_chief_editor(
             payload["ok"] = False
             payload["reason"] = "hitl_approval_required"
     _write_hitl(hitl_path, payload, target)
+    if payload.get("ok"):
+        payload.update(_publish_status_projection(root, target, payload))
     (root / "survey_chief_editor_backend.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload
