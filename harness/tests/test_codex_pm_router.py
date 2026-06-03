@@ -272,6 +272,69 @@ def test_build_pm_intake_prefers_enhanced_requirement_design_section():
     assert requirement_ir["user_intent"] == "研究实现 一个需求编译链路。"
     assert requirement_ir["source_inputs"]["enhanced_requirement_sections"][0]["heading"] == "需求概述"
     assert requirement_ir["source_inputs"]["compile_segments"][0]["kind"] == "enhanced_requirement_section"
+    assert requirement_ir["source_inputs"]["compile_segments"][0]["semantic_label"] == "architecture_and_scope"
+
+
+def test_build_pm_intake_maps_enhanced_requirement_sections_to_dag_semantics():
+    router = _load_router()
+    consumer_text = """# RawIntent Consumer Request - section semantic mapping
+
+## Rewritten Objective
+
+把研究实现需求编译成更细粒度的 DAG 提示。
+
+## Problem
+
+用户需要按章节语义把需求拆进不同 node family。
+
+## Enhanced Requirement Design
+
+# 需求概述
+
+需要把增强需求的章节语义映射到 requirement compiler DAG。
+
+## 功能需求
+
+- 生成 GPTRequirementWriter 增强需求
+- 把章节喂给 requirement compiler
+
+## 非功能需求
+
+- 保持 provenance
+- 保持可验证
+
+## 风险与约束
+
+- 不能破坏现有 DAG 主骨架
+
+## 验收标准
+
+- ImplementationWorker / Verifier 能看到章节语义提示
+
+## Raw User Intent
+
+研究实现 一个章节语义到 DAG 模板的链路。
+"""
+    payload = router.build_pm_intake(consumer_text, sprint_id="sprint-test", target_system="solar-harness")
+    requirement_ir = payload["requirement_ir"]
+    semantic_hints = requirement_ir["source_inputs"]["enhanced_requirement_semantic_hints"]
+    assert [item["node_family"] for item in semantic_hints[:4]] == [
+        "design",
+        "implementation",
+        "quality",
+        "risk_review",
+    ]
+    compile_segments = requirement_ir["source_inputs"]["compile_segments"]
+    assert compile_segments[1]["semantic_label"] == "functional_requirements"
+    assert compile_segments[2]["node_family"] == "quality"
+    assert compile_segments[3]["node_family"] == "risk_review"
+    by_id = {node["id"]: node for node in payload["compiled_artifacts"]["task_dag"]["nodes"]}
+    assert "implementation" in by_id["S2"]["semantic_focus"]
+    assert any(item["heading"] == "功能需求" for item in by_id["S2"]["section_semantic_hints"])
+    assert "verification" in by_id["S4"]["semantic_focus"]
+    assert any(item["heading"] == "验收标准" for item in by_id["S4"]["section_semantic_hints"])
+    assert "risk_review" in by_id["S1"]["semantic_focus"]
+    assert requirement_ir["section_semantic_plan"]["section_count"] == 5
 
 
 def test_validate_compiled_package_rejects_raw_metadata_pollution():
