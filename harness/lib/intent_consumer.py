@@ -143,6 +143,13 @@ def build_consumer_text(raw: dict[str, Any], rewritten: dict[str, Any], ir: dict
     acceptance = rewritten.get("acceptance") or ir.get("acceptance") or []
     title = str(rewritten.get("title") or ir.get("title") or "RawIntent")
     research = extract_research_artifact(raw, ir)
+    source_inputs = ir.get("source_inputs") if isinstance(ir.get("source_inputs"), dict) else {}
+    enhanced_requirement = (
+        source_inputs.get("enhanced_requirement")
+        if isinstance(source_inputs.get("enhanced_requirement"), dict)
+        else None
+    )
+    enhanced_content = str((enhanced_requirement or {}).get("content") or "").strip()
     lines = [
         f"# RawIntent Consumer Request - {title}",
         "",
@@ -181,6 +188,15 @@ def build_consumer_text(raw: dict[str, Any], rewritten: dict[str, Any], ir: dict
             f"- source_url: {research.get('source_url') or 'N/A'}",
             "",
             "Research artifact must remain a first-class source input for product-brief, PRD, and requirement_ir generation.",
+            "",
+        ])
+    if enhanced_content:
+        lines.extend([
+            "## Enhanced Requirement Design",
+            "",
+            enhanced_content,
+            "",
+            "Requirement compiler should prefer the enhanced requirement design above as the compile input, while preserving raw user intent as provenance.",
             "",
         ])
     lines.extend([

@@ -187,9 +187,10 @@ def _extract_effective_request_text(text: str) -> dict[str, str]:
 
     objective = _collapse_goal_text(_extract_markdown_section(text, "Rewritten Objective"))
     problem = _collapse_goal_text(_extract_markdown_section(text, "Problem"))
+    enhanced_requirement = _collapse_goal_text(_extract_markdown_section(text, "Enhanced Requirement Design"))
     raw_user_intent = _collapse_goal_text(_extract_markdown_section(text, "Raw User Intent"))
-    effective = raw_user_intent or problem or objective or whole
-    goal = objective or problem or raw_user_intent or effective
+    effective = enhanced_requirement or raw_user_intent or problem or objective or whole
+    goal = enhanced_requirement or objective or problem or raw_user_intent or effective
     return {
         "effective_text": effective,
         "goal_text": goal,

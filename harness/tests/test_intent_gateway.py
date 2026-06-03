@@ -134,3 +134,83 @@ def test_capture_embeds_research_artifact_into_requirement_ir(tmp_path):
     assert raw["routing_hints"]["require_research_artifact"] is True
     assert raw["research"]["path"] == "/tmp/frontdoor-research.json"
     assert ir["source_inputs"]["research_artifact"]["conversation_id"] == "conv-frontdoor-001"
+
+
+def test_capture_research_implementation_trigger_invokes_requirement_writer(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    fake = tmp_path / "fake_requirement_writer.py"
+    fake.write_text(
+        "import json, os, sys\n"
+        "from pathlib import Path\n"
+        "raw=os.environ.get('SOLAR_RAW_REQUIREMENT','').strip()\n"
+        "request_dir=Path(os.environ['BROWSER_AGENT_REQUEST_DIR'])\n"
+        "request_dir.mkdir(parents=True, exist_ok=True)\n"
+        "(request_dir/'chatgpt-mode-state.json').write_text(json.dumps({'ok': True}), encoding='utf-8')\n"
+        "print('# 需求概述\\n\\n基于原始需求扩写：' + raw)\n",
+        encoding="utf-8",
+    )
+    env["SOLAR_GPT_REQUIREMENT_WRITER_CMD"] = f"{sys.executable} {fake}"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "capture",
+            "--text",
+            "研究实现 一个基于论文分析并自动落地的需求编译链路。",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    base = tmp_path / "intents" / payload["intent_id"]
+    rewritten = json.loads((base / "rewritten_intent.json").read_text())
+    ir = json.loads((base / "requirement_ir.json").read_text())
+    trace = json.loads((base / "requirement_trace.json").read_text())
+    assert payload["requirement_enhancement"]["ok"] is True
+    assert rewritten["rewrite_method"] == "gpt_requirement_writer"
+    assert rewritten["requirement_enhancement"]["trigger_phrase"] == "研究实现"
+    assert ir["source_inputs"]["enhanced_requirement"]["operator"] == "GPTRequirementWriter"
+    assert "基于原始需求扩写" in ir["source_inputs"]["enhanced_requirement"]["content"]
+    assert trace["stages"][1]["stage"] == "requirement_enhancement"
+    assert (base / "gpt_requirement_writer_output.md").exists()
+
+
+def test_bind_copies_requirement_writer_artifacts_when_present(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    fake = tmp_path / "fake_requirement_writer.py"
+    fake.write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "request_dir=Path(os.environ['BROWSER_AGENT_REQUEST_DIR'])\n"
+        "request_dir.mkdir(parents=True, exist_ok=True)\n"
+        "(request_dir/'chatgpt-mode-state.json').write_text(json.dumps({'ok': True}), encoding='utf-8')\n"
+        "print('# 标题\\n\\n章节化需求设计')\n",
+        encoding="utf-8",
+    )
+    env["SOLAR_GPT_REQUIREMENT_WRITER_CMD"] = f"{sys.executable} {fake}"
+    capture = subprocess.run(
+        [sys.executable, str(SCRIPT), "capture", "--text", "研究实现 一个新编译器。", "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    intent_id = json.loads(capture.stdout)["intent_id"]
+    sprint_id = "sprint-20990101-000001"
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "bind", "--intent-id", intent_id, "--sprint-id", sprint_id, "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    sprints = tmp_path / "sprints"
+    assert (sprints / f"{sprint_id}.gpt_requirement_writer_output.json").exists()
+    assert (sprints / f"{sprint_id}.gpt_requirement_writer_output.md").exists()

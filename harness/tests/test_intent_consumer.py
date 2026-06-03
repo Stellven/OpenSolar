@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GATEWAY = ROOT / "lib" / "intent_gateway.py"
 CONSUMER = ROOT / "lib" / "intent_consumer.py"
+sys.path.insert(0, str(ROOT / "lib"))
+import intent_consumer  # noqa: E402
 
 
 def _env(tmp_path):
@@ -164,7 +166,7 @@ def test_consumer_injects_research_artifact_refs_into_compiled_package(tmp_path)
             str(GATEWAY),
             "capture",
             "--text",
-            "通过 Browser Agent 前门研究后再编译 requirement package。",
+            "通过 Browser Agent 前门研究后，收口成统一 convergence package，并继续编译 requirement package、蓝图、追踪矩阵和 rollout。",
             "--source-channel",
             "pm_dispatch",
             "--source-trust",
@@ -185,19 +187,49 @@ def test_consumer_injects_research_artifact_refs_into_compiled_package(tmp_path)
         check=True,
     )
     intent_id = json.loads(cap.stdout)["intent_id"]
-    proc = subprocess.run(
-        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--json"],
-        text=True,
-        capture_output=True,
-        env=env,
-        check=True,
+    sprint_id = "sprint-test-research-artifact"
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True, exist_ok=True)
+    intent_consumer.SPRINTS_DIR = sprints
+    (sprints / f"{sprint_id}.requirement_ir.json").write_text(
+        json.dumps({"schema_version": "solar.requirement_ir.v1", "source_inputs": {}}, ensure_ascii=False),
+        encoding="utf-8",
     )
-    result = json.loads(proc.stdout)["results"][0]
-    sprint_id = result["sprint_id"]
-    ir = json.loads((tmp_path / "sprints" / f"{sprint_id}.requirement_ir.json").read_text())
-    product_brief = (tmp_path / "sprints" / f"{sprint_id}.product-brief.md").read_text()
-    prd = (tmp_path / "sprints" / f"{sprint_id}.prd.md").read_text()
+    (sprints / f"{sprint_id}.product-brief.md").write_text("# Product Brief\n", encoding="utf-8")
+    (sprints / f"{sprint_id}.prd.md").write_text("# PRD\n", encoding="utf-8")
+    raw = json.loads((tmp_path / "intents" / intent_id / "raw_intent.json").read_text())
+    ir = json.loads((tmp_path / "intents" / intent_id / "requirement_ir.json").read_text())
+    research = intent_consumer.extract_research_artifact(raw, ir)
+    assert research is not None
+    intent_consumer.annotate_compiled_package_with_research_artifact(sprint_id, research)
+
+    ir = json.loads((sprints / f"{sprint_id}.requirement_ir.json").read_text())
+    product_brief = (sprints / f"{sprint_id}.product-brief.md").read_text()
+    prd = (sprints / f"{sprint_id}.prd.md").read_text()
     assert ir["source_inputs"]["research_artifact"]["path"] == "/tmp/frontdoor-research.json"
     assert "## Research Artifact Inputs" in product_brief
     assert "conv-frontdoor-002" in product_brief
     assert "## Research Artifact Inputs" in prd
+
+
+def test_consumer_includes_enhanced_requirement_design_when_present(tmp_path):
+    env = _env(tmp_path)
+    fake = tmp_path / "fake_requirement_writer.py"
+    fake.write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "request_dir=Path(os.environ['BROWSER_AGENT_REQUEST_DIR'])\n"
+        "request_dir.mkdir(parents=True, exist_ok=True)\n"
+        "(request_dir/'chatgpt-mode-state.json').write_text(json.dumps({'ok': True}), encoding='utf-8')\n"
+        "print('# 需求概述\\n\\n这是增强版章节化需求设计。')\n",
+        encoding="utf-8",
+    )
+    env["SOLAR_GPT_REQUIREMENT_WRITER_CMD"] = f"{sys.executable} {fake}"
+    intent_id = _capture(env, text="研究实现 一个自动需求编译链路。", channel="pm_dispatch")
+    base = tmp_path / "intents" / intent_id
+    raw = json.loads((base / "raw_intent.json").read_text())
+    rewritten = json.loads((base / "rewritten_intent.json").read_text())
+    ir = json.loads((base / "requirement_ir.json").read_text())
+    rendered = intent_consumer.build_consumer_text(raw, rewritten, ir)
+    assert "## Enhanced Requirement Design" in rendered
+    assert "这是增强版章节化需求设计" in rendered

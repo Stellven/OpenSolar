@@ -239,6 +239,39 @@ Codex bridge should capture RawIntent and auto consume into sprint package.
     assert "RawIntent Consumer Request" not in prd
 
 
+def test_build_pm_intake_prefers_enhanced_requirement_design_section():
+    router = _load_router()
+    consumer_text = """# RawIntent Consumer Request - research implementation
+
+## Rewritten Objective
+
+把研究类需求编译成 sprint package。
+
+## Problem
+
+用户想做研究实现链路，但原始文本很短。
+
+## Enhanced Requirement Design
+
+# 需求概述
+
+需要把研究实现类需求先走章节化增强，再进入 requirement compiler，输出更完整的 IR、PRD、contract 和 task_graph。
+
+## 功能需求
+
+- 必须支持显式启动词 `研究实现`
+- 必须保留 raw user intent provenance
+
+## Raw User Intent
+
+研究实现 一个需求编译链路。
+"""
+    payload = router.build_pm_intake(consumer_text, sprint_id="sprint-test", target_system="solar-harness")
+    requirement_ir = payload["requirement_ir"]
+    assert "章节化增强" in requirement_ir["normalized_goal"]
+    assert requirement_ir["user_intent"] == "研究实现 一个需求编译链路。"
+
+
 def test_validate_compiled_package_rejects_raw_metadata_pollution():
     router = _load_router()
     payload = router.build_pm_intake("正常需求：补齐 requirement compiler 的 closeout gate。", sprint_id="sprint-test")
