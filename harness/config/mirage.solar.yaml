@@ -62,7 +62,7 @@ mounts:
 
   - path: /drive
     source_type: gdrive
-    root: "/Users/lisihao/Library/CloudStorage/GoogleDrive-haogege1977@gmail.com"
+    root: "/Users/lisihao/Library/CloudStorage/GoogleDrive-browser-agent@example.com"
     local_provider: "macos-google-drive-file-provider"
     credential_env: "GOOGLE_APPLICATION_CREDENTIALS"
     mode: ro

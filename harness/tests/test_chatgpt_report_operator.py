@@ -106,17 +106,17 @@ def test_explicit_profile_and_account_hints_are_forwarded(tmp_path):
         purpose="hf-paper-l7-high-reasoning-demo",
         env_extra={
             "BROWSER_AGENT_PROFILE_DIRECTORY": "Default",
-            "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL": "haogege1977@gmail.com",
-            "BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL": "haogege1977@gmail.com",
+            "BROWSER_AGENT_TARGET_ACCOUNT_EMAIL": "browser-agent@example.com",
+            "BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL": "browser-agent@example.com",
         },
     )
     payload = json.loads(proc.stdout)
     assert payload["profile_directory"] == "Default"
-    assert payload["target_account_email"] == "haogege1977@gmail.com"
-    assert payload["chatgpt_account_email"] == "haogege1977@gmail.com"
+    assert payload["target_account_email"] == "browser-agent@example.com"
+    assert payload["chatgpt_account_email"] == "browser-agent@example.com"
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["profile_directory"] == "Default"
-    assert meta["target_account_email"] == "haogege1977@gmail.com"
+    assert meta["target_account_email"] == "browser-agent@example.com"
     assert meta["account_email_hint_present"] is True
 
 
@@ -128,7 +128,7 @@ def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
                 "version": 1,
                 "policies": {
                     "default": {
-                        "expected_account_email": "haogege1977@gmail.com",
+                        "expected_account_email": "browser-agent@example.com",
                         "allowed_profiles": ["Profile 1", "Profile 2"],
                         "selection": "first",
                     }
@@ -148,13 +148,13 @@ def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
     )
     payload = json.loads(proc.stdout)
     assert payload["profile_directory"] == "Profile 1"
-    assert payload["target_account_email"] == "haogege1977@gmail.com"
-    assert payload["chatgpt_account_email"] == "haogege1977@gmail.com"
+    assert payload["target_account_email"] == "browser-agent@example.com"
+    assert payload["chatgpt_account_email"] == "browser-agent@example.com"
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["profile_policy"]["enabled"] is True
     assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
     assert meta["profile_policy"]["selected_profile_directory"] == "Profile 1"
-    assert meta["profile_policy"]["selected_account_email"] == "haogege1977@gmail.com"
+    assert meta["profile_policy"]["selected_account_email"] == "browser-agent@example.com"
 
 
 def test_hf_report_planner_uses_hf_profile_policy_key(tmp_path):
@@ -170,7 +170,7 @@ def test_hf_report_planner_uses_hf_profile_policy_key(tmp_path):
                         "selection": "first",
                     },
                     "hf_paper_insight": {
-                        "expected_account_email": "haogege1977@gmail.com",
+                        "expected_account_email": "browser-agent@example.com",
                         "allowed_profiles": ["Profile 1"],
                         "selection": "first",
                     },
@@ -191,7 +191,7 @@ def test_hf_report_planner_uses_hf_profile_policy_key(tmp_path):
     )
     payload = json.loads(proc.stdout)
     assert payload["profile_directory"] == "Profile 1"
-    assert payload["target_account_email"] == "haogege1977@gmail.com"
+    assert payload["target_account_email"] == "browser-agent@example.com"
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
 
@@ -209,7 +209,7 @@ def test_hf_report_section_uses_hf_profile_policy_key(tmp_path):
                         "selection": "first",
                     },
                     "hf_paper_insight": {
-                        "expected_account_email": "haogege1977@gmail.com",
+                        "expected_account_email": "browser-agent@example.com",
                         "allowed_profiles": ["Profile 1"],
                         "selection": "first",
                     },
@@ -230,7 +230,7 @@ def test_hf_report_section_uses_hf_profile_policy_key(tmp_path):
     )
     payload = json.loads(proc.stdout)
     assert payload["profile_directory"] == "Profile 1"
-    assert payload["target_account_email"] == "haogege1977@gmail.com"
+    assert payload["target_account_email"] == "browser-agent@example.com"
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
 
@@ -243,7 +243,7 @@ def test_local_profile_policy_rejects_profile_outside_allowed_pool(tmp_path):
                 "version": 1,
                 "policies": {
                     "default": {
-                        "expected_account_email": "haogege1977@gmail.com",
+                        "expected_account_email": "browser-agent@example.com",
                         "allowed_profiles": ["Default", "Profile 2"],
                     }
                 },
@@ -274,7 +274,7 @@ def test_local_profile_policy_rejects_account_mismatch(tmp_path):
                 "version": 1,
                 "policies": {
                     "default": {
-                        "expected_account_email": "haogege1977@gmail.com",
+                        "expected_account_email": "browser-agent@example.com",
                         "allowed_profiles": ["Default"],
                     }
                 },
