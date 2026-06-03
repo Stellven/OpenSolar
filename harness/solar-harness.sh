@@ -2896,6 +2896,36 @@ print(json.dumps({
     shift || true
     python3 "$HARNESS_DIR/lib/research/cli.py" "$@"
     ;;
+  browser)
+    shift || true
+    _browser_scope="${1:-}"
+    if [[ "$_browser_scope" == "profile" ]]; then
+      shift || true
+      _browser_action="${1:-doctor}"
+      shift || true
+      case "$_browser_action" in
+        doctor)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" doctor "$@"
+          ;;
+        init)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" profile-init "$@"
+          ;;
+        verify)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" profile-verify "$@"
+          ;;
+        recover)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" profile-recover "$@"
+          ;;
+        *)
+          err "unknown browser profile subcommand: $_browser_action"
+          exit 1
+          ;;
+      esac
+    else
+      err "unknown browser command: ${_browser_scope:-N/A}"
+      exit 1
+    fi
+    ;;
   intake|request)
     shift || true
     intake_request "$@"
