@@ -30,6 +30,7 @@ if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
 import browser_job_runtime as bjrt
+from browser import runtime_control as brtc
 from browser_use.browser.profile import BrowserProfile
 from browser_use.browser.session import BrowserSession
 from playwright.async_api import async_playwright
@@ -807,6 +808,30 @@ async def _run(prompt: str) -> int:
     staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
     if user_data_dir and not staged_dir:
         raise RuntimeError("protected_browser_profile_cache_missing")
+    control_ctx = brtc.initialize_runtime_contract(
+        request_dir=request_dir,
+        service="gemini",
+        runtime_owner="browser_use",
+        wrapper_kind="gemini",
+        profile_directory=profile_directory,
+        user_data_dir=str(user_data_dir),
+        staged_user_data_dir=str(staged_dir),
+        explicit_profile_id=str(os.environ.get("BROWSER_AGENT_PROFILE_ID") or "").strip() or None,
+        task_id=str(os.environ.get("TASK_ID") or request_dir.name),
+        control_modes={
+            "browser_use_session": True,
+            "playwright_cdp_attach": True,
+            "webwright_bridge": False,
+        },
+        metadata={
+            "request_dir": str(request_dir),
+            "target_url": target_url,
+            "headless": headless,
+        },
+    )
+    final_error_text: str | None = None
+    final_page_state: dict | None = None
+    logged_in_verified = False
 
     meta = {
         "provider": "browser_agent_gemini_deep_research",
@@ -830,6 +855,11 @@ async def _run(prompt: str) -> int:
     )
     try:
         await asyncio.wait_for(browser.start(), timeout=40)
+        brtc.update_runtime_endpoint(
+            control_ctx,
+            cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+            browser_session_ref=f"browser-use-session://gemini/{control_ctx['profile_id']}",
+        )
         async with async_playwright() as pw:
             pw_browser = await pw.chromium.connect_over_cdp(browser.cdp_url)
             pw_context = pw_browser.contexts[0] if pw_browser.contexts else None
@@ -843,6 +873,14 @@ async def _run(prompt: str) -> int:
 
             # Check if login wall
             initial_check = await _extract_conversation_data(playwright_page)
+            final_page_state = {
+                "url": initial_check.get("url"),
+                "conversation_id": initial_check.get("conversation_id"),
+                "login_wall": initial_check.get("login_wall"),
+                "challenge_wall": initial_check.get("challenge_wall"),
+                "message_count": initial_check.get("message_count"),
+                "assistant_count": initial_check.get("assistant_count"),
+            }
             if initial_check.get("login_wall"):
                 raise PermissionError("gemini_reauth_required")
 
@@ -1002,6 +1040,15 @@ async def _run(prompt: str) -> int:
             (request_dir / "assistant-response.txt").write_text(latest_txt + "\n", encoding="utf-8")
             (request_dir / "page.html").write_text(html, encoding="utf-8")
             (request_dir / "conversation.json").write_text(json.dumps(final_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            final_page_state = {
+                "url": final_url,
+                "conversation_id": final_data.get("conversation_id"),
+                "message_count": final_data.get("message_count"),
+                "assistant_count": final_data.get("assistant_count"),
+                "login_wall": final_data.get("login_wall"),
+                "challenge_wall": final_data.get("challenge_wall"),
+            }
+            logged_in_verified = True
 
             non_flash_mode = bool(current_mode_label) and not _mode_label_is_flash_lite(current_mode_label)
             mode_evidence_strength = (
@@ -1039,6 +1086,9 @@ async def _run(prompt: str) -> int:
 
             print(latest_txt)
             return 0
+    except Exception as exc:
+        final_error_text = str(exc)
+        raise
     finally:
         try:
             await asyncio.wait_for(browser.stop(), timeout=20)
@@ -1047,6 +1097,18 @@ async def _run(prompt: str) -> int:
         if cleanup_dir is not None:
             import shutil
             shutil.rmtree(cleanup_dir, ignore_errors=True)
+        brtc.finalize_runtime_contract(
+            control_ctx,
+            success=logged_in_verified and not final_error_text,
+            error_text=final_error_text,
+            page_state=final_page_state,
+            logged_in_state_verified=logged_in_verified,
+            details={
+                "provider": "browser_agent_gemini_deep_research",
+                "request_dir": str(request_dir),
+            },
+            requires_precise_page_control=True,
+        )
 
 def main() -> int:
     _quiet_browser_logs()

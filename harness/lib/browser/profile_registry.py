@@ -31,9 +31,10 @@ def _normalise_profile_id(profile_id: str) -> str:
     clean = str(profile_id or "").strip()
     if not clean:
         raise ValueError("profile_id is required")
-    if "/" in clean or "\\" in clean or ".." in clean:
+    path = Path(clean)
+    if path.is_absolute() or ".." in path.parts or any(part in {"", "."} for part in path.parts):
         raise ValueError(f"invalid profile_id: {profile_id!r}")
-    return clean
+    return path.as_posix()
 
 
 def _read_json(path: Path) -> dict[str, Any]:
