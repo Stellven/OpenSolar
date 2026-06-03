@@ -349,6 +349,78 @@ def test_build_pm_intake_maps_enhanced_requirement_sections_to_dag_semantics():
     assert requirement_ir["section_semantic_plan"]["section_count"] == 5
 
 
+def test_build_pm_intake_upgrades_standard_dag_when_semantic_families_are_heavy():
+    router = _load_router()
+    consumer_text = """# RawIntent Consumer Request - semantic dag upgrade
+
+## Rewritten Objective
+
+把研究实现需求编译成更宽的并行交付 DAG。
+
+## Problem
+
+需求同时包含接口、风险、非功能和验收章节，标准串行 DAG 太窄。
+
+## Enhanced Requirement Design
+
+# 需求概述
+
+这是一条研究实现链路，需要在进入实现前把接口、风险和验证分支准备好。
+
+## 接口与数据契约
+
+- 定义 IR 输入输出边界
+- 声明 contract 和 schema 兼容要求
+
+## 风险与约束
+
+- 不能破坏现有 requirement compiler 主链
+- 不能丢失 raw provenance
+
+## 非功能需求
+
+- 需要可验证
+- 需要回归证据
+
+## 验收标准
+
+- 必须有 acceptance matrix
+- 必须有 closeout decision
+
+## 功能需求
+
+- 最终把增强需求编译进 DAG 和 PRD
+
+## Raw User Intent
+
+研究实现 一个语义驱动 DAG 升级链路。
+"""
+    payload = router.build_pm_intake(consumer_text, sprint_id="sprint-test", target_system="solar-harness")
+    requirement_ir = payload["requirement_ir"]
+    dag = payload["compiled_artifacts"]["task_dag"]
+    by_id = {node["id"]: node for node in dag["nodes"]}
+    assert payload["classification"] == router.FULL_SPEC
+    assert payload["dag_variant"] == "parallel_delivery"
+    assert dag["semantic_upgrade"]["enabled"] is True
+    assert dag["semantic_upgrade"]["mode"] == "section_family_parallel_delivery"
+    assert dag["quality_gates"]["parallelism"]["min_ready_width"] == 3
+    source_nodes = [node["id"] for node in dag["nodes"] if not node["depends_on"]]
+    assert source_nodes == ["S1", "S2", "S3"]
+    assert by_id["S4"]["depends_on"] == ["S1", "S2", "S3"]
+    assert "interface_contract" in by_id["S1"]["semantic_focus"]
+    assert "risk_review" in by_id["S2"]["semantic_focus"]
+    assert "verification" in by_id["S3"]["semantic_focus"]
+    assert "quality" in by_id["S3"]["semantic_focus"]
+    assert "implementation" in by_id["S4"]["semantic_focus"]
+    assert "acceptance-matrix.json" in by_id["S5"]["outputs"]
+    assert requirement_ir["dag_view"]["semantic_upgrade"]["trigger_families"] == [
+        "interface_contract",
+        "quality",
+        "risk_review",
+        "verification",
+    ]
+
+
 def test_validate_compiled_package_rejects_raw_metadata_pollution():
     router = _load_router()
     payload = router.build_pm_intake("正常需求：补齐 requirement compiler 的 closeout gate。", sprint_id="sprint-test")

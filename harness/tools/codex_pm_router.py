@@ -369,6 +369,16 @@ def _build_section_semantic_hints(sections: list[dict[str, Any]]) -> list[dict[s
     return hints
 
 
+def _section_family_counts(section_hints: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for hint in section_hints:
+        family = str(hint.get("node_family") or "").strip()
+        if not family:
+            continue
+        counts[family] = counts.get(family, 0) + 1
+    return counts
+
+
 def _append_unique_items(target: list[Any], additions: list[Any]) -> list[Any]:
     existing = {json.dumps(item, ensure_ascii=False, sort_keys=True) for item in target}
     merged = list(target)
@@ -1583,6 +1593,61 @@ def build_task_graph_skeleton(request_type: str, lane_hint: str, request_text: s
     return _apply_default_gate_assignments(_standard_task_graph(strategy_lane=lane_hint == "strategy"))
 
 
+def _upgrade_standard_graph_for_section_semantics(
+    graph: dict[str, Any],
+    section_hints: list[dict[str, Any]],
+    request_type: str,
+) -> dict[str, Any]:
+    if request_type != FULL_SPEC:
+        return graph
+    if str(graph.get("dag_variant") or "").strip().lower() != "standard":
+        return graph
+    family_counts = _section_family_counts(section_hints)
+    if not family_counts.get("verification"):
+        return graph
+    if not family_counts.get("interface_contract"):
+        return graph
+    branch_families = [family for family in ("risk_review", "interface_contract", "quality") if family_counts.get(family)]
+    if not (family_counts.get("risk_review") or family_counts.get("quality")):
+        return graph
+
+    upgraded = _apply_default_gate_assignments(_parallel_delivery_task_graph())
+    upgraded["semantic_upgrade"] = {
+        "enabled": True,
+        "mode": "section_family_parallel_delivery",
+        "trigger_families": sorted(branch_families + ["verification"]),
+        "family_counts": family_counts,
+    }
+    upgraded["quality_gates"] = {
+        "parallelism": {
+            "min_ready_width": 3,
+        }
+    }
+
+    customized_nodes: list[dict[str, Any]] = []
+    for node in upgraded.get("nodes") or []:
+        enriched = dict(node)
+        node_id = str(enriched.get("id") or "")
+        if node_id == "S1":
+            enriched["goal"] = "Lock implementation scope, interface boundaries, architecture constraints, and write-scope policy."
+            enriched["acceptance"] = ["Scope, interface boundaries, and implementation constraints are explicit."]
+        elif node_id == "S2":
+            enriched["goal"] = "Inspect risk, constraints, and failure evidence before implementation begins."
+            enriched["acceptance"] = ["Risk and constraint review is explicit and grounded in requirement sections."]
+        elif node_id == "S3":
+            enriched["goal"] = "Prepare acceptance, non-functional verification plan, and regression probes."
+            enriched["acceptance"] = ["Acceptance matrix, quality checklist, and regression probes are ready."]
+        elif node_id == "S4":
+            enriched["goal"] = "Implement the functional scope using the approved interface, risk, and verification constraints."
+            enriched["acceptance"] = ["Patch is linked to functional requirements and semantic branch outputs."]
+        elif node_id == "S5":
+            enriched["goal"] = "Run release verification, review branch evidence, and record the closeout decision."
+            enriched["acceptance"] = ["Verifier decision is grounded in implementation, quality, and risk evidence."]
+        customized_nodes.append(enriched)
+    upgraded["nodes"] = customized_nodes
+    return upgraded
+
+
 def build_pm_intake(
     text: str,
     *,
@@ -1609,6 +1674,7 @@ def build_pm_intake(
     output_mode = choose_output_mode(request_type)
     priority = choose_priority(compile_text, request_type)
     task_graph = build_task_graph_skeleton(request_type, lane_hint, compile_text)
+    task_graph = _upgrade_standard_graph_for_section_semantics(task_graph, section_semantic_hints, request_type)
     if _is_code_understanding_request(compile_text, repo_context):
         task_graph = _adapt_graph_for_code_understanding(task_graph, request_type)
     task_graph["nodes"] = [_node_enrichment(request_type, lane_hint, node) for node in task_graph["nodes"]]
