@@ -58,7 +58,7 @@ def test_call_browser_agent_chatgpt_text_prefers_process_env_over_config(monkeyp
     monkeypatch.setenv("TECH_HOTSPOT_BROWSER_CHATGPT_CMD", f"{sys.executable} {wrapper}")
     monkeypatch.setenv("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
     monkeypatch.setenv("BROWSER_AGENT_HEADLESS", "true")
-    monkeypatch.setenv("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "haogege1977@gmail.com")
+    monkeypatch.setenv("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "browser-agent@example.com")
     ns = _load_namespace()
     result = ns["call_browser_agent_chatgpt_text"](
         "验证 env override",
@@ -78,7 +78,7 @@ def test_call_browser_agent_chatgpt_text_prefers_process_env_over_config(monkeyp
     payload = json.loads(result["text"])
     assert payload["profile_directory"] == "Default"
     assert payload["headless"] == "true"
-    assert payload["account_email"] == "haogege1977@gmail.com"
+    assert payload["account_email"] == "browser-agent@example.com"
 
 
 def test_hf_public_report_render_outputs_reader_facing_md_and_html():

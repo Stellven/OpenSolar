@@ -40,7 +40,7 @@ DEFAULT_ALLOWED_DOMAINS = [
     "www.youtube.com", "youtube.com", "accounts.google.com",
     "google.com", "m.youtube.com",
 ]
-TARGET_ACCOUNT_EMAIL = os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "haogege1977@gmail.com")
+TARGET_ACCOUNT_EMAIL = os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "browser-agent@example.com")
 STRICT_ACCOUNT_FOR_PANEL = os.environ.get("BROWSER_AGENT_YT_REQUIRE_LOGIN_FOR_PANEL", "false").strip().lower() in {
     "1",
     "true",

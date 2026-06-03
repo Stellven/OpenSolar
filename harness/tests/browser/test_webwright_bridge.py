@@ -16,7 +16,7 @@ from browser.profile_registry import ProfileRegistry  # noqa: E402
 
 def test_prepare_webwright_bridge_storage_state_clone(tmp_path: Path) -> None:
     registry = ProfileRegistry(root=tmp_path / "profiles")
-    profile_id = "chatgpt/haogege1977"
+    profile_id = "chatgpt/example-user"
     source_state = tmp_path / "source" / "storageState.json"
     source_state.parent.mkdir(parents=True, exist_ok=True)
     source_state.write_text('{"cookies":[]}', encoding="utf-8")

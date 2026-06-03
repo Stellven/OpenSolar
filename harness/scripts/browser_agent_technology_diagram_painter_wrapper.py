@@ -4,7 +4,7 @@
 Pipeline:
 1. Connect via browser-use profile session (CDP).
 2. Navigate to https://chatgpt.com/.
-3. Verify logged in as target account (haogege1977@gmail.com).
+3. Verify logged in as target account (browser-agent@example.com).
 4. Click "...更多" (More) on the left navigation bar, and select "图片" (Image).
 5. Select model "gpt5.5" and "thinking high" from the model selector.
 6. Enter text + drawing prompt into the textarea and submit.
@@ -38,7 +38,7 @@ DEFAULT_PROFILE_DIRECTORY = "Profile 1"
 DEFAULT_ALLOWED_DOMAINS = [
     "chatgpt.com", "openai.com", "auth0.openai.com", "google.com", "accounts.google.com"
 ]
-TARGET_ACCOUNT_EMAIL = "haogege1977@gmail.com"
+TARGET_ACCOUNT_EMAIL = "browser-agent@example.com"
 
 # ---------------------------------------------------------------------------
 # Logging helpers
