@@ -62,12 +62,12 @@ mounts:
 
   - path: /drive
     source_type: gdrive
-    root: "/Users/lisihao/Library/CloudStorage/GoogleDrive-browser-agent@example.com"
+    root: "/Users/lisihao/Library/CloudStorage/GoogleDrive-haogege1977@gmail.com"
     local_provider: "macos-google-drive-file-provider"
     credential_env: "GOOGLE_APPLICATION_CREDENTIALS"
     mode: ro
     optional: true
-    description: "Google Drive local File Provider mount (optional, read-only by default)"
+    description: "Google Drive local File Provider mount for haogege1977@gmail.com (optional, read-only by default)"
 
 policy:
   default_timeout_s: 30
