@@ -53,9 +53,10 @@ def test_ai_influence_payload_discovers_all_report_kinds(tmp_path, monkeypatch):
 
     payload = mod._ai_influence_payload(limit=20)
 
-    assert payload["count"] == 4
+    assert payload["count"] == 3
     labels = {item["module_label"] for item in payload["items"]}
-    assert {"日度洞察", "大咖访谈及大展洞察报告", "统一日报", "Phase 2"} <= labels
+    assert {"日度洞察", "大咖访谈及大展洞察报告", "统一日报"} <= labels
+    assert "Phase 2" not in labels
     assert payload["module_counts"]["大咖访谈及大展洞察报告"] == 1
     assert "raw_dir" not in payload
     assert "legacy_raw_dir" not in payload
@@ -136,6 +137,9 @@ def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypat
     assert "只看未发送" in html
     assert "按频道折叠" in html
     assert "全部报告" in html
+    assert "大咖访谈及大展洞察未发送" not in html
+    assert "planned_unsent" not in html
+    assert "历史 phase" not in html
     assert "active-chips" in html
     assert "active-chips" in html
     assert "group-send-btn" in html
