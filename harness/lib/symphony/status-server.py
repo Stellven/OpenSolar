@@ -1459,6 +1459,9 @@ def _sanitize_ai_influence_payload(payload: dict) -> dict:
         "generated_at": payload.get("generated_at", ""),
         "period": payload.get("period", "30d"),
         "count": payload.get("count", 0),
+        "total_before_filter": payload.get("total_before_filter", payload.get("count", 0)),
+        "total_after_filter": payload.get("total_after_filter", payload.get("count", 0)),
+        "filters_applied": payload.get("filters_applied", {}),
         "items": [_sanitize_ai_influence_item(item) for item in (payload.get("items") or [])],
         "groups": groups,
         "module_counts": payload.get("module_counts", {}),
@@ -1467,7 +1470,47 @@ def _sanitize_ai_influence_payload(payload: dict) -> dict:
     }
 
 
-def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict:
+def _ai_influence_filter_match(item: dict, *, theme: str = "", technology: str = "", channel: str = "", module: str = "", unsent: bool = False) -> bool:
+    filters = item.get("filters") if isinstance(item.get("filters"), dict) else {}
+    themes = [str(value) for value in (filters.get("themes") or [])]
+    technologies = [str(value) for value in (filters.get("technologies") or [])]
+    channels = [str(value) for value in (filters.get("channels") or [])]
+    module_label = str(item.get("module_label") or "")
+    mail_status = str(((item.get("mail") or {}).get("status")) or "unsent").strip().lower()
+    if theme and theme not in themes:
+        return False
+    if technology and technology not in technologies:
+        return False
+    if channel and channel not in channels:
+        return False
+    if module and module != module_label:
+        return False
+    if unsent and mail_status in {"sent", "warn"}:
+        return False
+    return True
+
+
+def _ai_influence_sort_items(items: list[dict], sort_mode: str) -> list[dict]:
+    if sort_mode == "date_asc":
+        return sorted(items, key=lambda item: (str(item.get("date") or ""), str(item.get("title") or "").lower(), float(item.get("mtime") or 0)))
+    if sort_mode == "title_asc":
+        return sorted(items, key=lambda item: (str(item.get("title") or "").lower(), str(item.get("date") or "")))
+    if sort_mode == "module_asc":
+        return sorted(items, key=lambda item: (str(item.get("module_label") or "").lower(), str(item.get("date") or ""), str(item.get("title") or "").lower()), reverse=False)
+    return sorted(items, key=lambda item: item.get("mtime", 0), reverse=True)
+
+
+def _ai_influence_payload_internal(
+    limit: int = 80,
+    period: str = "30d",
+    *,
+    theme: str = "",
+    technology: str = "",
+    channel: str = "",
+    module: str = "",
+    unsent: bool = False,
+    sort_mode: str = "date_desc",
+) -> dict:
     tech_hotspot_raw_dir = _tech_hotspot_raw_dir()
     items: list[dict] = []
     if AI_INFLUENCE_RAW_DIR.exists():
@@ -1514,14 +1557,29 @@ def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict
     deleted_ids = _ai_influence_deleted_report_ids()
     if deleted_ids:
         items = [item for item in items if str(item.get("id") or "") not in deleted_ids]
-    items.sort(key=lambda item: item.get("mtime", 0), reverse=True)
     normalized_period, cutoff = _ai_influence_period_cutoff(period)
     if cutoff is not None:
         items = [
             item for item in items
             if (_parse_ai_influence_date(str(item.get("date") or "")) or datetime.date.min) >= cutoff
         ]
-    limited = items[:limit]
+    filter_themes = _unique_preserve([value for item in items for value in ((item.get("filters") or {}).get("themes") or [])])
+    filter_technologies = _unique_preserve([value for item in items for value in ((item.get("filters") or {}).get("technologies") or [])])
+    filter_channels = _unique_preserve([value for item in items for value in ((item.get("filters") or {}).get("channels") or [])])
+    filter_modules = _unique_preserve([str(item.get("module_label") or "") for item in items if str(item.get("module_label") or "")])
+    filtered = [
+        item for item in items
+        if _ai_influence_filter_match(
+            item,
+            theme=theme,
+            technology=technology,
+            channel=channel,
+            module=module,
+            unsent=unsent,
+        )
+    ]
+    filtered = _ai_influence_sort_items(filtered, sort_mode)
+    limited = filtered[:limit]
     groups: dict[str, dict] = {}
     for item in limited:
         key = str(item.get("module_key") or "other")
@@ -1529,14 +1587,21 @@ def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict
         group["items"].append(item)
     for key, group in groups.items():
         group["summary"] = _ai_influence_group_summary(key, group.get("items") or [])
-    filter_themes = _unique_preserve([value for item in limited for value in ((item.get("filters") or {}).get("themes") or [])])
-    filter_technologies = _unique_preserve([value for item in limited for value in ((item.get("filters") or {}).get("technologies") or [])])
-    filter_channels = _unique_preserve([value for item in limited for value in ((item.get("filters") or {}).get("channels") or [])])
     return {
         "ok": bool(limited),
         "status": "ok" if limited else "warn",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "period": normalized_period,
+        "filters_applied": {
+            "theme": theme,
+            "technology": technology,
+            "channel": channel,
+            "module": module,
+            "unsent": unsent,
+            "sort": sort_mode,
+        },
+        "total_before_filter": len(items),
+        "total_after_filter": len(filtered),
         "count": len(limited),
         "items": limited,
         "groups": list(groups.values()),
@@ -1545,13 +1610,33 @@ def _ai_influence_payload_internal(limit: int = 80, period: str = "30d") -> dict
             "themes": filter_themes,
             "technologies": filter_technologies,
             "channels": filter_channels,
+            "modules": filter_modules,
         },
         "mail_config": _ai_influence_mail_config_payload(),
     }
 
 
-def _ai_influence_payload(limit: int = 80, period: str = "30d") -> dict:
-    return _sanitize_ai_influence_payload(_ai_influence_payload_internal(limit=limit, period=period))
+def _ai_influence_payload(
+    limit: int = 80,
+    period: str = "30d",
+    *,
+    theme: str = "",
+    technology: str = "",
+    channel: str = "",
+    module: str = "",
+    unsent: bool = False,
+    sort_mode: str = "date_desc",
+) -> dict:
+    return _sanitize_ai_influence_payload(_ai_influence_payload_internal(
+        limit=limit,
+        period=period,
+        theme=theme,
+        technology=technology,
+        channel=channel,
+        module=module,
+        unsent=unsent,
+        sort_mode=sort_mode,
+    ))
 
 
 def _ai_influence_deleted_reports_payload() -> dict:
@@ -2360,8 +2445,27 @@ def _ai_influence_collectors_section() -> str:
     return "".join(sections)
 
 
-def _ai_influence_html(period: str = "30d") -> str:
-    payload = _ai_influence_payload(limit=200, period=period)
+def _ai_influence_html(
+    period: str = "30d",
+    *,
+    theme: str = "",
+    technology: str = "",
+    channel: str = "",
+    module: str = "",
+    unsent: bool = False,
+    group_channel: bool = False,
+    sort_mode: str = "date_desc",
+) -> str:
+    payload = _ai_influence_payload(
+        limit=200,
+        period=period,
+        theme=theme,
+        technology=technology,
+        channel=channel,
+        module=module,
+        unsent=unsent,
+        sort_mode=sort_mode,
+    )
     mail_cfg = payload.get("mail_config") if isinstance(payload.get("mail_config"), dict) else {}
     current_to = str(mail_cfg.get("to") or "")
     current_period = str(payload.get("period") or "30d")
@@ -2487,10 +2591,21 @@ def _ai_influence_html(period: str = "30d") -> str:
         for key, label in (("7d", "近 7 天"), ("30d", "近 30 天"), ("90d", "近 90 天"), ("all", "全部"))
     )
     filter_options = payload.get("filter_options") if isinstance(payload.get("filter_options"), dict) else {}
-    theme_options = "".join(f"<option value='{html.escape(value)}'>{html.escape(value)}</option>" for value in (filter_options.get("themes") or []))
-    technology_options = "".join(f"<option value='{html.escape(value)}'>{html.escape(value)}</option>" for value in (filter_options.get("technologies") or []))
-    channel_options = "".join(f"<option value='{html.escape(value)}'>{html.escape(value)}</option>" for value in (filter_options.get("channels") or []))
-    module_options = "".join(f"<option value='{html.escape(str(group.get('label') or ''))}'>{html.escape(str(group.get('label') or ''))}</option>" for group in (payload.get("groups") or []))
+    def _option(value: str, current: str) -> str:
+        selected = " selected" if value == current else ""
+        return f"<option value='{html.escape(value, quote=True)}'{selected}>{html.escape(value)}</option>"
+
+    def _sort_option(value: str, label: str) -> str:
+        selected = " selected" if value == sort_mode else ""
+        return f"<option value='{html.escape(value, quote=True)}'{selected}>{html.escape(label)}</option>"
+
+    theme_options = "".join(_option(str(value), theme) for value in (filter_options.get("themes") or []))
+    technology_options = "".join(_option(str(value), technology) for value in (filter_options.get("technologies") or []))
+    channel_options = "".join(_option(str(value), channel) for value in (filter_options.get("channels") or []))
+    module_labels = [str(value) for value in (filter_options.get("modules") or [])]
+    if module and module not in module_labels:
+        module_labels.append(module)
+    module_options = "".join(_option(value, module) for value in module_labels)
     quick_module_buttons = "".join(
         f"<button class='quick-btn' data-module='{html.escape(str(group.get('label') or ''))}' onclick=\"setQuickModule('{html.escape(str(group.get('label') or ''))}', this)\">{html.escape(str(group.get('label') or ''))}</button>"
         for group in (payload.get("groups") or [])
@@ -2608,7 +2723,8 @@ def _ai_influence_html(period: str = "30d") -> str:
     </section>
     <div class="toolbar">
       <span class="pill">状态：{html.escape(str(payload.get("status") or "N/A"))}</span>
-      <span class="pill">总报告：{int(payload.get("count", 0) or 0)}</span>
+      <span class="pill">总报告：{int(payload.get("total_before_filter", payload.get("count", 0)) or 0)}</span>
+      <span class="pill">筛选后：{int(payload.get("count", 0) or 0)}</span>
       <span class="pill">周期：{html.escape(current_period)}</span>
       <span class="pill">收件人：{html.escape(current_to or 'N/A')}</span>
       {module_pills}
@@ -2668,14 +2784,14 @@ def _ai_influence_html(period: str = "30d") -> str:
         <div class="filter-field">
           <label for="sort-reports">排序方式</label>
           <select id="sort-reports" onchange="applyReportFilters()">
-            <option value="date_desc">时间：最新优先</option>
-            <option value="date_asc">时间：最早优先</option>
-            <option value="title_asc">标题：A-Z</option>
-            <option value="module_asc">模块：A-Z</option>
-          </select>
-        </div>
-        <label class="filter-check"><input id="filter-unsent" type="checkbox" onchange="applyReportFilters()">只看未发送</label>
-        <label class="filter-check"><input id="group-channel" type="checkbox" onchange="applyReportFilters()">按频道折叠</label>
+	            {_sort_option("date_desc", "时间：最新优先")}
+	            {_sort_option("date_asc", "时间：最早优先")}
+	            {_sort_option("title_asc", "标题：A-Z")}
+	            {_sort_option("module_asc", "模块：A-Z")}
+	          </select>
+	        </div>
+	        <label class="filter-check"><input id="filter-unsent" type="checkbox" onchange="applyReportFilters()"{' checked' if unsent else ''}>只看未发送</label>
+	        <label class="filter-check"><input id="group-channel" type="checkbox" onchange="applyReportFilters()"{' checked' if group_channel else ''}>按频道折叠</label>
       </div>
       <div class="quick-filters">
         <button class="quick-btn active" data-module="" onclick="setQuickModule('', this)">全部报告</button>
@@ -2686,7 +2802,7 @@ def _ai_influence_html(period: str = "30d") -> str:
         <span class="chip">当前周期：{html.escape(current_period)}</span>
       </div>
       <div class="results-meta">
-        <div id="report-results-count">N/A</div>
+	      <div id="report-results-count">当前可见：{int(payload.get("count", 0) or 0)} 份报告</div>
         <div>支持时间、主题、技术、频道、模块、邮件状态和频道折叠。</div>
       </div>
       <div id="report-source" class="report-source">{''.join(report_cards)}</div>
@@ -2721,6 +2837,28 @@ def _ai_influence_html(period: str = "30d") -> str:
       document.querySelectorAll('.preset-btn').forEach(el => el.classList.remove('active'));
       document.getElementById('filter-unsent').checked = false;
       applyReportFilters();
+    }}
+    function syncReportFilterUrl() {{
+      const params = new URLSearchParams(window.location.search);
+      params.set('period', '{html.escape(current_period)}');
+      const values = [
+        ['theme', document.getElementById('filter-theme').value],
+        ['technology', document.getElementById('filter-technology').value],
+        ['channel', document.getElementById('filter-channel').value],
+        ['module', document.getElementById('filter-module').value],
+        ['sort', document.getElementById('sort-reports').value],
+      ];
+      values.forEach(([key, value]) => {{
+        if (value && !(key === 'sort' && value === 'date_desc')) params.set(key, value);
+        else params.delete(key);
+      }});
+      if (document.getElementById('filter-unsent').checked) params.set('unsent', '1');
+      else params.delete('unsent');
+      if (document.getElementById('group-channel').checked) params.set('group_channel', '1');
+      else params.delete('group_channel');
+      const query = params.toString();
+      const nextUrl = window.location.pathname + (query ? '?' + query : '');
+      window.history.replaceState(null, '', nextUrl);
     }}
     function clearAllReportFilters() {{
       document.getElementById('filter-theme').value = '';
@@ -2850,6 +2988,9 @@ def _ai_influence_html(period: str = "30d") -> str:
       renderedCards.forEach(card => container.appendChild(card));
     }}
     function applyReportFilters() {{
+      syncReportFilterUrl();
+      const selectedModule = document.getElementById('filter-module').value;
+      document.querySelectorAll('.quick-btn[data-module]').forEach(el => el.classList.toggle('active', (el.dataset.module || '') === selectedModule));
       document.querySelectorAll('.preset-btn').forEach(el => {{
         if (document.getElementById('filter-module').value !== '大咖访谈及大展洞察报告' || !document.getElementById('filter-unsent').checked) {{
           el.classList.remove('active');
@@ -11319,7 +11460,16 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         elif path == "/ai-influence":
             period = params.get("period", ["30d"])[0]
-            self._send_text(_ai_influence_html(period=period), content_type="text/html; charset=utf-8")
+            self._send_text(_ai_influence_html(
+                period=period,
+                theme=params.get("theme", [""])[0],
+                technology=params.get("technology", [""])[0],
+                channel=params.get("channel", [""])[0],
+                module=params.get("module", [""])[0],
+                unsent=params.get("unsent", ["0"])[0].lower() in ("1", "true", "yes", "on"),
+                group_channel=params.get("group_channel", ["0"])[0].lower() in ("1", "true", "yes", "on"),
+                sort_mode=params.get("sort", ["date_desc"])[0],
+            ), content_type="text/html; charset=utf-8")
 
         elif path == "/ai-influence/youtube-videos":
             period = params.get("period", ["all"])[0]
@@ -11342,7 +11492,16 @@ class StatusHandler(BaseHTTPRequestHandler):
             except ValueError:
                 limit = 80
             period = params.get("period", ["30d"])[0]
-            self._send_json(_ai_influence_payload(limit=limit, period=period))
+            self._send_json(_ai_influence_payload(
+                limit=limit,
+                period=period,
+                theme=params.get("theme", [""])[0],
+                technology=params.get("technology", [""])[0],
+                channel=params.get("channel", [""])[0],
+                module=params.get("module", [""])[0],
+                unsent=params.get("unsent", ["0"])[0].lower() in ("1", "true", "yes", "on"),
+                sort_mode=params.get("sort", ["date_desc"])[0],
+            ))
 
         elif path == "/ai-influence/report":
             target = _resolve_ai_influence_report(
