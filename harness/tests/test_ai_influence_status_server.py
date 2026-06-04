@@ -146,6 +146,17 @@ def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkey
     mod = _load_module()
     db_path = tmp_path / "tech-hotspot-radar.sqlite"
     archive_path = tmp_path / "youtube-video-archive.json"
+    youtube_config_path = tmp_path / "youtube-influence-digest.yaml"
+    youtube_config_path.write_text(
+        """
+channels:
+  - name: AI Engineer
+    url: https://www.youtube.com/@aiDotEngineer
+    category: AI / Tech
+    priority: tier1
+""".strip(),
+        encoding="utf-8",
+    )
     with sqlite3.connect(db_path) as conn:
         conn.executescript(
             """
@@ -267,6 +278,7 @@ def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkey
 
     monkeypatch.setattr(mod, "TECH_HOTSPOT_DB", db_path)
     monkeypatch.setattr(mod, "AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE", archive_path)
+    monkeypatch.setattr(mod, "YOUTUBE_DIGEST_CONFIG", youtube_config_path)
 
     payload = mod._ai_influence_youtube_videos_payload(period="all")
 
@@ -298,6 +310,18 @@ def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkey
     assert "Channel Group" not in html
     assert "频道分组" in html
     assert "影响力" in html
+    assert "推荐关注" in html
+    assert "addRecommendedChannels" in html
+
+    recommendations = mod._youtube_subscription_recommendations(limit=5)
+    assert recommendations
+    assert all(item["name"] != "AI Engineer" for item in recommendations)
+    add_result = mod._append_youtube_recommended_subscriptions({"channels": [{"url": "https://www.youtube.com/@LatentSpacePod"}]})
+    assert add_result["added"] == 1
+    saved = mod._read_yaml_file(youtube_config_path)
+    assert any(item.get("name") == "Latent Space" for item in saved["channels"])
+    exists_result = mod._append_youtube_recommended_subscriptions({"channels": [{"url": "https://www.youtube.com/@LatentSpacePod"}]})
+    assert exists_result["exists"] == 1
 
     result = mod._ai_influence_youtube_videos_archive({"video_ids": ["abc123"]})
     assert result["ok"] is True
