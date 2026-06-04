@@ -105,11 +105,30 @@ def _check_solar_context(harness_dir: Path) -> Check:
     return Check("Solar context", "warn", _short(result.stderr or result.stdout))
 
 
+def _json_from_output(text: str) -> dict[str, Any]:
+    start = text.find("{")
+    if start < 0:
+        raise json.JSONDecodeError("missing json object", text, 0)
+    payload, _end = json.JSONDecoder().raw_decode(text[start:])
+    if not isinstance(payload, dict):
+        raise json.JSONDecodeError("json payload is not an object", text, start)
+    return payload
+
+
 def _check_mirage_drive(harness_dir: Path) -> Check:
-    result = _run(["bash", "solar-harness.sh", "mirage", "exec", "ls", "/drive"], cwd=harness_dir, timeout=60)
-    if result.returncode == 0:
-        return Check("Mirage /drive", "ok", "reachable", True)
-    return Check("Mirage /drive", "error", _short(result.stderr or result.stdout), True)
+    result = _run(["bash", "solar-harness.sh", "mirage", "doctor", "--json"], cwd=harness_dir, timeout=30)
+    if result.returncode != 0:
+        return Check("Mirage /drive", "error", _short(result.stderr or result.stdout), True)
+    try:
+        payload = _json_from_output(f"{result.stdout}\n{result.stderr}")
+    except json.JSONDecodeError as exc:
+        return Check("Mirage /drive", "error", f"invalid mirage doctor json: {exc}", True)
+    drive = payload.get("drive") if isinstance(payload.get("drive"), dict) else {}
+    if drive.get("status") == "ok":
+        detail = drive.get("local_root") or drive.get("reason") or "drive.status=ok"
+        return Check("Mirage /drive", "ok", str(detail), True)
+    return Check("Mirage /drive", "error", _short(json.dumps(drive, ensure_ascii=False)), True)
+
 
 
 def _check_tvs_root(value: str) -> Check:

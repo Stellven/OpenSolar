@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -60,3 +61,52 @@ def test_nightly_release_doctor_blocks_lightweight_release_errors(monkeypatch):
     assert payload["ok"] is False
     names = {item["name"]: item for item in payload["checks"]}
     assert names["release dry-run"]["required_for_full"] is False
+
+
+def test_mirage_drive_probe_uses_doctor_not_root_listing(monkeypatch):
+    mod = _load_module()
+    calls = []
+
+    def fake_run(cmd, *, cwd, timeout=30, env=None):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout='{"drive":{"status":"ok","local_root":"/tmp/drive"}}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+
+    check = mod._check_mirage_drive(ROOT)
+
+    assert check.status == "ok"
+    assert check.detail == "/tmp/drive"
+    assert calls == [["bash", "solar-harness.sh", "mirage", "doctor", "--json"]]
+
+
+def test_mirage_drive_probe_handles_warning_prefixed_json(monkeypatch):
+    mod = _load_module()
+
+    def fake_run(cmd, *, cwd, timeout=30, env=None):
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout='warning before json\n{"drive":{"status":"degraded","reason":"missing"}}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(mod, "_run", fake_run)
+
+    check = mod._check_mirage_drive(ROOT)
+
+    assert check.status == "error"
+    assert "missing" in check.detail
+
+
+def test_json_from_output_ignores_trailing_warnings():
+    mod = _load_module()
+
+    payload = mod._json_from_output('prefix\n{"drive":{"status":"ok"}}\nwarning after json')
+
+    assert payload["drive"]["status"] == "ok"
