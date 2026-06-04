@@ -698,7 +698,22 @@ def _mail_status_badge(mail_result: dict | None) -> str:
     if not isinstance(mail_result, dict):
         return "未发送"
     status = str(mail_result.get("status") or "N/A")
-    return {"sent": "已发送", "skipped": "未发送", "warn": "告警", "failed": "失败"}.get(status, status)
+    return {"sent": "已发送", "skipped": "未发送", "unsent": "未发送", "warn": "告警", "failed": "失败"}.get(status, status)
+
+
+def _ai_influence_mail_status(mail_obj: dict | None) -> str:
+    if not isinstance(mail_obj, dict):
+        return "unsent"
+    status = str(mail_obj.get("status") or "").strip().lower()
+    return status or "unsent"
+
+
+def _ai_influence_is_unsent_mail_status(mail_status: str) -> bool:
+    return str(mail_status or "").strip().lower() not in {"sent", "ok"}
+
+
+def _ai_influence_filter_normalize(value: str) -> str:
+    return re.sub(r"\s+", "", str(value or "").strip().lower())
 
 
 def _ai_influence_display_value(value) -> str:
@@ -1498,18 +1513,18 @@ def _ai_influence_filter_match(
     technologies = [str(value) for value in (filters.get("technologies") or [])]
     channels = [str(value) for value in (filters.get("channels") or [])]
     module_label = str(item.get("module_label") or "")
-    mail_status = str(((item.get("mail") or {}).get("status")) or "unsent").strip().lower()
+    mail_status = _ai_influence_mail_status(item.get("mail"))
     if theme and theme not in themes:
         return False
     if technology and technology not in technologies:
         return False
     if channel and channel not in channels:
         return False
-    if module and module != module_label:
+    if module and _ai_influence_filter_normalize(module) != _ai_influence_filter_normalize(module_label):
         return False
     if month and str(item.get("month") or "") != month:
         return False
-    if unsent and mail_status in {"sent", "warn"}:
+    if unsent and not _ai_influence_is_unsent_mail_status(mail_status):
         return False
     return True
 
@@ -3436,6 +3451,12 @@ def _ai_influence_html(
       }});
     }});
     }}
+    function normalizeFilterValue(value) {{
+      return String(value || '').replace(/\\s+/g, '').toLowerCase();
+    }}
+    function isUnsentMailStatus(value) {{
+      return !['sent', 'ok'].includes(String(value || '').toLowerCase());
+    }}
     function visibleReportCards() {{
       const theme = document.getElementById('filter-theme').value;
       const technology = document.getElementById('filter-technology').value;
@@ -3448,9 +3469,9 @@ def _ai_influence_html(
         const okTheme = !theme || (main.dataset.themes || '').includes(theme);
         const okTechnology = !technology || (main.dataset.technologies || '').includes(technology);
         const okChannel = !channel || (main.dataset.channels || '').includes(channel);
-        const okModule = !moduleName || (main.dataset.module || '') === moduleName;
+        const okModule = !moduleName || normalizeFilterValue(main.dataset.module || '') === normalizeFilterValue(moduleName);
         const okMonth = !month || (main.dataset.month || '') === month;
-        const okMail = !unsentOnly || !['sent', 'warn'].includes((main.dataset.mailStatus || '').toLowerCase());
+        const okMail = !unsentOnly || isUnsentMailStatus(main.dataset.mailStatus || '');
         return okTheme && okTechnology && okChannel && okModule && okMonth && okMail;
       }});
     }}
@@ -3505,7 +3526,7 @@ def _ai_influence_html(
           const details = document.createElement('details');
           details.className = 'channel-group';
           details.open = true;
-          const unsent = channelCards.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          const unsent = channelCards.filter(card => isUnsentMailStatus(card.querySelector('.main').dataset.mailStatus || ''));
           const summary = document.createElement('summary');
           summary.innerHTML = '<span class="channel-group-left"><span>' + channel + '</span><span class="channel-group-count">' + channelCards.length + ' 份报告</span></span>'
             + '<span class="channel-group-right">'
@@ -3528,7 +3549,7 @@ def _ai_influence_html(
         months.forEach(month => {{
           const monthCards = groupedByMonth[month];
           const monthDetails = document.createElement('details');
-          const unsent = monthCards.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          const unsent = monthCards.filter(card => isUnsentMailStatus(card.querySelector('.main').dataset.mailStatus || ''));
           monthDetails.className = 'month-group';
           monthDetails.open = true;
           const monthSummary = document.createElement('summary');
@@ -3545,7 +3566,7 @@ def _ai_influence_html(
         months.forEach(month => {{
           const monthCards = groupedByMonth[month];
           const monthDetails = document.createElement('details');
-          const unsent = monthCards.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          const unsent = monthCards.filter(card => isUnsentMailStatus(card.querySelector('.main').dataset.mailStatus || ''));
           monthDetails.className = 'month-group';
           monthDetails.open = true;
           const monthSummary = document.createElement('summary');
