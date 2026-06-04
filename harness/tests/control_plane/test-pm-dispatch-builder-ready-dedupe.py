@@ -61,3 +61,16 @@ def test_builder_namespace_logical_operator_is_builder_ready(tmp_path: Path, mon
     assert pm_dispatch._node_is_builder_ready({"logical_operator": "builder.fix"})
     assert pm_dispatch._node_is_builder_ready({"logical_operator": "builder.implementation"})
     assert not pm_dispatch._node_is_builder_ready({"logical_operator": "eval.review"})
+
+
+def test_node_builder_objective_requires_canonical_handoff(tmp_path: Path, monkeypatch):
+    pm_dispatch = _load_pm_dispatch(tmp_path, monkeypatch)
+
+    objective = pm_dispatch._node_builder_objective(
+        "sprint-test",
+        {"id": "N1", "goal": "ship the fix", "acceptance": ["tests pass"]},
+    )
+
+    assert "canonical handoff" in objective
+    assert "sprint-test.N1-handoff.md" in objective
+    assert ".pm-result.md" in objective
