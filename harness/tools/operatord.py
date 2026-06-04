@@ -971,8 +971,12 @@ def cmd_daemon(args: argparse.Namespace) -> int:
                         log_lines.append(
                             f"[WARN] pm_dispatch complete returned {completed.returncode} for {task_id}"
                         )
+                        result_status = "failed_contract_closeout"
+                        exit_code = exit_code or 67
                 except Exception as exc:
                     log_lines.append(f"[WARN] pm_dispatch complete hook failed: {exc}")
+                    result_status = "failed_contract_closeout"
+                    exit_code = exit_code or 67
 
             # ── Write result artifact ─────────────────────────────────────────────
             log_tail = "\n".join(log_lines[-50:])
