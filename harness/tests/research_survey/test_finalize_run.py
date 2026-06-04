@@ -55,7 +55,8 @@ def test_finalize_run_builds_pipeline_and_compiles(tmp_path):
     )
     assert payload["ok"] is True
     assert payload["reason"] == "passed"
-    assert [step["step"] for step in payload["steps"]] == ["plan", "source_gap", "pack", "write", "eval", "auto_repair", "compile", "final_eval"]
+    assert [step["step"] for step in payload["steps"]] == ["deepdive_entry", "plan", "source_gap", "pack", "write", "eval", "auto_repair", "compile", "final_eval"]
+    assert payload["steps"][0]["ok"] is True
     assert payload["compile"]["finalized_sections"] >= 1
     assert (tmp_path / "final.md").exists()
     assert (tmp_path / "survey_finalize_run.json").exists()

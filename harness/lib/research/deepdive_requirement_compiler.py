@@ -317,13 +317,18 @@ def compile_deepdive_brief(
     brief: str,
     *,
     options: DeepDiveCompileOptions | None = None,
+    expansion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     options = options or DeepDiveCompileOptions()
-    normalized = normalize_text(brief)
+    raw_normalized = normalize_text(brief)
+    expanded_brief = ""
+    if expansion and isinstance(expansion, dict):
+        expanded_brief = normalize_text(str(expansion.get("expanded_brief") or ""))
+    normalized = expanded_brief or raw_normalized
     if not normalized:
         raise ValueError("brief is required")
 
-    questions = extract_research_questions(brief)
+    questions = extract_research_questions(normalized)
     source_refs = [ref.to_dict() for ref in options.source_refs]
     contract = {
         "schema_version": SCHEMA_VERSION,
@@ -337,6 +342,7 @@ def compile_deepdive_brief(
         },
         "profile": options.profile,
         "source_channel": options.source_channel,
+        "raw_brief": raw_normalized,
         "brief": normalized,
         "target_chars": options.target_chars,
         "research_questions": [question.to_dict() for question in questions],
@@ -356,6 +362,16 @@ def compile_deepdive_brief(
         },
         "operator_mapping": OPERATOR_MAPPING,
     }
+    if expansion:
+        contract["brief_expansion"] = {
+            "schema_version": expansion.get("schema_version"),
+            "operator": "DeepDiveBriefExpander",
+            "status": expansion.get("status"),
+            "attempted": bool(expansion.get("attempted")),
+            "output_md_path": expansion.get("output_md_path", ""),
+            "output_json_path": expansion.get("output_json_path", ""),
+            "normal_requirement_pipeline_import_allowed": False,
+        }
     contract["deepdive_dag"] = build_deepdive_evidence_dag(questions)
     contract["traceability"] = build_traceability(contract)
     return contract
@@ -407,4 +423,3 @@ def validate_deepdive_contract(contract: dict[str, Any]) -> dict[str, Any]:
             "mapping_count": len(contract.get("operator_mapping") or []),
         },
     }
-

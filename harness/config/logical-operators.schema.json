@@ -53,6 +53,7 @@
         "DeepResearchBrowser",
         "DeepResearchGemini",
         "DeepResearchChatGPT",
+        "GPTRequirementWriter",
         "WebwrightPlaywright",
         "BrowserUseMcp",
         "YoutubeTranscriptExtractor",

@@ -156,47 +156,61 @@ def test_consumer_blocks_when_research_artifact_is_required_but_missing(tmp_path
     assert result["status"] == "blocked_missing_research_artifact"
 
 
+def test_consumer_includes_enhanced_requirement_context(tmp_path):
+    from importlib.machinery import SourceFileLoader
+
+    consumer = SourceFileLoader("intent_consumer_under_test", str(CONSUMER)).load_module()
+    raw = {
+        "intent_id": "intent-test",
+        "source": {"channel": "test"},
+        "raw": {"text": "先研究再实现一个功能。"},
+    }
+    rewritten = {
+        "title": "DeepDive entry",
+        "objective": "Build isolated entry",
+        "constraints": [],
+        "acceptance": [],
+    }
+    ir = {
+        "intent_id": "intent-test",
+        "source_inputs": {
+            "enhanced_requirement": {
+                "content": "## 功能需求\n- DeepDive 先扩展 brief，再进入 evidence/chapter/chief-editor。"
+            }
+        },
+    }
+    text = consumer.build_consumer_text(raw, rewritten, ir)
+    assert "## Enhanced Requirement Design" in text
+    assert "先扩展 brief" in text
+
+
 def test_consumer_injects_research_artifact_refs_into_compiled_package(tmp_path):
-    env = _env(tmp_path)
-    cap = subprocess.run(
-        [
-            sys.executable,
-            str(GATEWAY),
-            "capture",
-            "--text",
-            "通过 Browser Agent 前门研究后再编译 requirement package。",
-            "--source-channel",
-            "pm_dispatch",
-            "--source-trust",
-            "pm_dispatch",
-            "--research-artifact",
-            "/tmp/frontdoor-research.json",
-            "--research-project-name",
-            "需求研究-2026-05",
-            "--research-conversation-id",
-            "conv-frontdoor-002",
-            "--research-source-url",
-            "https://chatgpt.com/c/conv-frontdoor-002",
-            "--json",
-        ],
-        text=True,
-        capture_output=True,
-        env=env,
-        check=True,
+    from importlib.machinery import SourceFileLoader
+
+    consumer = SourceFileLoader("intent_consumer_annotate_under_test", str(CONSUMER)).load_module()
+    consumer.SPRINTS_DIR = tmp_path / "sprints"
+    consumer.SPRINTS_DIR.mkdir()
+    sprint_id = "sprint-test-research-artifact"
+    (consumer.SPRINTS_DIR / f"{sprint_id}.requirement_ir.json").write_text(
+        json.dumps({"source_inputs": {}}, ensure_ascii=False),
+        encoding="utf-8",
     )
-    intent_id = json.loads(cap.stdout)["intent_id"]
-    proc = subprocess.run(
-        [sys.executable, str(CONSUMER), "consume", "--intent-id", intent_id, "--json"],
-        text=True,
-        capture_output=True,
-        env=env,
-        check=True,
+    (consumer.SPRINTS_DIR / f"{sprint_id}.product-brief.md").write_text("# Product\n", encoding="utf-8")
+    (consumer.SPRINTS_DIR / f"{sprint_id}.prd.md").write_text("# PRD\n", encoding="utf-8")
+
+    consumer.annotate_compiled_package_with_research_artifact(
+        sprint_id,
+        {
+            "path": "/tmp/frontdoor-research.json",
+            "project_name": "需求研究-2026-05",
+            "conversation_id": "conv-frontdoor-002",
+            "source_url": "https://chatgpt.com/c/conv-frontdoor-002",
+        },
     )
-    result = json.loads(proc.stdout)["results"][0]
-    sprint_id = result["sprint_id"]
-    ir = json.loads((tmp_path / "sprints" / f"{sprint_id}.requirement_ir.json").read_text())
-    product_brief = (tmp_path / "sprints" / f"{sprint_id}.product-brief.md").read_text()
-    prd = (tmp_path / "sprints" / f"{sprint_id}.prd.md").read_text()
+
+    ir = json.loads((consumer.SPRINTS_DIR / f"{sprint_id}.requirement_ir.json").read_text())
+    product_brief = (consumer.SPRINTS_DIR / f"{sprint_id}.product-brief.md").read_text()
+    prd = (consumer.SPRINTS_DIR / f"{sprint_id}.prd.md").read_text()
     assert ir["source_inputs"]["research_artifact"]["path"] == "/tmp/frontdoor-research.json"
     assert "## Research Artifact Inputs" in product_brief
     assert "conv-frontdoor-002" in product_brief

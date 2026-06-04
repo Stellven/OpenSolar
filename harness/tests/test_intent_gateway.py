@@ -134,3 +134,69 @@ def test_capture_embeds_research_artifact_into_requirement_ir(tmp_path):
     assert raw["routing_hints"]["require_research_artifact"] is True
     assert raw["research"]["path"] == "/tmp/frontdoor-research.json"
     assert ir["source_inputs"]["research_artifact"]["conversation_id"] == "conv-frontdoor-001"
+
+
+def test_capture_triggers_gpt_requirement_writer_for_complex_research_intent(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    env["SOLAR_GPT_REQUIREMENT_WRITER_CMD"] = (
+        f"{sys.executable} -c \"print('# 增强需求设计\\\\n\\\\n## 功能需求\\\\n- 先做证据边界，再拆实现任务。')\""
+    )
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "capture",
+            "--text",
+            "先研究再实现 DeepDive 需求编译入口，避免污染普通需求管道。",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    base = tmp_path / "intents" / payload["intent_id"]
+    raw = json.loads((base / "raw_intent.json").read_text())
+    rewritten = json.loads((base / "rewritten_intent.json").read_text())
+    ir = json.loads((base / "requirement_ir.json").read_text())
+    trace = json.loads((base / "requirement_trace.json").read_text())
+
+    assert raw["routing_hints"]["requirement_enhancement"]["enabled"] is True
+    assert rewritten["rewrite_method"] == "gpt_requirement_writer"
+    assert "enhanced_requirement" in ir["source_inputs"]
+    assert "先做证据边界" in ir["source_inputs"]["enhanced_requirement"]["content"]
+    assert (base / "gpt_requirement_writer_output.json").exists()
+    assert (base / "gpt_requirement_writer_output.md").exists()
+    assert any(stage["stage"] == "requirement_enhancement" and stage["status"] == "ok" for stage in trace["stages"])
+
+
+def test_capture_does_not_trigger_requirement_writer_for_plain_intent(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    env["SOLAR_GPT_REQUIREMENT_WRITER_CMD"] = f"{sys.executable} -c \"raise SystemExit(99)\""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "capture",
+            "--text",
+            "修复一个普通状态页按钮样式问题。",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    base = tmp_path / "intents" / payload["intent_id"]
+    raw = json.loads((base / "raw_intent.json").read_text())
+    ir = json.loads((base / "requirement_ir.json").read_text())
+
+    assert raw["routing_hints"]["requirement_enhancement"]["enabled"] is False
+    assert "enhanced_requirement" not in ir["source_inputs"]
+    assert not (base / "gpt_requirement_writer_output.json").exists()

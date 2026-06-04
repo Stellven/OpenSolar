@@ -62,6 +62,17 @@
       "schedule": "on_demand",
       "output_dir": "reports/chatgpt-report-chapters/"
     },
+    "chatgpt_requirement_writer": {
+      "primary": "tools/chatgpt_requirement_writer_operator.py",
+      "executors": [
+        "scripts/browser_agent_chatgpt_wrapper.py"
+      ],
+      "fallback": [
+        "deterministic_requirement_rewrite"
+      ],
+      "schedule": "on_demand",
+      "output_dir": "reports/chatgpt-requirement-writer/"
+    },
     "technology_diagram": {
       "primary": "tools/technology_diagram_painter_operator.py",
       "executors": [
