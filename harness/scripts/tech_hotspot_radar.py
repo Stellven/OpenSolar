@@ -53,6 +53,13 @@ from report_evidence import run_chapter_writer as runtime_run_chapter_writer
 from report_ir import compile_report_ir as runtime_compile_report_ir
 from report_ir import create_chapter_jobs as runtime_create_chapter_jobs
 from report_synthesis import synthesize_report as runtime_synthesize_report
+from browser_operator_submit import browser_agent_chatgpt_cmd as runtime_browser_agent_chatgpt_cmd
+from browser_operator_submit import build_chatgpt_operator_env as runtime_build_chatgpt_operator_env
+from browser_operator_submit import derive_chatgpt_session_lineage as runtime_derive_chatgpt_session_lineage
+from browser_operator_submit import env_override_bool as runtime_env_override_bool
+from browser_operator_submit import env_override_text as runtime_env_override_text
+from browser_operator_submit import strip_browser_agent_noise as runtime_strip_browser_agent_noise
+from browser_operator_submit import submit_chatgpt_operator_request as runtime_submit_chatgpt_operator_request
 
 try:
     import yaml
@@ -13863,30 +13870,7 @@ def _browser_agent_request_dir(config: dict[str, Any], purpose: str) -> Path:
 
 
 def browser_agent_chatgpt_cmd(config: dict[str, Any]) -> list[str]:
-    """Resolve the browser-agent ChatGPT executor command.
-
-    This is intentionally explicit. If the global Browser Agent operator is not
-    wired yet, we write a request artifact and fail closed instead of silently
-    falling back to Codex or local Qwen.
-    """
-    flow_cfg = ((config.get("youtube") or {}).get("ai_influence_report_flow") or {})
-    reasoner_cfg = ((config.get("youtube") or {}).get("phase_report_reasoner") or {})
-    cmd = (
-        os.environ.get("TECH_HOTSPOT_BROWSER_CHATGPT_CMD")
-        or os.environ.get("BROWSER_AGENT_CHATGPT_CMD")
-        or str((flow_cfg.get("browser_agent") or {}).get("cmd") or "")
-        or str(reasoner_cfg.get("browser_agent_cmd") or "")
-    ).strip()
-    if cmd:
-        return shlex.split(cmd)
-    operator = Path(__file__).resolve().parents[1] / "tools" / "chatgpt_report_operator.py"
-    if operator.exists():
-        return [sys.executable, str(operator)]
-    wrapper = Path(__file__).resolve().with_name("browser_agent_chatgpt_wrapper.py")
-    browser_use_python = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
-    if wrapper.exists() and browser_use_python.exists():
-        return [str(browser_use_python), str(wrapper)]
-    return []
+    return runtime_browser_agent_chatgpt_cmd(config)
 
 
 def browser_agent_notebooklm_cmd(config: dict[str, Any]) -> list[str]:
@@ -13907,70 +13891,19 @@ def browser_agent_notebooklm_cmd(config: dict[str, Any]) -> list[str]:
 
 
 def _strip_browser_agent_noise(text: str) -> str:
-    if not text:
-        return ""
-    lines = str(text).splitlines()
-    cleaned: list[str] = []
-    started = False
-    noise_prefixes = ("INFO     [", "WARNING  [", "ERROR    [", "DEBUG    [")
-    for line in lines:
-        if not started and (line.startswith(noise_prefixes) or not line.strip()):
-            continue
-        started = True
-        cleaned.append(line)
-    return "\n".join(cleaned).strip()
+    return runtime_strip_browser_agent_noise(text)
 
 
 def _env_override_text(*names: str) -> str | None:
-    for name in names:
-        raw = os.environ.get(name)
-        if raw is None:
-            continue
-        value = str(raw).strip()
-        if value:
-            return value
-    return None
+    return runtime_env_override_text(*names)
 
 
 def _env_override_bool(*names: str) -> bool | None:
-    raw = _env_override_text(*names)
-    if raw is None:
-        return None
-    lowered = raw.lower()
-    if lowered in {"1", "true", "yes", "on"}:
-        return True
-    if lowered in {"0", "false", "no", "off"}:
-        return False
-    return None
+    return runtime_env_override_bool(*names)
 
 
 def derive_browser_agent_session_lineage(purpose: str) -> str:
-    value = str(purpose or "").strip().lower()
-    if not value:
-        return "browser-agent:default"
-    for prefix, lineage_prefix in (
-        ("ai-influence-video-grouping-", "ai-influence-planning:"),
-        ("ai-influence-report-plan-", "ai-influence-planning:"),
-        ("github-trend-report-", "github-trend-report:"),
-        ("hf-paper-l7-high-reasoning-", "hf-paper-l7-high-reasoning:"),
-    ):
-        if value.startswith(prefix):
-            return f"{lineage_prefix}{value[len(prefix):]}"
-    if value.startswith("hf-paper-report-plan-"):
-        return f"hf-paper-report:{value[len('hf-paper-report-plan-'):]}"
-    if value.startswith("hf-paper-report-section-"):
-        tail = value[len("hf-paper-report-section-"):]
-        date_key = tail.split("-", 3)[0:3]
-        if len(date_key) == 3 and all(part.isdigit() for part in date_key):
-            return f"hf-paper-report:{'-'.join(date_key)}"
-        return f"hf-paper-report:{slugify(tail)[:80]}"
-    if value.startswith("ai-influence-report-chapter-"):
-        tail = value[len("ai-influence-report-chapter-"):]
-        match = re.match(r"(?P<date>\d{4}-\d{2}-\d{2})-(?P<report>.+)-(?P<chapter>[^-]+)$", tail)
-        if match:
-            return f"ai-influence-report:{match.group('date')}:{slugify(match.group('report'))[:80]}"
-        return f"ai-influence-report:{slugify(tail)[:80]}"
-    return f"browser-agent:{slugify(value)[:96]}"
+    return runtime_derive_chatgpt_session_lineage(purpose, slugify=slugify)
 
 
 def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
@@ -14033,23 +13966,6 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
             "to a Browser Agent operator wrapper that reads prompt from stdin and writes final output to stdout."
         )
     env = os.environ.copy()
-    env.update({
-        "CHATGPT_MODEL": model,
-        "CHATGPT_REASONING_EFFORT": reasoning_effort,
-        "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
-        "BROWSER_AGENT_REQUEST_DIR": str(req_dir),
-        "BROWSER_AGENT_PURPOSE": purpose,
-        "BROWSER_AGENT_CHATGPT_MODEL_MODE": "thinking",
-        "BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE": "true",
-        "BROWSER_AGENT_SESSION_LINEAGE": session_lineage,
-        "SOLAR_BROWSER_SESSION_LINEAGE": session_lineage,
-        "BROWSER_AGENT_SESSION_REUSE": "true" if bool(session_reuse) else "false",
-        "SOLAR_BROWSER_SESSION_REUSE": "true" if bool(session_reuse) else "false",
-    })
-    if operator_kind:
-        env["CHATGPT_REPORT_OPERATOR_KIND"] = operator_kind
-    if target_url:
-        env["BROWSER_AGENT_CHATGPT_URL"] = str(target_url)
     resolved_headless = headless
     if resolved_headless is None:
         resolved_headless = _env_override_bool("BROWSER_AGENT_HEADLESS", "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS")
@@ -14128,50 +14044,45 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
             "require_isolated_conversation",
             writer_cfg.get("require_isolated_conversation", browser_agent_cfg.get("require_isolated_conversation")),
         )
-    if resolved_headless is not None:
-        env["BROWSER_AGENT_HEADLESS"] = "true" if bool(resolved_headless) else "false"
-    if resolved_profile_directory:
-        env["BROWSER_AGENT_PROFILE_DIRECTORY"] = str(resolved_profile_directory)
-    if resolved_target_account_email:
-        env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = str(resolved_target_account_email)
-        env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = str(resolved_target_account_email)
-    if resolved_scrub_client_state is not None:
-        env["BROWSER_AGENT_CHATGPT_SCRUB_CLIENT_STATE"] = "true" if bool(resolved_scrub_client_state) else "false"
-    if resolved_open_project_first is not None:
-        env["BROWSER_AGENT_CHATGPT_OPEN_PROJECT_FIRST"] = "true" if bool(resolved_open_project_first) else "false"
-    if resolved_require_project is not None:
-        env["BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT"] = "true" if bool(resolved_require_project) else "false"
-    if resolved_force_new_chat is not None:
-        env["BROWSER_AGENT_CHATGPT_FORCE_NEW_CHAT"] = "true" if bool(resolved_force_new_chat) else "false"
-    if resolved_require_isolated_conversation is not None:
-        env["BROWSER_AGENT_CHATGPT_REQUIRE_ISOLATED_CONVERSATION"] = "true" if bool(resolved_require_isolated_conversation) else "false"
     project_name = str(
         writer_cfg.get("chatgpt_project")
         or reasoner_cfg.get("chatgpt_project")
         or (flow_cfg.get("browser_agent") or {}).get("chatgpt_project")
         or "杂项"
     ).strip()
-    if project_name:
-        env["BROWSER_AGENT_CHATGPT_PROJECT_NAME"] = project_name
-    started = time.time()
-    run = subprocess.run(
-        cmd,
-        input=prompt,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+    env = runtime_build_chatgpt_operator_env(
+        model=model,
+        reasoning_effort=reasoning_effort,
+        expected=expected,
+        request_dir=req_dir,
+        purpose=purpose,
+        session_lineage=session_lineage,
+        session_reuse=bool(session_reuse),
+        operator_kind=operator_kind,
+        target_url=target_url,
+        headless=resolved_headless,
+        profile_directory=resolved_profile_directory,
+        target_account_email=resolved_target_account_email,
+        scrub_client_state=resolved_scrub_client_state,
+        open_project_first=resolved_open_project_first,
+        require_project=resolved_require_project,
+        force_new_chat=resolved_force_new_chat,
+        require_isolated_conversation=resolved_require_isolated_conversation,
+        project_name=project_name or None,
+        base_env=env,
+    )
+    submitted = runtime_submit_chatgpt_operator_request(
+        cmd=cmd,
+        prompt=prompt,
         timeout=timeout,
         env=env,
+        request_dir=req_dir,
+        expected=expected,
     )
-    output = _strip_browser_agent_noise(run.stdout or "")
-    (req_dir / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
-    if run.returncode != 0:
-        raise RuntimeError(f"browser_agent_chatgpt failed rc={run.returncode}: {output[-2000:]}")
-    if len(output) < (500 if expected == "json" else 1000):
-        raise ValueError(f"browser_agent_chatgpt output too short: {len(output)} chars")
+    output = str(submitted["output"] or "")
     meta.update({
         "status": "completed",
-        "latency_ms": int((time.time() - started) * 1000),
+        "latency_ms": int(submitted["latency_ms"]),
         "output_chars": len(output),
     })
     (req_dir / "request.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
