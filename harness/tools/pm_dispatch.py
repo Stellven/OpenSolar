@@ -1253,6 +1253,11 @@ def _node_builder_objective(sprint_id: str, node: dict[str, Any]) -> str:
         "",
         "目标：",
         goal,
+        "",
+        "必交产物：",
+        f"- 必须写入 canonical handoff：`{SPRINTS_DIR / f'{sprint_id}.{node_id}-handoff.md'}`。",
+        "- handoff 必须包含：已完成、已验证、未验证、风险/阻塞、后续建议。",
+        "- 只写 `.pm-result.md` 不算完成；缺 handoff 会被 evaluator/graph closeout 判为未交付。",
     ]
     if requirements:
         lines.extend(["", "关联需求：", ", ".join(str(item) for item in requirements)])
@@ -1273,7 +1278,7 @@ def _node_builder_objective(sprint_id: str, node: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "请按 task_graph 节点约束完成实现/测试/交付，并写入标准 handoff/eval 证据。",
+            "请按 task_graph 节点约束完成实现/测试/交付，并写入上述 canonical handoff 证据。",
         ]
     )
     return "\n".join(lines)
