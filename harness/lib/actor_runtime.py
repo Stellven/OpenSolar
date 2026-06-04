@@ -85,25 +85,17 @@ class ActorRuntime:
         self.profiles = load_profiles(profiles_path)
         self.router = LogicalOperatorRouter(bindings_path)
 
-    def _kick_browser_agent_session_once(self) -> int:
-        proc = subprocess.Popen(
-            [
-                sys.executable,
-                str(BROWSER_AGENT_SESSION_WORKER),
-                "--actor-id",
-                BROWSER_AGENT_SESSION_ACTOR_ID,
-                "--mailbox-base",
-                str(self.mailbox_base),
-                "--lease-dir",
-                str(self.harness_dir / "run" / "actor-leases"),
-                "--once",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env={**os.environ, "HARNESS_DIR": str(self.harness_dir)},
+    def _ensure_browser_agent_session_supervisor(self) -> int:
+        if str(BROWSER_AGENT_SESSION_WORKER.parent) not in sys.path:
+            sys.path.insert(0, str(BROWSER_AGENT_SESSION_WORKER.parent))
+        from browser_agent_session_actor import ensure_supervisor_running  # type: ignore
+
+        result = ensure_supervisor_running(
+            actor_id=BROWSER_AGENT_SESSION_ACTOR_ID,
+            mailbox_base=self.mailbox_base,
+            lease_dir=self.harness_dir / "run" / "actor-leases",
         )
-        return int(proc.pid)
+        return int(result.get("pid") or 0)
 
     def _ensure_execution_plan_metadata(
         self,
@@ -250,14 +242,14 @@ class ActorRuntime:
         outbox_dir = str(mailbox.outbox)
         if actor_id == BROWSER_AGENT_SESSION_ACTOR_ID:
             try:
-                self._kick_browser_agent_session_once()
+                self._ensure_browser_agent_session_supervisor()
             except Exception as exc:
                 try:
                     Path(inbox_path).unlink(missing_ok=True)
                 except Exception:
                     pass
                 self.broker.transition(actor_id, READY)
-                return SubmitResult(success=False, error=f"browser_agent_session_kick_failed:{type(exc).__name__}:{exc}")
+                return SubmitResult(success=False, error=f"browser_agent_session_supervisor_failed:{type(exc).__name__}:{exc}")
 
         # Build scheduler decision
         sched_decision = build_scheduler_decision(

@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from actor_mailbox import ActorMailbox
 from actor_lease import LeaseBroker
-from browser_agent_session_actor import drain_once
+from browser_agent_session_actor import drain_once, ensure_supervisor_running, supervise_loop
 
 
 def test_browser_agent_session_actor_processes_deepresearch_task(monkeypatch):
@@ -154,3 +154,44 @@ def test_browser_agent_session_actor_submit_then_collect(monkeypatch):
         assert manifests == []
         final_results = mailbox.read_results("task-async")
         assert any(item["status"] == "completed" for item in final_results)
+
+
+def test_supervise_loop_writes_state_and_prewarms_slots(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "actors"
+        lease_dir = Path(td) / "run" / "actor-leases"
+        monkeypatch.setenv("HARNESS_DIR", str(Path(td)))
+        rc = supervise_loop(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+            poll_interval_seconds=0.01,
+            max_loops=1,
+        )
+        assert rc == 0
+        state_path = Path(td) / "run" / "browser-agent-session-supervisor" / "browser_agent_session.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert state["status"] == "stopped"
+        assert state["loop_count"] == 1
+        pool_dir = Path(td) / "run" / "browser-agent-session-pool" / "chatgpt"
+        assert (pool_dir / "slot-01.json").exists()
+        assert (pool_dir / "slot-02.json").exists()
+
+
+def test_ensure_supervisor_running_reuses_alive_pid(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "actors"
+        lease_dir = Path(td) / "run" / "actor-leases"
+        pid_path = Path(td) / "run" / "browser-agent-session-supervisor" / "browser_agent_session.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("43210", encoding="utf-8")
+        monkeypatch.setenv("HARNESS_DIR", str(Path(td)))
+        monkeypatch.setattr("browser_agent_session_actor._pid_alive", lambda pid: pid == 43210)
+        result = ensure_supervisor_running(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert result["ok"] is True
+        assert result["reused"] is True
+        assert result["pid"] == 43210

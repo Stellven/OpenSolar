@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import subprocess
 import sys
 from pathlib import Path
@@ -46,6 +47,91 @@ def _pool_size() -> int:
         return max(1, int(raw))
     except Exception:
         return 2
+
+
+def _supervisor_dir() -> Path:
+    path = _current_harness_dir() / "run" / "browser-agent-session-supervisor"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _supervisor_pid_path(actor_id: str) -> Path:
+    return _supervisor_dir() / f"{actor_id}.pid"
+
+
+def _supervisor_state_path(actor_id: str) -> Path:
+    return _supervisor_dir() / f"{actor_id}.json"
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _read_supervisor_pid(actor_id: str) -> int | None:
+    path = _supervisor_pid_path(actor_id)
+    if not path.exists():
+        return None
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except Exception:
+        return None
+
+
+def _write_supervisor_state(actor_id: str, payload: dict[str, Any]) -> None:
+    path = _supervisor_state_path(actor_id)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def ensure_supervisor_running(
+    *,
+    actor_id: str,
+    mailbox_base: Path,
+    lease_dir: Path,
+    poll_interval_seconds: float = 2.0,
+) -> dict[str, Any]:
+    existing_pid = _read_supervisor_pid(actor_id)
+    if existing_pid and _pid_alive(existing_pid):
+        return {"ok": True, "pid": existing_pid, "reused": True}
+    cmd = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--actor-id",
+        str(actor_id),
+        "--mailbox-base",
+        str(mailbox_base),
+        "--lease-dir",
+        str(lease_dir),
+        "--supervise",
+        "--poll-interval-seconds",
+        str(poll_interval_seconds),
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        env={**os.environ, "HARNESS_DIR": str(_current_harness_dir())},
+    )
+    _supervisor_pid_path(actor_id).write_text(str(proc.pid), encoding="utf-8")
+    _write_supervisor_state(
+        actor_id,
+        {
+            "actor_id": actor_id,
+            "pid": int(proc.pid),
+            "status": "starting",
+            "started_at": _now_iso(),
+            "poll_interval_seconds": poll_interval_seconds,
+        },
+    )
+    return {"ok": True, "pid": int(proc.pid), "reused": False}
 
 
 def _active_runs_dir() -> Path:
@@ -444,6 +530,67 @@ def drain_once(*, actor_id: str, mailbox_base: Path, lease_dir: Path) -> int:
     return 0
 
 
+def supervise_loop(
+    *,
+    actor_id: str,
+    mailbox_base: Path,
+    lease_dir: Path,
+    poll_interval_seconds: float = 2.0,
+    max_loops: int = 0,
+) -> int:
+    mailbox = ActorMailbox(actor_id, mailbox_base)
+    mailbox.ensure_dirs()
+    BrowserAgentSessionPool(_current_harness_dir() / "run" / "browser-agent-session-pool", pool_size=_pool_size()).ensure_slots()
+    _supervisor_pid_path(actor_id).write_text(str(os.getpid()), encoding="utf-8")
+    loops = 0
+    while True:
+        processed = drain_once(actor_id=actor_id, mailbox_base=mailbox_base, lease_dir=lease_dir)
+        slots = BrowserAgentSessionPool(
+            _current_harness_dir() / "run" / "browser-agent-session-pool",
+            pool_size=_pool_size(),
+        ).list_slots()
+        active_runs = len(_iter_active_runs())
+        state = {
+            "actor_id": actor_id,
+            "pid": int(os.getpid()),
+            "status": "running",
+            "heartbeat_at": _now_iso(),
+            "poll_interval_seconds": poll_interval_seconds,
+            "active_run_count": active_runs,
+            "slot_count": len(slots),
+            "warm_slot_count": sum(1 for slot in slots if bool(slot.get("warm"))),
+            "running_slot_count": sum(1 for slot in slots if str(slot.get("state") or "") == "running"),
+            "loop_count": loops + 1,
+            "last_processed": processed,
+        }
+        _write_supervisor_state(actor_id, state)
+        mailbox.write_heartbeat(
+            "supervising",
+            {
+                "active_run_count": active_runs,
+                "slot_count": len(slots),
+                "warm_slot_count": state["warm_slot_count"],
+                "running_slot_count": state["running_slot_count"],
+                "loop_count": state["loop_count"],
+            },
+        )
+        loops += 1
+        if max_loops > 0 and loops >= max_loops:
+            break
+        time.sleep(max(0.2, float(poll_interval_seconds)))
+    _write_supervisor_state(
+        actor_id,
+        {
+            "actor_id": actor_id,
+            "pid": int(os.getpid()),
+            "status": "stopped",
+            "heartbeat_at": _now_iso(),
+            "loop_count": loops,
+        },
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Process browser_agent_session actor mailbox tasks")
     parser.add_argument("--actor-id", default=DEFAULT_ACTOR_ID)
@@ -451,10 +598,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mailbox-base", default=str(default_harness_dir / "actors"))
     parser.add_argument("--lease-dir", default=str(default_harness_dir / "run" / "actor-leases"))
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--supervise", action="store_true")
+    parser.add_argument("--poll-interval-seconds", type=float, default=2.0)
+    parser.add_argument("--max-loops", type=int, default=0)
     args = parser.parse_args(argv)
 
     mailbox_base = Path(str(args.mailbox_base)).expanduser()
     lease_dir = Path(str(args.lease_dir)).expanduser()
+    if args.supervise:
+        return supervise_loop(
+            actor_id=str(args.actor_id),
+            mailbox_base=mailbox_base,
+            lease_dir=lease_dir,
+            poll_interval_seconds=float(args.poll_interval_seconds),
+            max_loops=int(args.max_loops),
+        )
     return drain_once(actor_id=str(args.actor_id), mailbox_base=mailbox_base, lease_dir=lease_dir)
 
 

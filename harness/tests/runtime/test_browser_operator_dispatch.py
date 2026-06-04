@@ -151,7 +151,7 @@ def test_custom_routing():
         assert res6.lease.actor_id == "op.browser.browser_use_mcp.quick.01"
 
 
-def test_browser_agent_session_submit_kicks_worker(monkeypatch):
+def test_browser_agent_session_submit_ensures_supervisor(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         bp, ap = _make_mock_configs(td)
         runtime = ActorRuntime(
@@ -169,7 +169,7 @@ def test_browser_agent_session_submit_kicks_worker(monkeypatch):
             kicked.append(1)
             return 12345
 
-        monkeypatch.setattr(runtime, "_kick_browser_agent_session_once", _fake_kick)
+        monkeypatch.setattr(runtime, "_ensure_browser_agent_session_supervisor", _fake_kick)
         res = runtime.submit({"objective": "Read browser page"}, logical_operator="DeepResearchBrowser")
         assert res.success is True
         assert res.lease.actor_id == "browser_agent_session"
