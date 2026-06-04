@@ -185,3 +185,9 @@ def test_open_project_js_targets_sidebar_project_group():
     assert "项目" in script
     assert "Open sidebar" in script
     assert "role='treeitem'" in script
+
+
+def test_chatgpt_wrapper_defaults_to_headless_true():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert '_env_flag("BROWSER_AGENT_HEADLESS", default=True)' in source
+    assert "await asyncio.wait_for(browser.kill(), timeout=20)" in source

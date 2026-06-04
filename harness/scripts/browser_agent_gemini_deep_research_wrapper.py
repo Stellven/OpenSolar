@@ -801,7 +801,7 @@ async def _run(prompt: str) -> int:
     user_data_dir = Path(os.environ.get("BROWSER_AGENT_USER_DATA_DIR") or str(DEFAULT_USER_DATA_DIR)).expanduser()
     target_url = str(os.environ.get("BROWSER_AGENT_GEMINI_URL") or DEFAULT_URL)
     timeout_s = int(os.environ.get("BROWSER_AGENT_GEMINI_TIMEOUT") or "1200")
-    headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "true").strip().lower() in {"1", "true", "yes", "on"}
     minimum_mode_evidence = str(os.environ.get("BROWSER_AGENT_GEMINI_MODE_EVIDENCE_MIN") or "strong").strip().lower()
     allowed_domains = DEFAULT_ALLOWED_DOMAINS
 
@@ -1091,7 +1091,7 @@ async def _run(prompt: str) -> int:
         raise
     finally:
         try:
-            await asyncio.wait_for(browser.stop(), timeout=20)
+            await asyncio.wait_for(browser.kill(), timeout=20)
         except Exception:
             pass
         if cleanup_dir is not None:

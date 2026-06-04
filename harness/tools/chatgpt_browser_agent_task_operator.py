@@ -170,12 +170,13 @@ def apply_profile_policy(env: dict[str, str], request: dict[str, Any]) -> dict[s
         env["BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY"] = profile_strategy
     if user_data_dir and not env.get("BROWSER_AGENT_USER_DATA_DIR"):
         env["BROWSER_AGENT_USER_DATA_DIR"] = user_data_dir
-    if _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless")):
-        env["BROWSER_AGENT_HEADLESS"] = "false"
-        env["TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS"] = "false"
-        env["BROWSER_AGENT_CHATGPT_ALLOW_HEADED"] = "true"
-        env["TECH_HOTSPOT_BROWSER_CHATGPT_ALLOW_HEADED"] = "true"
-        env["BROWSER_AGENT_ALLOW_HEADED"] = "true"
+    headed_recovery_allowed = _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless"))
+    if headed_recovery_allowed:
+        # Preserve the global headless default. Only explicit login-recovery flows
+        # may opt into headed mode later.
+        env.setdefault("BROWSER_AGENT_CHATGPT_ALLOW_HEADED", "true")
+        env.setdefault("TECH_HOTSPOT_BROWSER_CHATGPT_ALLOW_HEADED", "true")
+        env.setdefault("BROWSER_AGENT_ALLOW_HEADED", "true")
     env["BROWSER_AGENT_CHATGPT_PROFILE_POLICY_KEY"] = key
     return {
         "enabled": True,
@@ -185,7 +186,8 @@ def apply_profile_policy(env: dict[str, str], request: dict[str, Any]) -> dict[s
         "selected_account_email": resolved_account,
         "profile_strategy": profile_strategy,
         "user_data_dir_set": bool(env.get("BROWSER_AGENT_USER_DATA_DIR")),
-        "headless_forced": _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless")),
+        "headless_forced": False,
+        "headed_recovery_allowed": headed_recovery_allowed,
     }
 
 
@@ -319,6 +321,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
         encoding="utf-8",
     )
     env = os.environ.copy()
+    env.setdefault("BROWSER_AGENT_HEADLESS", "true")
     env.update(
         {
             "BROWSER_AGENT_REQUEST_DIR": str(request_dir),

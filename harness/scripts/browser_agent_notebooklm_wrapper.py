@@ -713,7 +713,7 @@ async def _run(payload: dict) -> int:
 
     browser = BrowserSession(
         browser_profile=BrowserProfile(
-            headless=str(os.environ.get("BROWSER_AGENT_HEADLESS") or "false").strip().lower() in {"1", "true", "yes", "on"},
+            headless=str(os.environ.get("BROWSER_AGENT_HEADLESS") or "true").strip().lower() in {"1", "true", "yes", "on"},
             user_data_dir=staged_dir,
             profile_directory=profile_directory,
             allowed_domains=DEFAULT_ALLOWED_DOMAINS,
@@ -839,7 +839,7 @@ async def _run(payload: dict) -> int:
         return 0
     finally:
         try:
-            await asyncio.wait_for(browser.stop(), timeout=20)
+            await asyncio.wait_for(browser.kill(), timeout=20)
         except Exception:
             pass
         if cleanup_dir is not None:

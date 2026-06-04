@@ -141,3 +141,9 @@ def test_build_deep_search_fallback_prompt_is_source_first():
     assert "source-first research engine" in prompt
     assert "categorized literature and link registry" in prompt.lower()
     assert "working URL" in prompt
+
+
+def test_wrapper_defaults_to_headless_true_and_kills_browser():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert 'os.environ.get("BROWSER_AGENT_HEADLESS") or "true"' in source
+    assert "await asyncio.wait_for(browser.kill(), timeout=20)" in source

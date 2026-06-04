@@ -791,7 +791,7 @@ async def _run(input_data: dict) -> int:
     request_dir = _request_dir()
     profile_directory = str(os.environ.get("BROWSER_AGENT_PROFILE_DIRECTORY") or DEFAULT_PROFILE_DIRECTORY)
     user_data_dir = Path(os.environ.get("BROWSER_AGENT_USER_DATA_DIR") or str(DEFAULT_USER_DATA_DIR)).expanduser()
-    headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "false").strip().lower() in {"1", "true", "yes", "on"}
+    headless = str(os.environ.get("BROWSER_AGENT_HEADLESS") or "true").strip().lower() in {"1", "true", "yes", "on"}
     timeout_s = int(os.environ.get("BROWSER_AGENT_TIMEOUT") or "600")
 
     staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
@@ -875,7 +875,7 @@ async def _run(input_data: dict) -> int:
 
     finally:
         try:
-            await asyncio.wait_for(browser.stop(), timeout=20)
+            await asyncio.wait_for(browser.kill(), timeout=20)
         except Exception:
             pass
         if cleanup_dir is not None:

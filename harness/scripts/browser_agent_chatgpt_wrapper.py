@@ -1399,7 +1399,7 @@ async def _run(prompt: str) -> int:
         or os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
         or ""
     ).strip()
-    headless = _env_flag("BROWSER_AGENT_HEADLESS", default=False)
+    headless = _env_flag("BROWSER_AGENT_HEADLESS", default=True)
     headed_allowed = _headed_run_allowed()
     profile_strategy = str(
         os.environ.get("BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY")
@@ -1781,7 +1781,7 @@ async def _run(prompt: str) -> int:
         raise
     finally:
         try:
-            await asyncio.wait_for(browser.stop(), timeout=20)
+            await asyncio.wait_for(browser.kill(), timeout=20)
         except Exception:
             pass
         _kill_browser_profile_processes(staged_dir)

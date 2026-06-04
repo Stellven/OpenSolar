@@ -49,6 +49,8 @@ def run_operator(
         "'require_ui_mode':os.environ.get('BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE'),"
         "'action':os.environ.get('BROWSER_AGENT_CHATGPT_ACTION'),"
         "'project':os.environ.get('BROWSER_AGENT_CHATGPT_PROJECT_NAME'),"
+        "'headless':os.environ.get('BROWSER_AGENT_HEADLESS'),"
+        "'allow_headed':os.environ.get('BROWSER_AGENT_CHATGPT_ALLOW_HEADED'),"
         "'profile_directory':os.environ.get('BROWSER_AGENT_PROFILE_DIRECTORY'),"
         "'target_account_email':os.environ.get('BROWSER_AGENT_TARGET_ACCOUNT_EMAIL'),"
         "'chatgpt_account_email':os.environ.get('BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL'),"
@@ -92,6 +94,7 @@ def test_planner_sets_thinking_high_and_project(tmp_path):
     assert payload["tool_mode"] == "none"
     assert payload["require_ui_mode"] == "true"
     assert payload["project"] == "杂项"
+    assert payload["headless"] == "true"
     assert "ChatGPT Report Planner" in payload["prompt"]
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["operator_kind"] == "planner"
@@ -155,6 +158,41 @@ def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
     assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
     assert meta["profile_policy"]["selected_profile_directory"] == "Profile 1"
     assert meta["profile_policy"]["selected_account_email"] == "browser-agent@example.com"
+
+
+def test_protected_profile_policy_keeps_headless_default(tmp_path):
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "hf_paper_insight": {
+                        "expected_account_email": "browser-agent@example.com",
+                        "allowed_profiles": ["Profile 1"],
+                        "allow_headless": False,
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="hf-paper-report-plan-2026-06-01",
+        expected="json",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+        },
+    )
+    payload = json.loads(proc.stdout)
+    meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
+    assert payload["headless"] == "true"
+    assert payload["allow_headed"] == "true"
+    assert meta["profile_policy"]["headless_forced"] is False
+    assert meta["profile_policy"]["headed_recovery_allowed"] is True
 
 
 def test_hf_report_planner_uses_hf_profile_policy_key(tmp_path):
