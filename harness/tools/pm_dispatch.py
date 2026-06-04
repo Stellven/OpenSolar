@@ -1178,6 +1178,8 @@ def _active_pm_record_for_node(sprint_id: str, node_id: str) -> dict[str, Any] |
 
 def _node_is_builder_ready(node: dict[str, Any]) -> bool:
     logical_operator = str(node.get("logical_operator") or "").strip()
+    if logical_operator.startswith("builder."):
+        return True
     if logical_operator in BUILDER_READY_LOGICAL_OPERATORS:
         return True
     if logical_operator in NON_BUILDER_READY_LOGICAL_OPERATORS:

@@ -53,3 +53,11 @@ def test_builder_ready_nodes_skip_dispatched_markers_and_active_status(tmp_path:
 
     assert meta["ok"] is True
     assert [node["id"] for node in nodes] == ["C"]
+
+
+def test_builder_namespace_logical_operator_is_builder_ready(tmp_path: Path, monkeypatch):
+    pm_dispatch = _load_pm_dispatch(tmp_path, monkeypatch)
+
+    assert pm_dispatch._node_is_builder_ready({"logical_operator": "builder.fix"})
+    assert pm_dispatch._node_is_builder_ready({"logical_operator": "builder.implementation"})
+    assert not pm_dispatch._node_is_builder_ready({"logical_operator": "eval.review"})
