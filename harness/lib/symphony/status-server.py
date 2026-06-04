@@ -1948,6 +1948,78 @@ def _youtube_video_date_parts(published_at: str) -> tuple[str, str, str]:
     return date_part, month, value
 
 
+def _youtube_video_channel_type(channel: str) -> tuple[str, str]:
+    name = str(channel or "").strip()
+    lowered = name.lower()
+    if not lowered or lowered == "n/a":
+        return "other", "其他频道"
+
+    influencer_exact = {
+        "硅谷101",
+        "dwarkesh clips",
+        "a16z deep dives",
+        "all-in podcast",
+        "no priors",
+        "bg2 pod",
+        "beyond the prompt",
+        "hannah fry",
+        "mlops clips",
+        "welch labs",
+        "silicon valley vector",
+        "the information bottleneck",
+        "alex kantrowitz",
+        "joe lonsdale clips",
+        "lightspeed vp",
+        "s3 | science, startups, & stories",
+        "moonshots clips",
+        "interesting times",
+        "whynottv",
+    }
+    if lowered in influencer_exact or any(token in lowered for token in ("podcast", "clips", "interview", "fireside")):
+        return "influencer", "大V/访谈频道"
+
+    academic_tokens = (
+        "stanford",
+        "berkeley",
+        "research",
+        "deepmind",
+        "usenix",
+        "acm",
+        "odsc",
+        "conference",
+        "conferences",
+        "institute",
+        "museum",
+        "csis",
+        "itu ai for good",
+        "open compute project",
+        "funding the commons",
+        "london clojurians",
+    )
+    if any(token in lowered for token in academic_tokens):
+        return "academic", "学术/机构频道"
+
+    industry_tokens = (
+        "google",
+        "microsoft",
+        "azure",
+        "cloud",
+        "databricks",
+        "anyscale",
+        "hubspot",
+        "people reign",
+        "peoplereign",
+        "y combinator",
+        "sequoia",
+        "prime intellect",
+        "tech field day",
+    )
+    if any(token in lowered for token in industry_tokens):
+        return "industry", "产业/产品频道"
+
+    return "other", "其他频道"
+
+
 def _connect_tech_hotspot_db():
     if not TECH_HOTSPOT_DB.exists():
         raise FileNotFoundError(f"tech-hotspot-radar sqlite missing: {TECH_HOTSPOT_DB}")
@@ -2015,10 +2087,13 @@ def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, incl
         tags = _youtube_video_tags(str(row.get("tags") or ""), title, description)
         raw_summary = _youtube_video_summary(row)
         summary_zh = _youtube_video_summary_zh(raw_summary, title=title, channel=channel, tags=tags)
+        channel_type, channel_type_label = _youtube_video_channel_type(channel)
         items.append({
             "video_id": video_id,
             "title": title,
             "channel": channel,
+            "channel_type": channel_type,
+            "channel_type_label": channel_type_label,
             "url": url,
             "published_at": published_raw,
             "date": date_part,
@@ -2084,6 +2159,33 @@ def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archive
             months.append(month_group)
         channel_group["months"] = months
         group_list.append(channel_group)
+    section_order = ("influencer", "academic", "industry", "other")
+    section_labels = {
+        "influencer": "大V/访谈频道",
+        "academic": "学术/机构频道",
+        "industry": "产业/产品频道",
+        "other": "其他频道",
+    }
+    section_map: dict[str, dict] = {
+        key: {"channel_type": key, "label": section_labels[key], "count": 0, "channels": []}
+        for key in section_order
+    }
+    for channel_group in group_list:
+        first_video = None
+        for month_group in channel_group.get("months") or []:
+            for date_group in month_group.get("dates") or []:
+                videos = date_group.get("videos") or []
+                if videos:
+                    first_video = videos[0]
+                    break
+            if first_video:
+                break
+        channel_type = str((first_video or {}).get("channel_type") or "other")
+        if channel_type not in section_map:
+            channel_type = "other"
+        section_map[channel_type]["count"] += int(channel_group.get("count") or 0)
+        section_map[channel_type]["channels"].append(channel_group)
+    channel_sections = [section_map[key] for key in section_order if section_map[key]["channels"]]
     return {
         "ok": True,
         "status": "ok",
@@ -2093,6 +2195,7 @@ def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archive
         "db": str(TECH_HOTSPOT_DB),
         "items": items,
         "groups": group_list,
+        "channel_sections": channel_sections,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
@@ -2273,47 +2376,65 @@ def shlex_quote(value: str) -> str:
 
 def _ai_influence_youtube_videos_html(period: str = "all") -> str:
     payload = _ai_influence_youtube_videos_payload(period=period)
-    groups = payload.get("groups") or []
-    cards_html = []
-    for group in groups:
-        month_blocks = []
-        for month in group.get("months") or []:
-            date_blocks = []
-            for date_group in month.get("dates") or []:
-                video_cards = []
-                for item in date_group.get("videos") or []:
-                    tags = "".join(f"<span class='tag'>{html.escape(str(tag))}</span>" for tag in item.get("tags") or [])
-                    video_cards.append(f"""
-                    <article class="video-card" data-video-id="{html.escape(str(item.get("video_id") or ""))}">
-                      <label class="check"><input type="checkbox" class="video-select" value="{html.escape(str(item.get("video_id") or ""))}"><span></span></label>
-                      <a href="{html.escape(str(item.get("url") or "#"))}" target="_blank" rel="noreferrer"><img class="thumb" src="{html.escape(str(item.get("thumbnail") or ""))}" alt=""></a>
-                      <div class="video-body">
-                        <div class="video-meta">{html.escape(str(item.get("date") or "N/A"))} · {html.escape(str(item.get("quality_tier") or "N/A"))} · {html.escape(str(item.get("duration_min") or "0"))} 分钟</div>
-                        <h3><a href="{html.escape(str(item.get("url") or "#"))}" target="_blank" rel="noreferrer">{html.escape(str(item.get("title") or "Untitled"))}</a></h3>
-                        <div class="tags">{tags or "<span class='tag muted'>暂无标签</span>"}</div>
-                        <p>{html.escape(str(item.get("summary") or ""))}</p>
-                      </div>
-                    </article>
+    sections = payload.get("channel_sections") or []
+    section_html = []
+    for section in sections:
+        cards_html = []
+        for group in section.get("channels") or []:
+            month_blocks = []
+            for month in group.get("months") or []:
+                date_blocks = []
+                for date_group in month.get("dates") or []:
+                    video_cards = []
+                    for item in date_group.get("videos") or []:
+                        tags = "".join(f"<span class='tag'>{html.escape(str(tag))}</span>" for tag in item.get("tags") or [])
+                        video_cards.append(f"""
+                        <article class="video-card" data-video-id="{html.escape(str(item.get("video_id") or ""))}">
+                          <label class="check"><input type="checkbox" class="video-select" value="{html.escape(str(item.get("video_id") or ""))}"><span></span></label>
+                          <a href="{html.escape(str(item.get("url") or "#"))}" target="_blank" rel="noreferrer"><img class="thumb" src="{html.escape(str(item.get("thumbnail") or ""))}" alt=""></a>
+                          <div class="video-body">
+                            <div class="video-meta">{html.escape(str(item.get("date") or "N/A"))} · {html.escape(str(item.get("quality_tier") or "N/A"))} · {html.escape(str(item.get("duration_min") or "0"))} 分钟</div>
+                            <h3><a href="{html.escape(str(item.get("url") or "#"))}" target="_blank" rel="noreferrer">{html.escape(str(item.get("title") or "Untitled"))}</a></h3>
+                            <div class="tags">{tags or "<span class='tag muted'>暂无标签</span>"}</div>
+                            <p>{html.escape(str(item.get("summary") or ""))}</p>
+                          </div>
+                        </article>
+                        """)
+                    date_blocks.append(f"""
+                    <section class="date-block">
+                      <h4>{html.escape(str(date_group.get("date") or "N/A"))} · {int(date_group.get("count") or 0)} 个视频</h4>
+                      <div class="video-grid">{''.join(video_cards)}</div>
+                    </section>
                     """)
-                date_blocks.append(f"""
-                <section class="date-block">
-                  <h4>{html.escape(str(date_group.get("date") or "N/A"))} · {int(date_group.get("count") or 0)} 个视频</h4>
-                  <div class="video-grid">{''.join(video_cards)}</div>
-                </section>
+                month_blocks.append(f"""
+                <details class="month" open>
+                  <summary>{html.escape(str(month.get("month") or "N/A"))} · {int(month.get("count") or 0)} 个视频</summary>
+                  {''.join(date_blocks)}
+                </details>
                 """)
-            month_blocks.append(f"""
-            <details class="month" open>
-              <summary>{html.escape(str(month.get("month") or "N/A"))} · {int(month.get("count") or 0)} 个视频</summary>
-              {''.join(date_blocks)}
+            cards_html.append(f"""
+            <details class="channel">
+              <summary><span class="summary-left"><span class="chevron">›</span>{html.escape(str(group.get("channel") or "N/A"))}</span><span class="summary-right">{int(group.get("count") or 0)} 个视频 · 点击展开/收起</span></summary>
+              {''.join(month_blocks)}
             </details>
             """)
-        cards_html.append(f"""
-        <details class="channel">
-          <summary><span class="summary-left"><span class="chevron">›</span>{html.escape(str(group.get("channel") or "N/A"))}</span><span class="summary-right">{int(group.get("count") or 0)} 个视频 · 点击展开/收起</span></summary>
-          {''.join(month_blocks)}
-        </details>
+        section_html.append(f"""
+        <section class="channel-section type-{html.escape(str(section.get("channel_type") or "other"))}">
+          <div class="section-head">
+            <div>
+              <div class="section-kicker">Channel Group</div>
+              <h2>{html.escape(str(section.get("label") or "其他频道"))}</h2>
+            </div>
+            <span>{int(section.get("count") or 0)} 个视频 · {len(section.get("channels") or [])} 个频道</span>
+          </div>
+          {''.join(cards_html)}
+        </section>
         """)
-    body = "".join(cards_html) if cards_html else "<div class='empty'>当前没有可展示的 YouTube 视频。</div>"
+    if not section_html and payload.get("groups"):
+        # Backward compatibility for older cached payloads without channel_sections.
+        for group in payload.get("groups") or []:
+            section_html.append(f"<section class='channel-section'><h2>{html.escape(str(group.get('channel') or 'N/A'))}</h2></section>")
+    body = "".join(section_html) if section_html else "<div class='empty'>当前没有可展示的 YouTube 视频。</div>"
     current_to = str(_ai_influence_mail_config_payload().get("to") or "")
     period_links = " ".join(
         f"<a class='pill {'active' if period == value else ''}' href='/ai-influence/youtube-videos?period={value}'>{label}</a>"
