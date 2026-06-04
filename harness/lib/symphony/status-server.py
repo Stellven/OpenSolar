@@ -1142,6 +1142,11 @@ def _huggingface_papers_item(run_dir: Path) -> dict:
     collection_summary = pack_meta.get("collection_summary") if isinstance(pack_meta.get("collection_summary"), dict) else {}
     cadence = str(report_context.get("cadence") or "daily").strip().lower()
     window_label = str(report_context.get("window_label") or date_str).strip() or date_str
+    week_id = str(report_context.get("week_id") or "").strip()
+    if cadence == "weekly" and week_id and not window_label.startswith(week_id):
+        start = str(report_context.get("window_start") or "").strip()
+        end = str(report_context.get("window_end") or "").strip()
+        window_label = f"{week_id} · {start} ~ {end}" if start and end else week_id
     grouped_sections = len(pack_meta.get("grouped_report_sections") or []) if isinstance(pack_meta.get("grouped_report_sections"), list) else 0
     report_variant = str(pack_meta.get("report_variant") or ("premium_insight_report" if report_md_path.exists() and papers_count else "fallback_report"))
     premium_count = int(pack_meta.get("premium_insight_count") or 0)
