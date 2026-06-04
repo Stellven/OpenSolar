@@ -2458,6 +2458,14 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
 .btn.danger{{background:#fff0ed;color:var(--red);}}
 .pill.active{{background:#e6efe5;border-color:#bfd7c7;}}
 .status{{min-height:22px;color:var(--muted);font-size:13px;}}
+.channel-section{{margin:24px 0 30px;padding:18px;border:1px solid var(--line);border-radius:30px;background:linear-gradient(180deg,rgba(255,253,248,.88),rgba(248,242,229,.76));box-shadow:0 16px 46px rgba(49,42,31,.06);}}
+.channel-section.type-influencer{{background:linear-gradient(180deg,rgba(255,251,239,.94),rgba(246,237,214,.78));}}
+.channel-section.type-academic{{background:linear-gradient(180deg,rgba(248,253,250,.94),rgba(229,241,236,.78));}}
+.channel-section.type-industry{{background:linear-gradient(180deg,rgba(250,251,255,.94),rgba(234,239,247,.78));}}
+.section-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin:0 2px 8px;padding:0 2px 12px;border-bottom:1px solid rgba(173,150,110,.22);}}
+.section-head h2{{margin:2px 0 0;color:var(--green);font-size:26px;line-height:1.1;}}
+.section-head span{{color:var(--muted);font-size:13px;font-weight:900;white-space:nowrap;}}
+.section-kicker{{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:900;}}
 .channel,.month{{margin:16px 0;border:1px solid var(--line);border-radius:24px;background:rgba(255,253,248,.82);overflow:hidden;}}
 .channel>summary,.month>summary{{cursor:pointer;list-style:none;padding:18px 20px;font-size:20px;font-weight:900;color:var(--green);display:flex;justify-content:space-between;gap:12px;align-items:center;user-select:none;}}
 .channel>summary::-webkit-details-marker,.month>summary::-webkit-details-marker{{display:none;}}
