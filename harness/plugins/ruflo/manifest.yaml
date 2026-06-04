@@ -2,7 +2,7 @@
 id: ruflo
 name: "Ruflo Multi-Agent Orchestration"
 version: "3.7.0-alpha.19"
-description: "Sandboxed Solar-Harness integration for ruvnet/ruflo / Claude Flow: Claude Code swarm orchestration, plugins, agents, memory and MCP architecture. Host-level init remains gated, but the official @claude-flow/cli runtime is installed and smoked inside state/ruflo."
+description: "Sandboxed Solar-Harness integration for ruvnet/ruflo / Claude Flow: Claude Code swarm orchestration, plugins, agents, memory and MCP architecture. Host-level init remains gated; the official @claude-flow/cli runtime is bootstrapped and smoked only in a local managed state/ruflo sandbox when explicitly requested."
 status: enabled
 
 write_scope:

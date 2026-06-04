@@ -10,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib"))
 
 import graph_node_dispatcher as gnd  # noqa: E402
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _disable_operator_pool_for_pane_discovery_tests(monkeypatch) -> None:
+    monkeypatch.setenv("SOLAR_GRAPH_BUILDER_OPERATOR_POOL", "0")
 
 
 def _ts(delta_seconds: int) -> str:
@@ -1063,7 +1069,7 @@ def test_overwrite_prompt_is_treated_as_edit_confirmation() -> None:
     assert gnd._pane_dispatch_prompt_reason(tail) == "edit_confirmation_prompt"
 
 
-def test_unavailable_reason_recovers_edit_prompt_after_stale_processing_scrollback(monkeypatch) -> None:
+def test_unavailable_reason_does_not_dismiss_edit_prompt_after_processing_scrollback(monkeypatch) -> None:
     tail = """Do you want to make this edit to test_pane_clear_manager.py?
  ❯ 1. Yes
    2. No
@@ -1087,7 +1093,7 @@ def test_unavailable_reason_recovers_edit_prompt_after_stale_processing_scrollba
     monkeypatch.setattr(gnd.time, "sleep", lambda seconds: None)
 
     assert gnd._pane_unavailable_reason("solar-harness-lab:0.0") == ""
-    assert dismissed == [("solar-harness-lab:0.0", "edit_confirmation_prompt")]
+    assert dismissed == []
 
 
 def test_idle_survey_prompt_does_not_block_evaluator_pool(monkeypatch) -> None:
