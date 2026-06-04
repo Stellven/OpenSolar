@@ -11,6 +11,8 @@ from browser_operator_submit import build_chatgpt_operator_env
 from browser_operator_submit import browser_agent_chatgpt_cmd
 from browser_operator_submit import derive_chatgpt_session_lineage
 from browser_operator_submit import submit_chatgpt_operator_request
+from browser_operator_submit import submit_gemini_operator_request
+from browser_operator_submit import submit_youtube_operator_request
 
 
 def test_browser_agent_chatgpt_cmd_uses_reasoner_browser_agent_cmd(monkeypatch):
@@ -125,3 +127,39 @@ def test_submit_chatgpt_operator_request_uses_explicit_submit_poll_collect(monke
     assert len(payload["body"]) == 1200
     assert (tmp_path / "request" / "submit-stdout.txt").exists()
     assert (tmp_path / "request" / "poll-status.json").exists()
+
+
+def test_submit_gemini_operator_request_writes_stdout(tmp_path):
+    wrapper = tmp_path / "fake_gemini_wrapper.py"
+    wrapper.write_text(
+        "print('g' * 600)\n",
+        encoding="utf-8",
+    )
+    result = submit_gemini_operator_request(
+        cmd=[sys.executable, str(wrapper)],
+        prompt="deep research prompt",
+        timeout=30,
+        env={},
+        request_dir=tmp_path / "gemini-request",
+    )
+    assert result["latency_ms"] >= 0
+    assert len(result["output"]) == 600
+    assert (tmp_path / "gemini-request" / "stdout.txt").exists()
+
+
+def test_submit_youtube_operator_request_writes_stdout(tmp_path):
+    wrapper = tmp_path / "fake_youtube_wrapper.py"
+    wrapper.write_text(
+        "print('ok')\n",
+        encoding="utf-8",
+    )
+    result = submit_youtube_operator_request(
+        cmd=[sys.executable, str(wrapper)],
+        youtube_url="https://www.youtube.com/watch?v=wQE2ItbsnVo",
+        timeout=30,
+        env={},
+        request_dir=tmp_path / "youtube-request",
+    )
+    assert result["latency_ms"] >= 0
+    assert result["output"] == "ok"
+    assert (tmp_path / "youtube-request" / "stdout.txt").exists()

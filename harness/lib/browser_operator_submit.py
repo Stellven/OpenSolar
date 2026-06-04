@@ -290,3 +290,67 @@ def submit_chatgpt_operator_request(
         "latency_ms": int((time.time() - started) * 1000),
         "task_id": task_id,
     }
+
+
+def submit_gemini_operator_request(
+    *,
+    cmd: list[str],
+    prompt: str,
+    timeout: int,
+    env: Mapping[str, str],
+    request_dir: str | Path,
+) -> dict[str, Any]:
+    request_path = Path(request_dir).expanduser()
+    request_path.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    run = subprocess.run(
+        cmd,
+        input=prompt,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        env=dict(env),
+    )
+    output = strip_browser_agent_noise(run.stdout or "")
+    (request_path / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
+    if run.returncode != 0:
+        raise RuntimeError(f"browser_agent_gemini failed rc={run.returncode}: {output[-2000:]}")
+    if len(output) < 500:
+        raise ValueError(f"browser_agent_gemini output too short: {len(output)} chars")
+    return {
+        "output": output,
+        "latency_ms": int((time.time() - started) * 1000),
+    }
+
+
+def submit_youtube_operator_request(
+    *,
+    cmd: list[str],
+    youtube_url: str,
+    timeout: int,
+    env: Mapping[str, str],
+    request_dir: str | Path,
+) -> dict[str, Any]:
+    request_path = Path(request_dir).expanduser()
+    request_path.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    run = subprocess.run(
+        cmd,
+        input=youtube_url,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=timeout,
+        env=dict(env),
+    )
+    output = strip_browser_agent_noise(run.stdout or "")
+    (request_path / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
+    if run.returncode != 0:
+        raise RuntimeError(f"browser_agent_youtube failed rc={run.returncode}: {output[-2000:]}")
+    if len(output) < 2:
+        raise ValueError(f"browser_agent_youtube output too short: {len(output)} chars")
+    return {
+        "output": output,
+        "latency_ms": int((time.time() - started) * 1000),
+    }

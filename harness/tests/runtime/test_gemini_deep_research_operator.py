@@ -22,11 +22,6 @@ def test_build_request_reads_prompt_file(tmp_path):
 
 
 def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
-    class Result:
-        returncode = 0
-        stdout = "final research report"
-        stderr = ""
-
     request_dir = tmp_path / "gemini-deep-research-request"
     request_dir.mkdir(parents=True, exist_ok=True)
     
@@ -39,8 +34,15 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
         "citations": [{"title": "Paper 1", "url": "https://example.com"}]
     }), encoding="utf-8")
 
+    helper_calls = []
+
+    def _fake_submit(**kwargs):
+        helper_calls.append(kwargs)
+        (request_dir / "stdout.txt").write_text("final research report\n", encoding="utf-8")
+        return {"output": "final research report", "latency_ms": 1}
+
     monkeypatch.setattr(gdro, "_wrapper_cmd", lambda: ["fake-wrapper"])
-    monkeypatch.setattr(gdro.subprocess, "run", lambda *args, **kwargs: Result())
+    monkeypatch.setattr(gdro, "submit_gemini_operator_request", _fake_submit)
     
     result = gdro.run_request({
         "prompt": "hello",
@@ -51,6 +53,7 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
     assert result["ok"] is True
     assert result["text"] == "deep research report text"
     assert len(result["citations"]) == 1
+    assert len(helper_calls) == 1
     assert (tmp_path / "gemini-deep-research-request.json").exists()
     assert (tmp_path / "gemini-deep-research-result.json").exists()
     assert (tmp_path / "report.md").exists()
@@ -61,31 +64,22 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
 
 
 def test_run_request_retries_on_failure(monkeypatch, tmp_path):
-    class FailResult:
-        returncode = 1
-        stdout = ""
-        stderr = "Network Timeout Error"
-        
-    class SuccessResult:
-        returncode = 0
-        stdout = "report"
-        stderr = ""
-
     request_dir = tmp_path / "gemini-deep-research-request"
     request_dir.mkdir(parents=True, exist_ok=True)
     
     calls = []
     
-    def mock_run(*args, **kwargs):
+    def _fake_submit(**kwargs):
         calls.append(len(calls) + 1)
         if len(calls) == 1:
-            return FailResult()
+            raise RuntimeError("Wrapper exited with code 1. Log snippet:\nNetwork Timeout Error")
         # On second attempt, write files and succeed
         (request_dir / "assistant-response.txt").write_text("recovered text", encoding="utf-8")
-        return SuccessResult()
+        (request_dir / "stdout.txt").write_text("report\n", encoding="utf-8")
+        return {"output": "report", "latency_ms": 1}
 
     monkeypatch.setattr(gdro, "_wrapper_cmd", lambda: ["fake-wrapper"])
-    monkeypatch.setattr(gdro.subprocess, "run", mock_run)
+    monkeypatch.setattr(gdro, "submit_gemini_operator_request", _fake_submit)
     monkeypatch.setattr(gdro.time, "sleep", lambda sec: None)
     
     result = gdro.run_request({
