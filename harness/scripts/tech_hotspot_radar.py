@@ -8963,20 +8963,40 @@ def hf_report_strategy(config: dict[str, Any] | None, *, requested_limit: int | 
     }
 
 
+def hf_week_context_for_date(day: dt.date) -> dict[str, str]:
+    iso_year, iso_week, _ = day.isocalendar()
+    start_date = dt.date.fromisocalendar(iso_year, iso_week, 1)
+    end_date = dt.date.fromisocalendar(iso_year, iso_week, 7)
+    week_id = f"{iso_year}-W{iso_week:02d}"
+    return {
+        "week_id": week_id,
+        "window_start": start_date.isoformat(),
+        "window_end": end_date.isoformat(),
+        "window_label": f"{week_id} · {start_date.isoformat()} ~ {end_date.isoformat()}",
+    }
+
+
 def hf_report_context(date_str: str, config: dict[str, Any] | None, *, requested_limit: int | None = None) -> dict[str, Any]:
     strategy = hf_report_strategy(config, requested_limit=requested_limit)
     end_date = dt.date.fromisoformat(str(date_str))
-    start_date = end_date - dt.timedelta(days=max(strategy["lookback_days"] - 1, 0))
     if strategy["cadence"] == "weekly":
-        label = f"{start_date.isoformat()} ~ {end_date.isoformat()}"
+        week_context = hf_week_context_for_date(end_date)
+        start_date = dt.date.fromisoformat(week_context["window_start"])
+        window_end = week_context["window_end"]
+        label = week_context["window_label"]
+        week_id = week_context["week_id"]
     else:
+        start_date = end_date - dt.timedelta(days=max(strategy["lookback_days"] - 1, 0))
+        window_end = end_date.isoformat()
         label = end_date.isoformat()
+        week_id = ""
     return {
         **strategy,
         "date": end_date.isoformat(),
         "window_start": start_date.isoformat(),
-        "window_end": end_date.isoformat(),
+        "window_end": window_end,
         "window_label": label,
+        "week_id": week_id,
         "period_label": "周报" if strategy["cadence"] == "weekly" else "日报",
         "fallback_label": "周度候选快报" if strategy["cadence"] == "weekly" else "候选快报",
     }

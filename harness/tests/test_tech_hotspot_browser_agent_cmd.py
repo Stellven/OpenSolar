@@ -177,7 +177,7 @@ def test_hf_normalize_report_plan_assigns_unassigned_papers():
         public_records,
         date_str="2026-06-01",
     )
-    assert plan["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01"
+    assert plan["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-W23 · 2026-06-01 ~ 2026-06-07"
     assert len(plan["sections"]) == 2
     assert plan["sections"][0]["paper_ids"] == ["p1", "p2"]
     assert plan["sections"][1]["section_id"] == "other-signals"
@@ -227,7 +227,7 @@ def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
         "ok": True,
         "model": "chatgpt-5.5",
         "plan": {
-            "headline": "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01",
+            "headline": "AI Influence HF Paper 高级洞察周报 — 2026-W23 · 2026-06-01 ~ 2026-06-07",
             "executive_summary": "今天 HF 热点可以拆成文档智能与基础模型接口两条主线。",
             "closing_watchpoints": ["继续跟踪开源复现速度"],
         },
@@ -295,9 +295,21 @@ def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
     assert "该部分论文分工" in html
     assert pack["grouped_report_ok"] is True
     assert pack["report_variant"] == "premium_insight_report"
-    assert pack["grouped_report_plan"]["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01"
+    assert pack["grouped_report_plan"]["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-W23 · 2026-06-01 ~ 2026-06-07"
     assert pack["report_context"]["cadence"] == "weekly"
+    assert pack["report_context"]["week_id"] == "2026-W23"
+    assert pack["report_context"]["window_start"] == "2026-06-01"
+    assert pack["report_context"]["window_end"] == "2026-06-07"
     assert len(pack["grouped_report_sections"]) == 2
+
+
+def test_hf_report_context_weekly_uses_iso_week_not_rolling_window():
+    ns = _load_namespace()
+    context = ns["hf_report_context"]("2026-05-29", {"hf_paper_insight": {"reporting": {"cadence": "weekly"}}})
+    assert context["week_id"] == "2026-W22"
+    assert context["window_start"] == "2026-05-25"
+    assert context["window_end"] == "2026-05-31"
+    assert context["window_label"] == "2026-W22 · 2026-05-25 ~ 2026-05-31"
 
 
 def test_hf_weekly_priority_score_prefers_persistent_high_rank_signals():
@@ -435,9 +447,10 @@ def test_hf_report_collection_summary_uses_weekly_source_tables(tmp_path):
         {"output": {"database": str(db_path)}},
         report_context={
             "cadence": "weekly",
-            "window_start": "2026-05-26",
-            "window_end": "2026-06-01",
-            "window_label": "2026-05-26 ~ 2026-06-01",
+            "week_id": "2026-W22",
+            "window_start": "2026-05-25",
+            "window_end": "2026-05-31",
+            "window_label": "2026-W22 · 2026-05-25 ~ 2026-05-31",
         },
         public_records=[
             {"paper_id": "p1", "weekly_signal": {"is_core": True}},
@@ -447,7 +460,7 @@ def test_hf_report_collection_summary_uses_weekly_source_tables(tmp_path):
     assert summary["daily_rows"] == 4
     assert summary["daily_unique_papers"] == 3
     assert summary["weekly_snapshot_unique_papers"] == 2
-    assert summary["monthly_snapshot_unique_papers"] == 2
+    assert summary["monthly_snapshot_unique_papers"] == 1
     assert summary["selected_papers"] == 2
     assert summary["core_papers"] == 1
 
@@ -528,7 +541,7 @@ def test_grouped_report_render_hides_internal_ids_and_labels():
         fallback_count=0,
         public_records=public_records,
         grouped_report=grouped_report,
-        report_context={"window_label": "2026-05-26 ~ 2026-06-01"},
+        report_context={"window_label": "2026-W23 · 2026-06-01 ~ 2026-06-07"},
     )
     assert "premium_insight_report" not in markdown
     assert "pkt-a3c9e8b0828b405c" not in markdown
@@ -563,7 +576,7 @@ def test_grouped_report_render_repairs_empty_cleanup_shells():
         fallback_count=0,
         public_records=[{"title": "minWM"}],
         grouped_report=grouped_report,
-        report_context={"window_label": "2026-05-26 ~ 2026-06-01"},
+        report_context={"window_label": "2026-W23 · 2026-06-01 ~ 2026-06-07"},
     )
     assert "证据来自" not in markdown
     assert "核心依据来自" not in markdown
