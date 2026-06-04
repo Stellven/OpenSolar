@@ -13944,6 +13944,35 @@ def _env_override_bool(*names: str) -> bool | None:
     return None
 
 
+def derive_browser_agent_session_lineage(purpose: str) -> str:
+    value = str(purpose or "").strip().lower()
+    if not value:
+        return "browser-agent:default"
+    for prefix, lineage_prefix in (
+        ("ai-influence-video-grouping-", "ai-influence-planning:"),
+        ("ai-influence-report-plan-", "ai-influence-planning:"),
+        ("github-trend-report-", "github-trend-report:"),
+        ("hf-paper-l7-high-reasoning-", "hf-paper-l7-high-reasoning:"),
+    ):
+        if value.startswith(prefix):
+            return f"{lineage_prefix}{value[len(prefix):]}"
+    if value.startswith("hf-paper-report-plan-"):
+        return f"hf-paper-report:{value[len('hf-paper-report-plan-'):]}"
+    if value.startswith("hf-paper-report-section-"):
+        tail = value[len("hf-paper-report-section-"):]
+        date_key = tail.split("-", 3)[0:3]
+        if len(date_key) == 3 and all(part.isdigit() for part in date_key):
+            return f"hf-paper-report:{'-'.join(date_key)}"
+        return f"hf-paper-report:{slugify(tail)[:80]}"
+    if value.startswith("ai-influence-report-chapter-"):
+        tail = value[len("ai-influence-report-chapter-"):]
+        match = re.match(r"(?P<date>\d{4}-\d{2}-\d{2})-(?P<report>.+)-(?P<chapter>[^-]+)$", tail)
+        if match:
+            return f"ai-influence-report:{match.group('date')}:{slugify(match.group('report'))[:80]}"
+        return f"ai-influence-report:{slugify(tail)[:80]}"
+    return f"browser-agent:{slugify(value)[:96]}"
+
+
 def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
                                     purpose: str,
                                     expected: str = "markdown",
@@ -13969,6 +13998,13 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
     reasoning_effort = str(requested_reasoning_effort or writer_cfg.get("reasoning_effort") or reasoner_cfg.get("reasoning_effort") or "high")
     timeout = int(requested_timeout_seconds or writer_cfg.get("timeout_seconds") or reasoner_cfg.get("timeout_seconds") or 1800)
     max_chars = int(requested_max_prompt_chars or writer_cfg.get("max_prompt_chars") or reasoner_cfg.get("max_prompt_chars") or 180000)
+    session_lineage = (
+        _env_override_text("SOLAR_BROWSER_SESSION_LINEAGE", "BROWSER_AGENT_SESSION_LINEAGE")
+        or derive_browser_agent_session_lineage(purpose)
+    )
+    session_reuse = _env_override_bool("SOLAR_BROWSER_SESSION_REUSE", "BROWSER_AGENT_SESSION_REUSE")
+    if session_reuse is None:
+        session_reuse = True
     if len(prompt) > max_chars:
         prompt = prompt[:max_chars] + "\n\n[TRUNCATED: prompt exceeded configured max_prompt_chars]\n"
     req_dir = _browser_agent_request_dir(config, purpose)
@@ -13982,6 +14018,8 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
         "operator_kind": operator_kind or "auto",
         "model": model,
         "reasoning_effort": reasoning_effort,
+        "session_lineage": session_lineage,
+        "session_reuse": bool(session_reuse),
         "created_at": iso_z(),
         "status": "pending_executor",
         "note": "AI Influence high-judgment stages must use DeepResearchChatGPT/chatgpt_thinking_high via Browser Agent + ChatGPT 5.5 Thinking high. No Codex/local fallback is allowed.",
@@ -14003,6 +14041,10 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
         "BROWSER_AGENT_PURPOSE": purpose,
         "BROWSER_AGENT_CHATGPT_MODEL_MODE": "thinking",
         "BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE": "true",
+        "BROWSER_AGENT_SESSION_LINEAGE": session_lineage,
+        "SOLAR_BROWSER_SESSION_LINEAGE": session_lineage,
+        "BROWSER_AGENT_SESSION_REUSE": "true" if bool(session_reuse) else "false",
+        "SOLAR_BROWSER_SESSION_REUSE": "true" if bool(session_reuse) else "false",
     })
     if operator_kind:
         env["CHATGPT_REPORT_OPERATOR_KIND"] = operator_kind

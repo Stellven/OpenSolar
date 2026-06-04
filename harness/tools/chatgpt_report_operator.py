@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import signal
+import re
 import shlex
 import subprocess
 import sys
@@ -50,6 +51,18 @@ def wrapper_cmd() -> list[str]:
     if DEFAULT_WRAPPER.exists() and DEFAULT_BROWSER_USE_PYTHON.exists():
         return [str(DEFAULT_BROWSER_USE_PYTHON), str(DEFAULT_WRAPPER)]
     return []
+
+
+def _slug(value: str, limit: int = 96) -> str:
+    text = re.sub(r"[^A-Za-z0-9_.:-]+", "-", str(value or "").strip()).strip("-")
+    return (text or "default")[:limit]
+
+
+def _default_session_lineage(*, purpose: str, kind: str) -> str:
+    clean_purpose = str(purpose or "").strip()
+    if not clean_purpose:
+        return f"chatgpt-report:{kind or 'auto'}"
+    return f"chatgpt-report:{_slug(clean_purpose)}"
 
 
 def _profile_policy_path() -> Path | None:
@@ -349,6 +362,11 @@ def main() -> int:
 
     env = os.environ.copy()
     env.setdefault("BROWSER_AGENT_HEADLESS", "true")
+    env.setdefault("BROWSER_AGENT_SESSION_REUSE", "true")
+    env.setdefault("SOLAR_BROWSER_SESSION_REUSE", env["BROWSER_AGENT_SESSION_REUSE"])
+    default_lineage = _default_session_lineage(purpose=purpose, kind=kind)
+    env.setdefault("BROWSER_AGENT_SESSION_LINEAGE", default_lineage)
+    env.setdefault("SOLAR_BROWSER_SESSION_LINEAGE", env["BROWSER_AGENT_SESSION_LINEAGE"])
     env.update(
         {
             "CHATGPT_MODEL": str(policy["model"]),

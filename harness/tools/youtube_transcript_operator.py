@@ -199,7 +199,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
 
     env = os.environ.copy()
     if "BROWSER_AGENT_HEADLESS" not in env:
-        env["BROWSER_AGENT_HEADLESS"] = "false"
+        env["BROWSER_AGENT_HEADLESS"] = "true"
     env.setdefault("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
     env.setdefault("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "browser-agent@example.com")
     env.update({

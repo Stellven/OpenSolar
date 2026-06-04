@@ -482,7 +482,7 @@ def fetch_transcript_via_browser_operator(video_id: str, timeout_seconds: int = 
         env["SOLAR_OPERATOR_ENVELOPE_JSON"] = str(envelope_path)
         env["TASK_DIR"] = str(td_path)
         if "BROWSER_AGENT_HEADLESS" not in env:
-            env["BROWSER_AGENT_HEADLESS"] = "false"
+            env["BROWSER_AGENT_HEADLESS"] = "true"
         env.setdefault("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
         env.setdefault("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "browser-agent@example.com")
 

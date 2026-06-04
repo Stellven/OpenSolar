@@ -33,6 +33,9 @@ def run_operator(
         "'model_mode':os.environ.get('BROWSER_AGENT_CHATGPT_MODEL_MODE'),"
         "'tool_mode':os.environ.get('BROWSER_AGENT_CHATGPT_TOOL_MODE'),"
         "'require_ui_mode':os.environ.get('BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE'),"
+        "'headless':os.environ.get('BROWSER_AGENT_HEADLESS'),"
+        "'session_reuse':os.environ.get('BROWSER_AGENT_SESSION_REUSE'),"
+        "'session_lineage':os.environ.get('BROWSER_AGENT_SESSION_LINEAGE'),"
         "'prompt':prompt[:4000]}\n"
         "print(json.dumps(out, ensure_ascii=False))\n",
         encoding="utf-8",
@@ -104,6 +107,9 @@ def test_requirement_writer_uses_thinking_high(tmp_path):
     assert payload["effort"] == "high"
     assert payload["tool_mode"] == "none"
     assert payload["require_ui_mode"] == "true"
+    assert payload["headless"] == "true"
+    assert payload["session_reuse"] == "true"
+    assert payload["session_lineage"].startswith("gpt-requirement-writer:")
     assert "GPTRequirementWriter 固化执行协议" in payload["prompt"]
     assert "功能需求清单" in payload["prompt"]
     meta = json.loads((tmp_path / "request" / "requirement-writer-request.json").read_text())

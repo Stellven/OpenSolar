@@ -38,3 +38,14 @@ def test_browser_agent_wrappers_default_to_headless_true_and_kill_browser():
         for pattern in patterns:
             assert pattern in source, f"{rel} missing pattern: {pattern}"
 
+
+def test_browser_agent_callers_default_to_headless_true():
+    expectations = {
+        "scripts/youtube_influence_digest.py": 'env["BROWSER_AGENT_HEADLESS"] = "true"',
+        "tools/youtube_transcript_operator.py": 'env["BROWSER_AGENT_HEADLESS"] = "true"',
+        "tools/technology_diagram_painter_operator.py": 'env["BROWSER_AGENT_HEADLESS"] = "true"',
+        "scripts/run_youtube_daily_previous_day_collect.sh": 'BROWSER_AGENT_HEADLESS="${BROWSER_AGENT_HEADLESS:-true}"',
+    }
+    for rel, pattern in expectations.items():
+        source = _read(rel)
+        assert pattern in source, f"{rel} missing pattern: {pattern}"

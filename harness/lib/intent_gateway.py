@@ -184,6 +184,11 @@ def invoke_requirement_writer(raw_intent: dict[str, Any], base: Path, *, trigger
     env["BROWSER_AGENT_REQUEST_DIR"] = str(request_dir)
     env["BROWSER_AGENT_EXPECTED_OUTPUT"] = "markdown"
     env["BROWSER_AGENT_PURPOSE"] = f"requirement-design:{trigger.get('mode') or 'unknown'}"
+    env["BROWSER_AGENT_SESSION_REUSE"] = env.get("BROWSER_AGENT_SESSION_REUSE") or "true"
+    env["SOLAR_BROWSER_SESSION_REUSE"] = env.get("SOLAR_BROWSER_SESSION_REUSE") or env["BROWSER_AGENT_SESSION_REUSE"]
+    lineage = f"gpt-requirement-writer:{base.name}"
+    env["BROWSER_AGENT_SESSION_LINEAGE"] = env.get("BROWSER_AGENT_SESSION_LINEAGE") or lineage
+    env["SOLAR_BROWSER_SESSION_LINEAGE"] = env.get("SOLAR_BROWSER_SESSION_LINEAGE") or env["BROWSER_AGENT_SESSION_LINEAGE"]
     env["CHATGPT_REQUIREMENT_WRITER_ACTION"] = "run"
     cmd = _requirement_writer_cmd()
     proc = subprocess.run(

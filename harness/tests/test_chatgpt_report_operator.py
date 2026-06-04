@@ -50,6 +50,8 @@ def run_operator(
         "'action':os.environ.get('BROWSER_AGENT_CHATGPT_ACTION'),"
         "'project':os.environ.get('BROWSER_AGENT_CHATGPT_PROJECT_NAME'),"
         "'headless':os.environ.get('BROWSER_AGENT_HEADLESS'),"
+        "'session_reuse':os.environ.get('BROWSER_AGENT_SESSION_REUSE'),"
+        "'session_lineage':os.environ.get('BROWSER_AGENT_SESSION_LINEAGE'),"
         "'allow_headed':os.environ.get('BROWSER_AGENT_CHATGPT_ALLOW_HEADED'),"
         "'profile_directory':os.environ.get('BROWSER_AGENT_PROFILE_DIRECTORY'),"
         "'target_account_email':os.environ.get('BROWSER_AGENT_TARGET_ACCOUNT_EMAIL'),"
@@ -95,6 +97,8 @@ def test_planner_sets_thinking_high_and_project(tmp_path):
     assert payload["require_ui_mode"] == "true"
     assert payload["project"] == "杂项"
     assert payload["headless"] == "true"
+    assert payload["session_reuse"] == "true"
+    assert payload["session_lineage"] == "chatgpt-report:ai-influence-report-plan-2026-05-31"
     assert "ChatGPT Report Planner" in payload["prompt"]
     meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
     assert meta["operator_kind"] == "planner"

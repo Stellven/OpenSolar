@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -38,6 +39,19 @@ RAW_INTENT_FILE_ENV_KEYS = (
     "BROWSER_AGENT_RAW_INTENT_FILE",
     "RAW_INTENT_FILE",
 )
+
+
+def _slug(value: str, limit: int = 96) -> str:
+    text = re.sub(r"[^A-Za-z0-9_.:-]+", "-", str(value or "").strip()).strip("-")
+    return (text or "default")[:limit]
+
+
+def _default_session_lineage(*, purpose: str, request_dir: str) -> str:
+    clean_purpose = str(purpose or "").strip()
+    if clean_purpose:
+        return f"gpt-requirement-writer:{_slug(clean_purpose)}"
+    request_name = Path(str(request_dir or "requirement-design")).name
+    return f"gpt-requirement-writer:{_slug(request_name)}"
 
 
 def _read_file_text(path_text: str, *, source_label: str) -> tuple[str, str]:
@@ -158,6 +172,13 @@ def main() -> int:
         return 2
 
     env = os.environ.copy()
+    env.setdefault("BROWSER_AGENT_HEADLESS", "true")
+    env.setdefault("BROWSER_AGENT_SESSION_REUSE", "true")
+    env.setdefault("SOLAR_BROWSER_SESSION_REUSE", env["BROWSER_AGENT_SESSION_REUSE"])
+    request_dir = str(env.get("BROWSER_AGENT_REQUEST_DIR") or "").strip()
+    default_lineage = _default_session_lineage(purpose=purpose, request_dir=request_dir)
+    env.setdefault("BROWSER_AGENT_SESSION_LINEAGE", default_lineage)
+    env.setdefault("SOLAR_BROWSER_SESSION_LINEAGE", env["BROWSER_AGENT_SESSION_LINEAGE"])
     env.update(
         {
             "CHATGPT_MODEL": str(

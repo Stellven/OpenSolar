@@ -348,7 +348,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path, operator_id: str = D
 
     env = os.environ.copy()
     if "BROWSER_AGENT_HEADLESS" not in env:
-        env["BROWSER_AGENT_HEADLESS"] = "false"
+        env["BROWSER_AGENT_HEADLESS"] = "true"
     env.update({
         "BROWSER_AGENT_REQUEST_DIR": str(request_dir),
         "BROWSER_AGENT_TIMEOUT": str(request.get("timeout_seconds") or 600),
