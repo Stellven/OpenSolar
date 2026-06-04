@@ -1190,6 +1190,39 @@ def _node_is_builder_ready(node: dict[str, Any]) -> bool:
     return False
 
 
+def _node_has_pm_dispatch_marker(graph: dict[str, Any], node_id: str, node: dict[str, Any]) -> bool:
+    results = graph.get("node_results") or graph.get("results") or {}
+    result = results.get(node_id) if isinstance(results, dict) and isinstance(results.get(node_id), dict) else {}
+    for payload in (node, result):
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("pm_task_id") or "").strip():
+            return True
+        if str(payload.get("dispatch_id") or "").strip():
+            return True
+        if str(payload.get("dispatched_via") or "").strip() == "pm_dispatch":
+            return True
+    return False
+
+
+def _node_has_non_latent_status(node: dict[str, Any]) -> bool:
+    status = str(node.get("status") or "").strip().lower()
+    return status in {
+        "assigned",
+        "blocked",
+        "cancelled",
+        "dispatched",
+        "failed",
+        "in_progress",
+        "queued",
+        "reviewing",
+        "running",
+        "skipped",
+        "worker_blocked",
+        "passed",
+    }
+
+
 def _node_builder_task_type(node: dict[str, Any]) -> str:
     task_type = str(node.get("dispatch_task_type") or node.get("type") or "").strip().lower()
     if task_type:
@@ -1261,6 +1294,10 @@ def _builder_ready_nodes_for_sprint(sprint_id: str) -> tuple[list[dict[str, Any]
     for node in ready:
         node_id = str(node.get("id") or "").strip()
         if not node_id or not _node_is_builder_ready(node):
+            continue
+        if _node_has_non_latent_status(node):
+            continue
+        if _node_has_pm_dispatch_marker(graph, node_id, node):
             continue
         if _active_pm_record_for_node(sprint_id, node_id):
             continue
