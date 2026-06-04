@@ -387,22 +387,83 @@ OPEN_PROJECT_JS = r"""(projectName) => {
     const style = window.getComputedStyle(el);
     return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
   };
-  const nodes = Array.from(document.querySelectorAll("a,button,[role='button'],div"));
-  const project = nodes.find((el) => visible(el) && clean(el.innerText || el.textContent || "") === target);
-  if (!project) {
-    const expanders = nodes.filter((el) => {
-      if (!visible(el)) return false;
-      const text = clean(el.innerText || el.textContent || "");
-      const aria = clean(el.getAttribute("aria-label") || "");
-      return /^(更多|More)$/.test(text) || /(show more|更多|展开|projects|项目)/i.test(aria);
-    }).slice(0, 5);
-    for (const item of expanders) {
-      try { item.click(); } catch (_) {}
+  const textOf = (el) => clean(el.innerText || el.textContent || "");
+  const allNodes = () => Array.from(document.querySelectorAll("a,button,[role='button'],[role='treeitem'],[role='menuitem'],div"));
+  const clickIfFound = (nodes, predicate) => {
+    const item = nodes.find((el) => visible(el) && predicate(el, textOf(el), clean(el.getAttribute("aria-label") || "")));
+    if (!item) return null;
+    item.click();
+    return { text: textOf(item), aria: clean(item.getAttribute("aria-label") || ""), tag: item.tagName };
+  };
+  const sidebarToggle = clickIfFound(allNodes(), (_el, text, aria) => /^(打开边栏|Open sidebar)$/.test(aria) || /^(打开边栏|Open sidebar)$/.test(text));
+  const roots = Array.from(document.querySelectorAll("nav,aside,section,[data-testid*='sidebar'],[aria-label*='sidebar'],[aria-label*='侧边栏']"))
+    .filter((el) => visible(el));
+  const rootCandidates = roots.length ? roots : [document.body];
+  const collectSearchRoots = () => {
+    const out = [];
+    for (const root of rootCandidates) {
+      out.push(root);
+      const sectionHeaders = Array.from(root.querySelectorAll("div,button,a,[role='button'],[role='treeitem'],h2,h3,h4"))
+        .filter((el) => visible(el) && /^(项目|Projects?)$/.test(textOf(el)));
+      for (const header of sectionHeaders) {
+        const container = header.closest("section,nav,aside,div,li") || header.parentElement;
+        if (container) out.push(container);
+        if (header.parentElement) out.push(header.parentElement);
+        if (container && container.nextElementSibling) out.push(container.nextElementSibling);
+        if (header.nextElementSibling) out.push(header.nextElementSibling);
+      }
     }
-    return JSON.stringify({ ok: false, step: "open_project", error: "project_not_found", project_name: target });
+    return Array.from(new Set(out.filter(Boolean)));
+  };
+  const searchRoots = collectSearchRoots();
+  const openProjectGroup = () => {
+    for (const root of searchRoots) {
+      const nodes = Array.from(root.querySelectorAll("button,a,[role='button'],[role='treeitem'],div")).filter((el) => visible(el));
+      const expander = nodes.find((el) => {
+        const text = textOf(el);
+        const aria = clean(el.getAttribute("aria-label") || "");
+        return /^(项目|Projects?)$/.test(text) || /(projects?|项目)/i.test(aria);
+      });
+      if (expander) {
+        try { expander.click(); } catch (_) {}
+      }
+    }
+  };
+  openProjectGroup();
+  const findProject = () => {
+    for (const root of searchRoots) {
+      const nodes = Array.from(root.querySelectorAll("a,button,[role='button'],[role='treeitem'],div")).filter((el) => visible(el));
+      const exact = nodes.find((el) => textOf(el) === target);
+      if (exact) return exact;
+    }
+    const nodes = allNodes();
+    return nodes.find((el) => visible(el) && textOf(el) === target) || null;
+  };
+  const project = findProject();
+  if (!project) {
+    const candidates = searchRoots
+      .flatMap((root) => Array.from(root.querySelectorAll("a,button,[role='button'],[role='treeitem'],div")))
+      .filter((el) => visible(el))
+      .map((el) => textOf(el))
+      .filter(Boolean)
+      .slice(0, 120);
+    return JSON.stringify({
+      ok: false,
+      step: "open_project",
+      error: "project_not_found",
+      project_name: target,
+      sidebar_toggle_clicked: sidebarToggle,
+      candidates,
+    });
   }
   project.click();
-  return JSON.stringify({ ok: true, step: "open_project", project_name: target });
+  return JSON.stringify({
+    ok: true,
+    step: "open_project",
+    project_name: target,
+    clicked: textOf(project),
+    sidebar_toggle_clicked: sidebarToggle,
+  });
 }"""
 
 NEW_CHAT_JS = r"""() => {

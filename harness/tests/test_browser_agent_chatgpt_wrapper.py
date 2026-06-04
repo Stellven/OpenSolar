@@ -176,3 +176,12 @@ def test_browser_user_agent_defaults_to_non_headless_chrome(monkeypatch):
     ua = ns["_browser_user_agent"](browser_channel="chrome")
     assert "Chrome/" in ua
     assert "HeadlessChrome/" not in ua
+
+
+def test_open_project_js_targets_sidebar_project_group():
+    ns = _load_namespace()
+    script = ns["OPEN_PROJECT_JS"]
+    assert "nav,aside,section" in script
+    assert "项目" in script
+    assert "Open sidebar" in script
+    assert "role='treeitem'" in script
