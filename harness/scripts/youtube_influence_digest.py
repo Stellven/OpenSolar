@@ -633,7 +633,15 @@ def maybe_write_browser_agent_report(
         "project_name": str(report_cfg.get("project_name") or "杂项"),
         "lineage_prefix": str(report_cfg.get("lineage_prefix") or "ai-influence-youtube-report"),
     }
-    for key in ("target_account_email", "profile_directory", "timeout_seconds", "headless", "session_reuse"):
+    for key in (
+        "target_account_email",
+        "profile_directory",
+        "timeout_seconds",
+        "headless",
+        "session_reuse",
+        "operator_script",
+        "python_executable",
+    ):
         if report_cfg.get(key) is not None:
             provider_options[key] = report_cfg.get(key)
 

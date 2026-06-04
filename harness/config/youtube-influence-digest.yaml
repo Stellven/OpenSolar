@@ -21,6 +21,15 @@ output:
   lookback_hours: 72
   keep_seen_days: 45
   transcript_max_chars: 60000
+  browser_agent_report:
+    enabled: false
+    requested_model: chatgpt-5.5-thinking-high
+    title_prefix: AI Influence YouTube Report
+    lineage_prefix: ai-influence-youtube-report
+    project_name: 杂项
+    headless: true
+    session_reuse: true
+    timeout_seconds: 1800
 fetch:
   timeout_seconds: 15
   sleep_between_channels_seconds: 3.0
