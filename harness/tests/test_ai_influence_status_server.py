@@ -76,6 +76,47 @@ def test_save_ai_influence_mail_config(tmp_path, monkeypatch):
     assert "updated_at" in saved
 
 
+def test_ai_influence_send_report_attaches_html_instead_of_using_full_body(tmp_path, monkeypatch):
+    mod = _load_module()
+    report_dir = tmp_path / "report-one"
+    report_dir.mkdir()
+    report_html = report_dir / "report.html"
+    transcript = report_dir / "transcripts.txt"
+    report_html.write_text("<html><body><h1>完整报告正文</h1><p>这是很长的网页报告。</p></body></html>", encoding="utf-8")
+    transcript.write_text("transcript body", encoding="utf-8")
+    config_path = tmp_path / "mail-config.json"
+    config_path.write_text(json.dumps({"to": "reader@example.com", "from": "sender@gmail.com"}, ensure_ascii=False), encoding="utf-8")
+
+    sent: dict = {}
+
+    class FakeTechHotspotModule:
+        @staticmethod
+        def send_html_email(html_content, subject, attachments):
+            sent["html_content"] = html_content
+            sent["subject"] = subject
+            sent["attachments"] = attachments
+            return {"status": "sent", "backend": "fake_smtp", "attachments": [str(path) for path in attachments]}
+
+    monkeypatch.setattr(mod, "AI_INFLUENCE_MAIL_CONFIG", config_path)
+    monkeypatch.setattr(mod, "_resolve_ai_influence_mail_target", lambda data: report_html)
+    monkeypatch.setattr(mod, "_load_tech_hotspot_module", lambda: FakeTechHotspotModule)
+
+    result = mod._ai_influence_send_report({
+        "title": "测试报告",
+        "date": "2026-06-04",
+        "module_label": "AI Influence",
+        "subject": "测试邮件",
+    })
+
+    assert result["ok"] is True
+    assert result["result"]["mail_body_mode"] == "summary_with_html_attachment"
+    assert "完整网页报告已作为 HTML 附件发送" in sent["html_content"]
+    assert "这是很长的网页报告" not in sent["html_content"]
+    assert report_html in sent["attachments"]
+    assert transcript in sent["attachments"]
+    assert json.loads((report_dir / "mail-result.json").read_text(encoding="utf-8"))["mail_body_mode"] == "summary_with_html_attachment"
+
+
 def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypatch):
     mod = _load_module()
     legacy_root = tmp_path / "legacy-ai-influence"
