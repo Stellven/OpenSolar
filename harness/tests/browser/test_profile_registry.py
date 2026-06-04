@@ -30,6 +30,13 @@ def test_profile_registry_meta_and_health_and_cdp(tmp_path: Path) -> None:
     assert read_cdp["profile_id"] == profile_id
     assert registry.cdp_last_path(profile_id).exists()
 
+    active = registry.write_active_session(profile_id, {"cdp_url": "http://127.0.0.1:9222", "session_lineage": "sprint-1"})
+    assert active["profile_id"] == profile_id
+    assert registry.read_active_session(profile_id)["cdp_url"] == "http://127.0.0.1:9222"
+    assert registry.active_session_path(profile_id).exists()
+    assert registry.clear_active_session(profile_id) is True
+    assert registry.read_active_session(profile_id) == {}
+
 
 def test_profile_registry_evidence_and_state_refs(tmp_path: Path) -> None:
     registry = ProfileRegistry(root=tmp_path)

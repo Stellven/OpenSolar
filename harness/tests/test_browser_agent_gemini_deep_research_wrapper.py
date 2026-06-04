@@ -147,3 +147,10 @@ def test_wrapper_defaults_to_headless_true_and_kills_browser():
     source = MODULE_PATH.read_text(encoding="utf-8")
     assert 'os.environ.get("BROWSER_AGENT_HEADLESS") or "true"' in source
     assert "await asyncio.wait_for(browser.kill(), timeout=20)" in source
+
+
+def test_wrapper_reads_and_writes_active_session_broker():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert "brtc.read_active_session(control_ctx, require_lineage_match=False)" in source
+    assert "brtc.activate_reusable_session(" in source
+    assert "await asyncio.wait_for(browser.stop(), timeout=20)" in source

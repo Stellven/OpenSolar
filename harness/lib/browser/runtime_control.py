@@ -1,7 +1,9 @@
 """Unified browser profile/lease/contract control plane helpers."""
 from __future__ import annotations
 
+import datetime
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,57 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _slug(value: str) -> str:
     text = re.sub(r"[^a-zA-Z0-9._-]+", "-", str(value or "").strip())
     return text.strip("-._").lower() or "default"
+
+
+def _env_flag(*names: str, default: bool = False) -> bool:
+    for name in names:
+        value = str(os.environ.get(name) or "").strip().lower()
+        if not value:
+            continue
+        return value in {"1", "true", "yes", "on"}
+    return default
+
+
+def _parse_iso8601(value: str | None) -> datetime.datetime:
+    if not value:
+        return datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc)
+    safe = str(value).rstrip("Z") + "+00:00"
+    try:
+        return datetime.datetime.fromisoformat(safe)
+    except ValueError:
+        return datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc)
+
+
+def resolve_session_lineage(metadata: dict[str, Any] | None = None) -> str:
+    meta = dict(metadata or {})
+    candidates = [
+        meta.get("session_lineage"),
+        meta.get("lineage_key"),
+        os.environ.get("BROWSER_AGENT_SESSION_LINEAGE"),
+        os.environ.get("SOLAR_BROWSER_SESSION_LINEAGE"),
+        os.environ.get("dispatch_id"),
+        os.environ.get("DISPATCH_ID"),
+        os.environ.get("SPRINT_ID"),
+        os.environ.get("SOLAR_RUNTIME_SESSION_ID"),
+        os.environ.get("TASK_ID"),
+        meta.get("task_id"),
+    ]
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def session_reuse_enabled(metadata: dict[str, Any] | None = None, *, default: bool = True) -> bool:
+    meta = dict(metadata or {})
+    if meta.get("session_reuse") is not None:
+        return bool(meta.get("session_reuse"))
+    return _env_flag(
+        "BROWSER_AGENT_SESSION_REUSE",
+        "SOLAR_BROWSER_SESSION_REUSE",
+        default=default,
+    )
 
 
 def default_profile_id(service: str, account_label: str | None = None, profile_directory: str | None = None) -> str:
@@ -43,6 +96,9 @@ def initialize_runtime_contract(
     control_modes: dict[str, bool] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    metadata = dict(metadata or {})
+    lineage_key = resolve_session_lineage({**metadata, "task_id": task_id})
+    reuse_enabled = session_reuse_enabled(metadata)
     request_dir.mkdir(parents=True, exist_ok=True)
     profile_id = explicit_profile_id or default_profile_id(
         service,
@@ -113,7 +169,9 @@ def initialize_runtime_contract(
             "service": service,
             "wrapper_kind": wrapper_kind,
             "control_modes": dict(control_modes or {}),
-            **dict(metadata or {}),
+            "session_lineage": lineage_key,
+            "session_reuse": reuse_enabled,
+            **metadata,
         },
     )
     _write_json(request_dir / "browser-profile-ref.json", profile_ref)
@@ -126,6 +184,8 @@ def initialize_runtime_contract(
             "wrapper_kind": wrapper_kind,
             "runtime_owner": runtime_owner,
             "profile_id": profile_id,
+            "session_lineage": lineage_key,
+            "session_reuse": reuse_enabled,
             "lease": lease_result.get("lease"),
         },
     )
@@ -141,6 +201,8 @@ def initialize_runtime_contract(
         "lease_manager": lease_manager,
         "lease": lease_result.get("lease") or {},
         "task_id": task_ref,
+        "session_lineage": lineage_key,
+        "session_reuse": reuse_enabled,
         "allowed_account_identifiers": stored_meta.get("allowed_account_identifiers") or [],
         "account_identifier": account_identifier or "",
     }
@@ -165,6 +227,69 @@ def update_runtime_endpoint(
     session_contract["metadata"] = metadata
     _write_json(Path(context["request_dir"]) / "browser-session-contract.json", session_contract)
     context["session_contract"] = session_contract
+
+
+def read_active_session(
+    context: dict[str, Any] | None,
+    *,
+    require_lineage_match: bool = True,
+    max_age_seconds: int = 1800,
+) -> dict[str, Any] | None:
+    if not context:
+        return None
+    registry: ProfileRegistry = context["registry"]
+    profile_id = str(context["profile_id"])
+    record = registry.read_active_session(profile_id)
+    if not record:
+        return None
+    updated_at = _parse_iso8601(str(record.get("updated_at") or ""))
+    age = (datetime.datetime.now(datetime.timezone.utc) - updated_at).total_seconds()
+    if age > max(0, int(max_age_seconds)):
+        registry.clear_active_session(profile_id)
+        return None
+    if require_lineage_match:
+        current = str(context.get("session_lineage") or "").strip()
+        existing = str(record.get("session_lineage") or "").strip()
+        if not current or not existing or current != existing:
+            return None
+    return record
+
+
+def activate_reusable_session(
+    context: dict[str, Any] | None,
+    *,
+    cdp_url: str,
+    browser_session_ref: str,
+    headless: bool,
+    attached: bool = False,
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    if not context:
+        return None
+    registry: ProfileRegistry = context["registry"]
+    profile_id = str(context["profile_id"])
+    payload = {
+        "service": str(context["service"]),
+        "wrapper_kind": str(context["wrapper_kind"]),
+        "runtime_owner": str(context["runtime_owner"]),
+        "task_id": str(context["task_id"]),
+        "session_lineage": str(context.get("session_lineage") or ""),
+        "session_reuse": bool(context.get("session_reuse")),
+        "cdp_url": str(cdp_url or "").strip() or None,
+        "browser_session_ref": str(browser_session_ref or "").strip() or None,
+        "headless": bool(headless),
+        "attached": bool(attached),
+        "details": dict(details or {}),
+    }
+    return registry.write_active_session(profile_id, payload)
+
+
+def clear_active_session(context: dict[str, Any] | None) -> bool:
+    if not context:
+        return False
+    registry: ProfileRegistry = context["registry"]
+    profile_id = str(context["profile_id"])
+    return registry.clear_active_session(profile_id)
 
 
 def finalize_runtime_contract(

@@ -191,3 +191,10 @@ def test_chatgpt_wrapper_defaults_to_headless_true():
     source = SCRIPT.read_text(encoding="utf-8")
     assert '_env_flag("BROWSER_AGENT_HEADLESS", default=True)' in source
     assert "await asyncio.wait_for(browser.kill(), timeout=20)" in source
+
+
+def test_chatgpt_wrapper_reads_and_writes_active_session_broker():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "brtc.read_active_session(control_ctx, require_lineage_match=False)" in source
+    assert "brtc.activate_reusable_session(" in source
+    assert "await asyncio.wait_for(browser.stop(), timeout=20)" in source

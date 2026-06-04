@@ -33,6 +33,7 @@ def test_login_recovery_selects_playwright_for_precise_control() -> None:
 def test_runtime_control_initializes_and_finalizes_contract(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("BROWSER_PROFILE_REGISTRY_ROOT", str(tmp_path / "profiles"))
     monkeypatch.setenv("BROWSER_PROFILE_LEASE_DIR", str(tmp_path / "leases"))
+    monkeypatch.setenv("SPRINT_ID", "sprint-browser-reuse")
     request_dir = tmp_path / "request"
     ctx = runtime_control.initialize_runtime_contract(
         request_dir=request_dir,
@@ -50,6 +51,8 @@ def test_runtime_control_initializes_and_finalizes_contract(tmp_path: Path, monk
         },
         task_id="task-123",
     )
+    assert ctx["session_lineage"] == "sprint-browser-reuse"
+    assert ctx["session_reuse"] is True
     assert (request_dir / "browser-profile-ref.json").exists()
     assert (request_dir / "browser-session-contract.json").exists()
     runtime_control.update_runtime_endpoint(
@@ -67,6 +70,43 @@ def test_runtime_control_initializes_and_finalizes_contract(tmp_path: Path, monk
     assert report is not None
     assert report["success"] is True
     assert (request_dir / "login-recovery-report.json").exists()
+
+
+def test_runtime_control_active_session_roundtrip(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BROWSER_PROFILE_REGISTRY_ROOT", str(tmp_path / "profiles"))
+    monkeypatch.setenv("BROWSER_PROFILE_LEASE_DIR", str(tmp_path / "leases"))
+    monkeypatch.setenv("SPRINT_ID", "sprint-browser-reuse")
+    request_dir = tmp_path / "request"
+    ctx = runtime_control.initialize_runtime_contract(
+        request_dir=request_dir,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="chatgpt",
+        profile_directory="Profile 7",
+        user_data_dir=str(tmp_path / "chrome"),
+        staged_user_data_dir=str(tmp_path / "staged"),
+        account_identifier="alice@example.com",
+        control_modes={
+            "browser_use_session": True,
+            "playwright_cdp_attach": False,
+            "webwright_bridge": False,
+        },
+        task_id="task-123",
+    )
+    runtime_control.activate_reusable_session(
+        ctx,
+        cdp_url="http://127.0.0.1:9222",
+        browser_session_ref="browser-use-session://chatgpt/chatgpt/alice",
+        headless=True,
+        attached=False,
+        details={"cleanup_dir": "/tmp/browser-cleanup"},
+    )
+    active = runtime_control.read_active_session(ctx)
+    assert active is not None
+    assert active["cdp_url"] == "http://127.0.0.1:9222"
+    assert active["session_lineage"] == "sprint-browser-reuse"
+    assert runtime_control.clear_active_session(ctx) is True
+    assert runtime_control.read_active_session(ctx) is None
 
 
 def test_login_recovery_report_contains_executor_and_policy() -> None:

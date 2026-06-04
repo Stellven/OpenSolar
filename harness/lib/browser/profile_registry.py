@@ -95,6 +95,9 @@ class ProfileRegistry:
     def cdp_last_path(self, profile_id: str) -> Path:
         return self.profile_dir(profile_id) / "cdp.last.json"
 
+    def active_session_path(self, profile_id: str) -> Path:
+        return self.profile_dir(profile_id) / "active-session.json"
+
     def evidence_dir(self, profile_id: str) -> Path:
         path = self.profile_dir(profile_id) / "evidence"
         path.mkdir(parents=True, exist_ok=True)
@@ -130,6 +133,26 @@ class ProfileRegistry:
 
     def read_cdp_last(self, profile_id: str) -> dict[str, Any]:
         return _read_json(self.cdp_last_path(profile_id))
+
+    def write_active_session(self, profile_id: str, session_state: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(session_state or {})
+        payload["profile_id"] = _normalise_profile_id(profile_id)
+        payload["updated_at"] = _now_iso()
+        _write_json_atomic(self.active_session_path(profile_id), payload)
+        return payload
+
+    def read_active_session(self, profile_id: str) -> dict[str, Any]:
+        return _read_json(self.active_session_path(profile_id))
+
+    def clear_active_session(self, profile_id: str) -> bool:
+        path = self.active_session_path(profile_id)
+        if not path.exists():
+            return False
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return False
+        return True
 
     def get_storage_state_ref(self, profile_id: str) -> str | None:
         return self.read_meta(profile_id).get("storage_state_ref")

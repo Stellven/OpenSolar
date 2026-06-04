@@ -1487,19 +1487,53 @@ async def _run(prompt: str) -> int:
     final_error_text: str | None = None
     final_page_state: dict | None = None
     logged_in_verified = False
-
-    browser = BrowserSession(
-        browser_profile=BrowserProfile(
-            headless=headless,
-            user_data_dir=staged_dir,
-            profile_directory=profile_directory,
-            allowed_domains=allowed_domains,
-            channel=browser_channel,
-            user_agent=browser_user_agent,
+    active_session = brtc.read_active_session(control_ctx, require_lineage_match=False)
+    browser: BrowserSession | None = None
+    reused_existing_session = False
+    keep_session_alive = bool(control_ctx.get("session_reuse")) and bool(control_ctx.get("session_lineage"))
+    runtime_cleanup_dir = cleanup_dir
+    runtime_staged_dir = staged_dir
+    if active_session and active_session.get("cdp_url"):
+        same_lineage = str(active_session.get("session_lineage") or "").strip() == str(control_ctx.get("session_lineage") or "").strip()
+        stale_cleanup_dir = Path(str((active_session.get("details") or {}).get("cleanup_dir") or "")).expanduser() if str((active_session.get("details") or {}).get("cleanup_dir") or "").strip() else None
+        try:
+            browser = BrowserSession(
+                cdp_url=str(active_session.get("cdp_url") or "").strip(),
+                browser_profile=BrowserProfile(
+                    headless=headless,
+                    allowed_domains=allowed_domains,
+                    channel=browser_channel,
+                    user_agent=browser_user_agent,
+                ),
+            )
+            await asyncio.wait_for(browser.start(), timeout=20)
+            if same_lineage and keep_session_alive:
+                reused_existing_session = True
+                runtime_cleanup_dir = Path(str((active_session.get("details") or {}).get("cleanup_dir") or "")).expanduser() if str((active_session.get("details") or {}).get("cleanup_dir") or "").strip() else cleanup_dir
+                runtime_staged_dir = str((active_session.get("details") or {}).get("staged_user_data_dir") or "").strip() or staged_dir
+            else:
+                await asyncio.wait_for(browser.kill(), timeout=20)
+                brtc.clear_active_session(control_ctx)
+                if stale_cleanup_dir is not None:
+                    shutil.rmtree(stale_cleanup_dir, ignore_errors=True)
+                browser = None
+        except Exception:
+            brtc.clear_active_session(control_ctx)
+            browser = None
+    if browser is None:
+        browser = BrowserSession(
+            browser_profile=BrowserProfile(
+                headless=headless,
+                user_data_dir=staged_dir,
+                profile_directory=profile_directory,
+                allowed_domains=allowed_domains,
+                channel=browser_channel,
+                user_agent=browser_user_agent,
+            )
         )
-    )
     try:
-        await asyncio.wait_for(browser.start(), timeout=40)
+        if not reused_existing_session:
+            await asyncio.wait_for(browser.start(), timeout=40)
         brtc.update_runtime_endpoint(
             control_ctx,
             cdp_url=str(getattr(browser, "cdp_url", "") or ""),
@@ -1781,11 +1815,30 @@ async def _run(prompt: str) -> int:
         raise
     finally:
         try:
-            await asyncio.wait_for(browser.kill(), timeout=20)
+            if keep_session_alive and logged_in_verified and not final_error_text:
+                brtc.activate_reusable_session(
+                    control_ctx,
+                    cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+                    browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
+                    headless=headless,
+                    attached=reused_existing_session,
+                    details={
+                        "request_dir": str(request_dir),
+                        "staged_user_data_dir": str(runtime_staged_dir or ""),
+                        "cleanup_dir": str(runtime_cleanup_dir or ""),
+                    },
+                )
+                await asyncio.wait_for(browser.stop(), timeout=20)
+            else:
+                await asyncio.wait_for(browser.kill(), timeout=20)
+                brtc.clear_active_session(control_ctx)
         except Exception:
             pass
-        _kill_browser_profile_processes(staged_dir)
-        if cleanup_dir is not None:
+        if not (keep_session_alive and logged_in_verified and not final_error_text):
+            _kill_browser_profile_processes(Path(str(runtime_staged_dir)).expanduser() if runtime_staged_dir else staged_dir)
+            if runtime_cleanup_dir is not None:
+                shutil.rmtree(runtime_cleanup_dir, ignore_errors=True)
+        elif cleanup_dir is not None and cleanup_dir != runtime_cleanup_dir:
             shutil.rmtree(cleanup_dir, ignore_errors=True)
         brtc.finalize_runtime_contract(
             control_ctx,
