@@ -1,0 +1,113 @@
+name: Solar CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: solar-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-smoke:
+    name: Python smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest requests pyyaml beautifulsoup4
+
+      - name: Syntax check critical runtime files
+        run: |
+          python -m py_compile \
+            harness/lib/graph_node_dispatcher.py \
+            harness/lib/symphony/status-server.py \
+            harness/scripts/tech_hotspot_radar.py
+
+      - name: Run graph and dispatch smoke tests
+        env:
+          SOLAR_GRAPH_BUILDER_OPERATOR_POOL: "0"
+        run: |
+          python -m pytest -q \
+            harness/tests/graph/test_pm_inbox_closeout_reconcile.py \
+            harness/tests/graph/test_graph_status_sync.py \
+            harness/tests/graph/test_parent_ready_closeout.py \
+            harness/tests/graph/test_task_graph_state_io.py \
+            harness/tests/graph/test_graph_dispatch_lease_busy.py \
+            harness/tests/graph/test_graph_dispatch_submit.py \
+            harness/tests/graph/test_worker_assignment_reasons.py \
+            harness/tests/test_eval_verdict_evidence_gate_wiring.py \
+            harness/tests/test_pm_dispatch.py
+
+  hf-ai-influence-smoke:
+    name: HF and AI Influence smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest requests pyyaml beautifulsoup4
+
+      - name: Run HF and report center smoke tests
+        run: |
+          python -m pytest -q \
+            harness/tests/test_tech_hotspot_browser_agent_cmd.py \
+            harness/tests/test_hf_paper_insight_runtime.py \
+            harness/tests/test_hf_paper_insight_schema.py \
+            harness/tests/test_hf_paper_insight_scoring.py \
+            harness/tests/test_ai_influence_status_server.py
+          python harness/tests/test-status-server-ai-influence.py
+
+  harness-shell-smoke:
+    name: Harness shell smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest requests pyyaml beautifulsoup4
+
+      - name: Run shell smoke tests
+        env:
+          SOLAR_GRAPH_BUILDER_OPERATOR_POOL: "0"
+        run: |
+          bash harness/tests/test-autopilot-prereq-dict.sh
+          bash harness/tests/test-coordinator-dispatch-template-escaping.sh
+          bash harness/tests/test-graph-dispatch-pane-role-guard.sh
+          bash harness/tests/test-multi-task-entrypoint.sh
+          bash harness/tests/test-pm-planner-html-artifacts.sh
