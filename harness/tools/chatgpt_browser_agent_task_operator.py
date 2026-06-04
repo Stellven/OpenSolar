@@ -225,6 +225,13 @@ def build_request(envelope: dict[str, Any], *, task_dir: Path | None = None) -> 
                 "require_deep_research",
                 "account_email",
                 "action",
+                "conversation_url",
+                "headless",
+                "open_project_first",
+                "require_project",
+                "force_new_chat",
+                "require_isolated_conversation",
+                "profile_directory",
                 "timeout_seconds",
             ):
                 if key in envelope:
@@ -307,8 +314,9 @@ def _summary_markdown(response: dict[str, Any]) -> str:
 
 
 def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
+    action = str(request.get("action") or "run")
     prompt = str(request.get("prompt") or "").strip()
-    if not prompt:
+    if action not in {"poll", "collect"} and not prompt:
         raise RuntimeError("ChatGPT browser-agent operator requires prompt")
     cmd = _wrapper_cmd()
     if not cmd:
@@ -336,11 +344,27 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
             "BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH": "true"
             if bool(request.get("require_deep_research", False))
             else "false",
-            "BROWSER_AGENT_CHATGPT_ACTION": str(request.get("action") or "run"),
+            "BROWSER_AGENT_CHATGPT_ACTION": action,
             "BROWSER_AGENT_CHATGPT_PROJECT_NAME": str(request.get("project_name") or DEFAULT_PROJECT_NAME),
             "BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT": "true",
         }
     )
+    if "conversation_url" in request and str(request.get("conversation_url") or "").strip():
+        env["BROWSER_AGENT_CHATGPT_CONVERSATION_URL"] = str(request.get("conversation_url") or "").strip()
+    if "headless" in request and request.get("headless") is not None:
+        env["BROWSER_AGENT_HEADLESS"] = "true" if bool(request.get("headless")) else "false"
+    if "open_project_first" in request and request.get("open_project_first") is not None:
+        env["BROWSER_AGENT_CHATGPT_OPEN_PROJECT_FIRST"] = "true" if bool(request.get("open_project_first")) else "false"
+    if "require_project" in request and request.get("require_project") is not None:
+        env["BROWSER_AGENT_CHATGPT_REQUIRE_PROJECT"] = "true" if bool(request.get("require_project")) else "false"
+    if "force_new_chat" in request and request.get("force_new_chat") is not None:
+        env["BROWSER_AGENT_CHATGPT_FORCE_NEW_CHAT"] = "true" if bool(request.get("force_new_chat")) else "false"
+    if "require_isolated_conversation" in request and request.get("require_isolated_conversation") is not None:
+        env["BROWSER_AGENT_CHATGPT_REQUIRE_ISOLATED_CONVERSATION"] = (
+            "true" if bool(request.get("require_isolated_conversation")) else "false"
+        )
+    if "profile_directory" in request and str(request.get("profile_directory") or "").strip():
+        env["BROWSER_AGENT_PROFILE_DIRECTORY"] = str(request.get("profile_directory") or "").strip()
     account_email = str(request.get("account_email") or "").strip()
     if account_email:
         env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = account_email
@@ -390,26 +414,31 @@ def main() -> int:
     task_dir = _task_dir()
     ofc.clear_task_control(task_dir)
     request = build_request(envelope, task_dir=task_dir)
+    action = str(request.get("action") or "run").strip().lower()
+    is_followup_action = action in {"poll", "collect"}
     rate_control = _rate_control_settings(envelope)
     operator_id = str(rate_control["operator_id"])
     try:
-        ofc.ensure_operator_available(operator_id)
+        if not is_followup_action:
+            ofc.ensure_operator_available(operator_id)
         run_request(request, task_dir=task_dir)
-        ofc.apply_success_cooldown(
-            operator_id,
-            success_cooldown_seconds=int(rate_control.get("success_cooldown_seconds") or 0),
-        )
+        if not is_followup_action:
+            ofc.apply_success_cooldown(
+                operator_id,
+                success_cooldown_seconds=int(rate_control.get("success_cooldown_seconds") or 0),
+            )
         return 0
     except Exception as exc:
-        ofc.apply_failure_flow_control(
-            task_dir,
-            operator_id=operator_id,
-            failure_text=str(exc),
-            rate_limit_cooldown_seconds=int(rate_control.get("rate_limit_cooldown_seconds") or 0),
-            auth_cooldown_seconds=int(rate_control.get("auth_cooldown_seconds") or 0),
-            defer_on_cooldown=bool(rate_control.get("defer_on_cooldown")),
-            defer_on_auth=bool(rate_control.get("defer_on_auth")),
-        )
+        if not is_followup_action:
+            ofc.apply_failure_flow_control(
+                task_dir,
+                operator_id=operator_id,
+                failure_text=str(exc),
+                rate_limit_cooldown_seconds=int(rate_control.get("rate_limit_cooldown_seconds") or 0),
+                auth_cooldown_seconds=int(rate_control.get("auth_cooldown_seconds") or 0),
+                defer_on_cooldown=bool(rate_control.get("defer_on_cooldown")),
+                defer_on_auth=bool(rate_control.get("defer_on_auth")),
+            )
         print(f"chatgpt_browser_agent_task_operator failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 

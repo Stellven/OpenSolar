@@ -51,6 +51,34 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
     assert "ChatGPT Browser Agent Result" in capsys.readouterr().out
 
 
+def test_run_request_allows_collect_without_prompt_and_sets_conversation_url(monkeypatch, tmp_path):
+    class Result:
+        returncode = 0
+        stdout = "final answer"
+        stderr = ""
+
+    monkeypatch.setattr(cto, "_wrapper_cmd", lambda: ["fake-wrapper"])
+    seen_env = {}
+
+    def _fake_run(*args, **kwargs):
+        seen_env.update(kwargs.get("env") or {})
+        return Result()
+
+    monkeypatch.setattr(cto.subprocess, "run", _fake_run)
+    result = cto.run_request(
+        {
+            "action": "collect",
+            "conversation_url": "https://chatgpt.com/c/demo",
+            "request_dir": str(tmp_path / "request"),
+            "project_name": "杂项",
+        },
+        task_dir=tmp_path,
+    )
+    assert result["ok"] is True
+    assert seen_env["BROWSER_AGENT_CHATGPT_ACTION"] == "collect"
+    assert seen_env["BROWSER_AGENT_CHATGPT_CONVERSATION_URL"] == "https://chatgpt.com/c/demo"
+
+
 def test_main_applies_success_cooldown(monkeypatch, tmp_path):
     envelope = {"task_id": "T1", "operator_id": "mini-browser-chatgpt", "prompt": "hello"}
     envelope_path = tmp_path / "envelope.json"
@@ -92,3 +120,42 @@ def test_main_applies_failure_flow_control(monkeypatch, tmp_path):
     )
     assert cto.main() == 1
     assert calls == [("mini-browser-chatgpt", 3600, 21600, True, True)]
+
+
+def test_main_collect_bypasses_flow_control(monkeypatch, tmp_path):
+    envelope = {
+        "task_id": "T3",
+        "operator_id": "mini-browser-chatgpt",
+        "chatgpt_browser_agent_request": {
+            "action": "collect",
+            "conversation_url": "https://chatgpt.com/c/demo",
+            "request_dir": str(tmp_path / "request"),
+        },
+    }
+    envelope_path = tmp_path / "envelope.json"
+    envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+    monkeypatch.setenv("SOLAR_OPERATOR_ENVELOPE_JSON", str(envelope_path))
+    monkeypatch.setenv("TASK_DIR", str(tmp_path / "task"))
+    ensure_calls: list[str] = []
+    failure_calls: list[str] = []
+    success_calls: list[str] = []
+    monkeypatch.setattr(
+        cto.ofc,
+        "ensure_operator_available",
+        lambda operator_id: ensure_calls.append(operator_id),
+    )
+    monkeypatch.setattr(
+        cto.ofc,
+        "apply_failure_flow_control",
+        lambda *args, **kwargs: failure_calls.append("called"),
+    )
+    monkeypatch.setattr(
+        cto.ofc,
+        "apply_success_cooldown",
+        lambda *args, **kwargs: success_calls.append("called"),
+    )
+    monkeypatch.setattr(cto, "run_request", lambda request, task_dir: {"ok": True})
+    assert cto.main() == 0
+    assert ensure_calls == []
+    assert failure_calls == []
+    assert success_calls == []
