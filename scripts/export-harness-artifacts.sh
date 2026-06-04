@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LIVE_HARNESS="${LIVE_HARNESS:-/Users/sihaoli/.solar/harness}"
-SOLAR_REPO="${SOLAR_REPO:-/Users/sihaoli/Solar}"
+LIVE_HARNESS="${LIVE_HARNESS:-$HOME/.solar/harness}"
+SOLAR_REPO="${SOLAR_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 REPO_HARNESS="${REPO_HARNESS:-$SOLAR_REPO/harness}"
-KNOWLEDGE_DIR="${KNOWLEDGE_DIR:-/Users/sihaoli/.solar/extracted_knowledge}"
+KNOWLEDGE_DIR="${KNOWLEDGE_DIR:-$HOME/.solar/extracted_knowledge}"
 ELIGIBLE_STATUSES="${ELIGIBLE_STATUSES:-passed}"
 DO_COMMIT=0
 
@@ -17,9 +17,9 @@ tracked Solar repo harness/ directory, writes knowledge extraction markdown, and
 optionally commits only the controlled Solar harness paths.
 
 Environment:
-  LIVE_HARNESS       default /Users/sihaoli/.solar/harness
-  SOLAR_REPO         default /Users/sihaoli/Solar
-  KNOWLEDGE_DIR      default /Users/sihaoli/.solar/extracted_knowledge
+  LIVE_HARNESS       default $HOME/.solar/harness
+  SOLAR_REPO         default (auto-detect from script location)
+  KNOWLEDGE_DIR      default $HOME/.solar/extracted_knowledge
   ELIGIBLE_STATUSES  default passed
 USAGE
 }
@@ -50,11 +50,10 @@ fi
 
 rsync_excludes=(
   --exclude '.*'
+  --exclude '$*'
   --exclude '.DS_Store'
-  # Guardrails: some live harness hooks may accidentally create literal
-  # placeholder filenames when env vars are missing. Never archive these.
-  --exclude '$KPI_FILE'
-  --exclude '$NEEDS_IMP_FILE'
+  --exclude '__pycache__/***'
+  --exclude '*.pyc'
   --exclude '.*.pid'
   --exclude '.*.port'
   --exclude '*.pid'
@@ -78,7 +77,6 @@ rsync_excludes=(
   --exclude '.planner-inbox.md'
   --exclude 'PLANNER-INBOX.md'
   --exclude 'cache/***'
-  --exclude 'usage/***'
   --exclude 'logs/***'
   --exclude 'run/***'
   --exclude 'state/***'
@@ -87,6 +85,7 @@ rsync_excludes=(
   --exclude 'quarantine/***'
   --exclude 'pm-predrafts/***'
   --exclude 'sprints/***'
+  --exclude 'codex-bridge.deprecated.*/***'
   --exclude '.backup-*/***'
 )
 
@@ -339,14 +338,17 @@ if [[ "$DO_COMMIT" == "1" ]]; then
   python3 <<'PY' > "$stage_file"
 import os
 from pathlib import Path
+import re
 
 repo = Path(os.environ["SOLAR_REPO"])
 harness = Path(os.environ["REPO_HARNESS"])
 
 allowed_dirs = {
     "ADR",
+    "ai-influence-digest",
     "autopilot",
     "brain",
+    "chrome-extension-update",
     "config",
     "docker",
     "docs",
@@ -360,6 +362,7 @@ allowed_dirs = {
     "plugins",
     "release",
     "runbooks",
+    "scripts",
     "schemas",
     "skills",
     "status-server",
@@ -368,8 +371,9 @@ allowed_dirs = {
     "tests",
     "tools",
 }
-top_suffixes = {".sh", ".ts", ".json", ".md", ".toml", ".plist"}
+top_suffixes = {".sh", ".ts", ".json", ".md", ".toml", ".plist", ".py"}
 top_names = {"VERSION"}
+deny_suffixes = {".pyc"}
 deny_names = {
     ".DS_Store",
     "STATE.md",
@@ -379,8 +383,7 @@ deny_names = {
     "capability-graph.jsonl",
     "kpi.json",
     "codex-budget.json",
-    "$KPI_FILE",
-    "$NEEDS_IMP_FILE",
+    "google-cse-token.json",
 }
 deny_fragments = [
     ".bak",
@@ -391,12 +394,17 @@ deny_fragments = [
     ".lock",
     ".state",
 ]
-deny_dir_names = {"inbox", "cache", "quarantine", "telemetry", "usage", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
+deny_dir_names = {"__pycache__", "inbox", "cache", "quarantine", "telemetry", "reports", "events", "logs", "run", "state", "venvs", "vendor"}
+deny_name_re = re.compile(r'(^|[-_.])(token|tokens|oauth|refresh_token|credential|credentials)([-_.]|$)')
 
 def denied(path: Path) -> bool:
     parts = path.parts
     name = path.name
     if name in deny_names:
+        return True
+    if deny_name_re.search(name.lower()) and name.lower().endswith(".json"):
+        return True
+    if path.suffix in deny_suffixes:
         return True
     if any(part.startswith(".") for part in parts):
         return True
@@ -418,14 +426,17 @@ for child in sorted(harness.iterdir()):
 PY
   stage_file_filtered="$(mktemp)"
   ignored_paths_file="$(mktemp)"
+  ignored_paths_lines="$(mktemp)"
+  # `git check-ignore` will escape/quote non-ASCII paths unless -z is used.
   # `git check-ignore` exits with 1 when there are no matches; treat that as success.
-  git -C "$SOLAR_REPO" check-ignore --stdin < "$stage_file" > "$ignored_paths_file" || true
+  git -C "$SOLAR_REPO" check-ignore -z --stdin < "$stage_file" > "$ignored_paths_file" || true
   if [[ -s "$ignored_paths_file" ]]; then
-    grep -Fvx -f "$ignored_paths_file" "$stage_file" > "$stage_file_filtered" || true
+    tr '\0' '\n' < "$ignored_paths_file" > "$ignored_paths_lines"
+    grep -Fvx -f "$ignored_paths_lines" "$stage_file" > "$stage_file_filtered" || true
   else
     cp "$stage_file" "$stage_file_filtered"
   fi
-  rm -f "$ignored_paths_file" "$stage_file"
+  rm -f "$ignored_paths_file" "$ignored_paths_lines" "$stage_file"
 
   git -C "$SOLAR_REPO" add -A --pathspec-from-file="$stage_file_filtered"
   rm -f "$stage_file_filtered"

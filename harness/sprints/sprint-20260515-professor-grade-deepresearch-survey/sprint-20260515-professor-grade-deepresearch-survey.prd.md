@@ -55,4 +55,3 @@ The user wants DeepResearch to support high-quality technical survey writing:
 - Package boundary is explicit.
 - Test fixtures do not require network.
 - Existing DeepResearch path remains compatible.
-

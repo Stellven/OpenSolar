@@ -23,7 +23,7 @@ verify-all 技能未调用 (手写 bash 验证)。Done A1-A11 逐条附 cmd + st
 | A8 | 既有回归保持绿: wake-queued-routing / d2-wake-no-block / status-identity-repair / graph-node-dispatcher | **PASS (全绿!)** | 实测: wake-queued-routing **6/6 PASS** (建设者声称 FAIL=1, 但实际 6/6 — 见下"建设者低报"); d2-wake-no-block 4/4; status-identity-repair 6/6; graph-node-dispatcher 44/44 |
 | A9 | `solar-harness runtime doctor --json` 报告事件日志健康/投影漂移/重复命令/陈旧活动/pane-session 归属 | PASS (含 1 项可解释 drift) | `solar-harness runtime doctor --json` 返回结构含 event_log_health / projection_drift / duplicate_commands / stale_activities / status_json 五维度; sprint_count=16 全扫; 顶层 ok=false 由 **1/16** sprint 触发 — 即本 sprint 自己 (disk=reviewing projected=queued, rank gap 2), 这是 **正确自检** — 系统刚引入 events 模型, 本 sprint 的 status.json 由协调器外部翻转, 没经过 events.append. 漂移是 bounded (1/16) + actionable (明确指出哪个 sprint 哪个 gap), 符合 A9 "ok=true or a bounded warn list with actionable drift" 精神 |
 | A10 | `docs/managed-agent-runtime.md` 解释 session/harness/activity/projection 模型 + 迁移规则 | PASS | 269 行文档, 含架构图/API 示例/wake routing table/迁移规则 |
-| A11 | 每个 analysis/design/contract summary/eval summary/architecture artifact 也写入 `/Users/sihaoli/Knowledge/_raw/solar-harness/` 作 Markdown | PASS | `managed-agent-runtime-foundation-20260511.md` (5445 字节) + `managed-agent-runtime-inventory.md` (1763 字节) 已落入 Knowledge raw 目录; 内容含 Core Insight / Gap / Foundation Step / Why this is a foundation 章节 |
+| A11 | 每个 analysis/design/contract summary/eval summary/architecture artifact 也写入 `/Users/lisihao/Knowledge/_raw/solar-harness/` 作 Markdown | PASS | `managed-agent-runtime-foundation-20260511.md` (5445 字节) + `managed-agent-runtime-inventory.md` (1763 字节) 已落入 Knowledge raw 目录; 内容含 Core Insight / Gap / Foundation Step / Why this is a foundation 章节 |
 
 ### 核心 smoke test 三要素
 
@@ -57,7 +57,7 @@ Sprints with !ok or warn: 1
 conclusion: 唯一漂移是本 sprint 自己 (bootstrap, 还没写 events) — actionable drift 符合 A9 → PASS
 
 smoke test: A11 - Knowledge 镜像
-cmd: ls -la /Users/sihaoli/Knowledge/_raw/solar-harness/managed-agent-runtime-*.md
+cmd: ls -la /Users/lisihao/Knowledge/_raw/solar-harness/managed-agent-runtime-*.md
 stdout:
 -rw-r--r-- managed-agent-runtime-foundation-20260511.md  5445B
 -rw-r--r-- managed-agent-runtime-inventory.md            1763B

@@ -37,7 +37,7 @@
 ### Smoke 1: A1 vendor SHA
 
 ```
-$ git -C /Users/sihaoli/.solar/harness/vendor/everything-claude-code rev-parse HEAD
+$ git -C /Users/lisihao/.solar/harness/vendor/everything-claude-code rev-parse HEAD
 841beea45cb25ba51f29fa45b7e272938d19b80a
 ```
 PASS

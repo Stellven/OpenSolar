@@ -3,7 +3,7 @@
   "defaults": {
     "profile": "builder",
     "backend": "claude-cli",
-    "max_workers": 2
+    "max_workers": 4
   },
   "profiles": {
     "builder": {
@@ -13,18 +13,28 @@
       "backend": "claude-cli",
       "model": "sonnet",
       "approval_mode": "yolo",
-      "best_for": ["implementation", "debugging", "tests", "refactor"],
-      "max_parallel": 2
+      "best_for": [
+        "implementation",
+        "debugging",
+        "tests",
+        "refactor"
+      ],
+      "max_parallel": 4
     },
     "planner": {
       "role": "planner",
       "label": "规划者",
       "persona": "planner",
       "backend": "claude-cli",
-      "model": "sonnet",
+      "model": "opus",
       "approval_mode": "auto_edit",
-      "best_for": ["planning", "architecture", "decomposition", "risk"],
-      "max_parallel": 1
+      "best_for": [
+        "planning",
+        "architecture",
+        "decomposition",
+        "risk"
+      ],
+      "max_parallel": 2
     },
     "evaluator": {
       "role": "evaluator",
@@ -33,8 +43,13 @@
       "backend": "claude-cli",
       "model": "opus",
       "approval_mode": "auto_edit",
-      "best_for": ["verification", "review", "evidence", "regression"],
-      "max_parallel": 1
+      "best_for": [
+        "verification",
+        "review",
+        "evidence",
+        "regression"
+      ],
+      "max_parallel": 2
     },
     "pm": {
       "role": "pm",
@@ -43,8 +58,13 @@
       "backend": "claude-cli",
       "model": "sonnet",
       "approval_mode": "auto_edit",
-      "best_for": ["requirements", "acceptance", "prioritization", "handoff"],
-      "max_parallel": 1
+      "best_for": [
+        "requirements",
+        "acceptance",
+        "prioritization",
+        "handoff"
+      ],
+      "max_parallel": 4
     },
     "gemini-builder": {
       "role": "builder",
@@ -52,9 +72,77 @@
       "persona": "builder",
       "backend": "gemini-cli",
       "model": "gemini",
-      "approval_mode": "yolo",
-      "best_for": ["large-context", "implementation", "code-search", "tests"],
-      "max_parallel": 1
+      "approval_mode": "auto_edit",
+      "best_for": [
+        "large-context",
+        "implementation",
+        "code-search",
+        "tests"
+      ],
+      "max_parallel": 2
+    },
+    "gemini-evaluator": {
+      "role": "evaluator",
+      "label": "Gemini 评审者",
+      "persona": "evaluator",
+      "backend": "gemini-cli",
+      "model": "gemini",
+      "approval_mode": "auto_edit",
+      "best_for": [
+        "verification",
+        "review",
+        "evidence",
+        "regression"
+      ],
+      "max_parallel": 2
+    },
+    "antigravity-multimodal": {
+      "role": "builder",
+      "label": "Antigravity 多模态兜底",
+      "persona": "builder",
+      "backend": "command",
+      "model": "gemini-3.5-flash-high",
+      "approval_mode": "default",
+      "best_for": [
+        "multimodal",
+        "image-processing",
+        "vision",
+        "ocr",
+        "diagram-analysis",
+        "pdf-page-image"
+      ],
+      "command": "AGY_BIN=/Users/lisihao/.local/bin/agy PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/antigravity_multimodal_agent.py\"",
+      "max_parallel": 2
+    },
+    "knowledge-extractor": {
+      "role": "builder",
+      "label": "知识库抽取器",
+      "persona": "builder",
+      "backend": "command",
+      "model": "thunderomlx",
+      "approval_mode": "default",
+      "best_for": [
+        "knowledge-extraction",
+        "wiki-ingest",
+        "qmd-indexing"
+      ],
+      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_knowledge_extract_agent.py\"",
+      "max_parallel": 2
+    },
+    "thunderomlx-benchmark": {
+      "role": "builder",
+      "label": "ThunderOMLX 缓存基准",
+      "persona": "builder",
+      "backend": "command",
+      "model": "thunderomlx",
+      "approval_mode": "default",
+      "best_for": [
+        "benchmark",
+        "cache-metrics",
+        "knowledge-extraction"
+      ],
+      "command": "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\" python3 \"$HARNESS_DIR/tools/thunderomlx_cache_benchmark_agent.py\"",
+      "max_parallel": 2
     },
     "deepseek-builder": {
       "role": "builder",
@@ -63,8 +151,12 @@
       "backend": "claude-cli",
       "model": "deepseek",
       "approval_mode": "yolo",
-      "best_for": ["implementation", "fast-patch", "code-edit"],
-      "max_parallel": 1
+      "best_for": [
+        "implementation",
+        "fast-patch",
+        "code-edit"
+      ],
+      "max_parallel": 2
     },
     "glm-planner": {
       "role": "planner",
@@ -73,19 +165,29 @@
       "backend": "claude-cli",
       "model": "glm-5.1",
       "approval_mode": "auto_edit",
-      "best_for": ["planning", "analysis", "chinese-reasoning"],
-      "max_parallel": 1
+      "best_for": [
+        "planning",
+        "analysis",
+        "chinese-reasoning"
+      ],
+      "max_parallel": 2
     },
     "thunderomlx-local": {
       "role": "builder",
       "label": "ThunderOMLX 本地",
       "persona": "builder",
-      "backend": "command",
+      "backend": "claude-cli",
       "model": "thunderomlx",
+      "allow_claude_local_proxy": true,
       "approval_mode": "default",
-      "best_for": ["local", "offline", "low-cost"],
-      "command_env": "SOLAR_MULTI_TASK_AGENT_CMD",
-      "max_parallel": 1
+      "best_for": [
+        "implementation",
+        "code-edit",
+        "local",
+        "offline",
+        "low-cost"
+      ],
+      "max_parallel": 2
     }
   }
 }

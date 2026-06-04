@@ -30,9 +30,9 @@ python3 tools/verify-workstream-ledger.py --json | python3 -c '...; assert "spri
 ```
 
 ### A2 — Obsidian Wiki Integration Still Works
-✅ Wiki configured, vault_path=/Users/sihaoli/Knowledge, 1131 files indexed, 1928 vectors embedded
+✅ Wiki configured, vault_path=/Users/lisihao/Knowledge, 1131 files indexed, 1928 vectors embedded
 ```
-solar-harness wiki status --json → configured=True, vault_path="/Users/sihaoli/Knowledge"
+solar-harness wiki status --json → configured=True, vault_path="/Users/lisihao/Knowledge"
 solar-harness wiki qmd-search "Solar Harness Obsidian" -n 2 --json → 2 hits
 ```
 
@@ -82,7 +82,7 @@ KB P0 (solar-kb-obsidian-autouse) evaluated as FAIL → accepted-artifact-knowle
 ⚠️ WARN: capture server stopped (was last on 8788), but `_raw` dir exists
 ```
 solar-harness wiki capture-server status → status=stopped, url=http://127.0.0.1:8788
-test -d /Users/sihaoli/Knowledge/_raw → OK
+test -d /Users/lisihao/Knowledge/_raw → OK
 ```
 Documented in fix-dispatch.md as owner=user, fix=`solar-harness wiki capture-server start`.
 

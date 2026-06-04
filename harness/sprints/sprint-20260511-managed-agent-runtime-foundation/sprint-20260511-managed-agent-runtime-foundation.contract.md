@@ -54,7 +54,7 @@ The "Scaling Managed Agents" runtime model maps directly to Solar-Harness:
 8. Keep existing regressions green: `test-wake-queued-routing.sh`, `test-d2-wake-no-block.sh`, `test-status-identity-repair.sh`, and `test-graph-node-dispatcher.sh`.
 9. Add `solar-harness runtime doctor --json` or equivalent report that shows event log health, projection drift, duplicate commands, stale activities, and pane/session ownership.
 10. Add `docs/managed-agent-runtime.md` explaining the new session/harness/activity/projection model and migration rules.
-11. Every analysis, design, contract summary, evaluation summary, and accepted architecture artifact produced by this sprint must also be written as Markdown under `/Users/sihaoli/Knowledge/_raw/solar-harness/` so the Obsidian/QMD knowledge pipeline can extract it.
+11. Every analysis, design, contract summary, evaluation summary, and accepted architecture artifact produced by this sprint must also be written as Markdown under `/Users/lisihao/Knowledge/_raw/solar-harness/` so the Obsidian/QMD knowledge pipeline can extract it.
 
 ## Required Files
 
@@ -64,7 +64,7 @@ The "Scaling Managed Agents" runtime model maps directly to Solar-Harness:
 - `lib/activity_runtime.py`
 - `lib/runtime_doctor.py`
 - `docs/managed-agent-runtime.md`
-- `/Users/sihaoli/Knowledge/_raw/solar-harness/managed-agent-runtime-foundation-20260511.md`
+- `/Users/lisihao/Knowledge/_raw/solar-harness/managed-agent-runtime-foundation-20260511.md`
 - `tests/runtime/test-session-log-v2.sh`
 - `tests/runtime/test-projection-replay.sh`
 - `tests/runtime/test-activity-runtime.sh`

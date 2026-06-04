@@ -5,7 +5,7 @@
   "priority": "P1",
   "lane": "delivery",
   "handoff_to": "done",
-  "updated_at": "2026-05-10T14:52:54Z",
+  "updated_at": "2026-05-24T01:51:13Z",
   "summary": "Close partial MinerU Document Explorer and Mirage SDK/FUSE integrations; keep QMD IPv4 compatibility and heavy jobs background-only.",
   "id": "sprint-20260509-mineru-mirage-closeout",
   "sprint_id": "sprint-20260509-mineru-mirage-closeout",
@@ -111,7 +111,7 @@
       "ts": "2026-05-09T01:54:21Z",
       "event": "planner_loopbreak_reassert",
       "by": "planner",
-      "note": "Coordinator stuck in dispatch_failed -> wake-planner loop. Verified via tmux capture pane 0.2: builder Sonnet actively executing S2 (2 PDFs extracted to /Users/sihaoli/Knowledge/references/) and S4 (editing lib/external-integrations-health.py for 4-tier labels). Forcing status back to active. STOP redispatching.",
+      "note": "Coordinator stuck in dispatch_failed -> wake-planner loop. Verified via tmux capture pane 0.2: builder Sonnet actively executing S2 (2 PDFs extracted to /Users/lisihao/Knowledge/references/) and S4 (editing lib/external-integrations-health.py for 4-tier labels). Forcing status back to active. STOP redispatching.",
       "prior": {
         "status": "drafting",
         "phase": "spec",
@@ -119,7 +119,7 @@
       },
       "evidence": {
         "s2_pdf_extracted": 2,
-        "s2_output_dir": "/Users/sihaoli/Knowledge/references/",
+        "s2_output_dir": "/Users/lisihao/Knowledge/references/",
         "s4_in_progress_file": "lib/external-integrations-health.py",
         "builder_pane": "solar-harness:0.2",
         "builder_thinking_duration": "10m20s"
@@ -181,10 +181,14 @@
   "round": 2,
   "last_handoff_mtime": 1778291752.0,
   "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260509-mineru-mirage-closeout.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-mineru-mirage-closeout.dispatch.md",
-  "knowledge_exported_at": "2026-05-09T02:02:05Z",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-mineru-mirage-closeout.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-mineru-mirage-closeout.dispatch.md",
+  "knowledge_exported_at": "2026-05-24T01:51:13Z",
   "knowledge_ingested_at": null,
   "knowledge_export_error": null,
-  "target_role": "done"
+  "target_role": "done",
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-mineru-mirage-closeout.source_artifact_index.md",
+  "knowledge_summary_count": 1,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported"
 }

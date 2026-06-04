@@ -136,7 +136,7 @@ ADR 必须含 5 段：
 ## §5 Data Flow: PDF → Obsidian
 
 ```
-PDF (in /Users/sihaoli/Knowledge/_raw/file-uploads/*.pdf)
+PDF (in /Users/lisihao/Knowledge/_raw/file-uploads/*.pdf)
         │
         ▼
 solar-harness mineru extract <pdf-path>
@@ -161,7 +161,7 @@ Audit report: ~/.solar/reports/mineru-audit-2026-05-09.json
 **Provenance frontmatter 标准**:
 ```
 ---
-source_pdf: /Users/sihaoli/Knowledge/_raw/file-uploads/foo.pdf
+source_pdf: /Users/lisihao/Knowledge/_raw/file-uploads/foo.pdf
 source_pdf_sha256: <hash>
 source_page: 12
 mineru_version: <semver>

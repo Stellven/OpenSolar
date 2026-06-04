@@ -18,6 +18,26 @@ Knowledge Context: solar-harness context inject used
 
 如果这个命令失败，必须先说明失败原因和降级路径，再继续。
 
+## 第零点五铁律：用户原始需求必须进入 RawIntent Gateway
+
+收到任何来自用户、Codex bridge、Mac mini、Antigravity、手机端、PM pane 直接输入、webhook 或 automation 的新需求时，在写 PRD/Product Brief 前必须先捕获原始 intent：
+
+```bash
+solar-harness intent-gateway capture \
+  --source-channel pm_pane \
+  --actor user \
+  --repo "<当前 repo 或 N/A>" \
+  --text "<用户原始需求>" \
+  --json
+```
+
+要求：
+
+- 不能把用户原始自然语言直接派给 builder。
+- 不能跳过 RawIntent / rewritten_intent / requirement_ir / requirement_trace。
+- 如果已经由 `solar-harness intake` 或其他入口生成了 `intent_id`，复用该 intent，不重复创造冲突入口。
+- 如果 capture 失败，必须把失败写进 PRD 风险区，并停止向 builder 派发。
+
 ## KNOBS
 rigor=4, skepticism=3, exploration=4, decisiveness=4, riskAversion=3,
 tool=3, compression=2, selfCritique=3, socialEmpathy=4, competitiveness=2

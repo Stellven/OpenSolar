@@ -141,3 +141,51 @@ def test_chief_editor_local_command_records_real_usage_json(tmp_path):
     assert len(usage_rows) == 2
     assert usage_rows[0]["token_usage_is_estimated"] is False
     assert usage_rows[0]["total_tokens"] == 255
+
+
+def test_chief_editor_publishes_status_projection(tmp_path, monkeypatch):
+    _write_human_final(tmp_path)
+    reports_root = tmp_path / "harness-home" / "reports"
+    monkeypatch.setenv("HARNESS_DIR", str(tmp_path / "harness-home"))
+
+    (tmp_path / "survey_final_summary.json").write_text(
+        json.dumps({"title": "CAIS 2026 DeepDive"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "survey_source_gap.json").write_text(
+        json.dumps(
+            {
+                "brief": "CAIS 2026",
+                "source_count": 23,
+                "evidence_count": 46,
+                "claim_count": 46,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "survey_section_factual_audit.json").write_text(
+        json.dumps({"section_grounding_accuracy": 1.0}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "survey_section_scorecard.json").write_text(
+        json.dumps({"section_count": 32}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "survey_human_execution_metrics.json").write_text(
+        json.dumps({"total_tokens": 255, "document_word_count": 1234}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "survey_eval.json").write_text(json.dumps({"ok": False}, ensure_ascii=False), encoding="utf-8")
+
+    payload = chief_editor.run_chief_editor(tmp_path, backend="deterministic", min_chars=100)
+
+    report_dir = reports_root / tmp_path.name
+    manifest = report_dir / f"{tmp_path.name}-research_eval.json"
+    assert payload["ok"] is True
+    assert manifest.exists()
+    saved = json.loads(manifest.read_text(encoding="utf-8"))
+    assert saved["final_md"].endswith("chief_editor_final.md")
+    assert saved["status"] == "partial"
+    assert saved["source_count"] == 23
+    assert (report_dir / "chief_editor_final.md").exists()

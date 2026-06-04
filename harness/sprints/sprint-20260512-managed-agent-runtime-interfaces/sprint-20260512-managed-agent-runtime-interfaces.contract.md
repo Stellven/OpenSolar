@@ -73,8 +73,8 @@ Already done by `sprint-20260511-managed-agent-runtime-foundation`:
 - `docs/managed-agent-runtime-interfaces.md`
 - `reports/managed-agent-runtime-interfaces/interface-inventory.{json,md}`
 - `reports/managed-agent-runtime-interfaces/chaos-report.{json,md}`
-- `/Users/sihaoli/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-20260512.md`
-- `/Users/sihaoli/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-eval.md`
+- `/Users/lisihao/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-20260512.md`
+- `/Users/lisihao/Knowledge/_raw/solar-harness/managed-agent-runtime-interfaces-eval.md`
 - tests:
   - `tests/runtime/test-session-get-events.sh`
   - `tests/runtime/test-hands-runtime.sh`
@@ -101,7 +101,7 @@ Already done by `sprint-20260511-managed-agent-runtime-foundation`:
     - `tests/runtime/test-projection-replay.sh`
     - `tests/runtime/test-activity-runtime.sh`
     - `tests/runtime/test-wake-projection-routing.sh`
-14. Every analysis/design/contract/eval artifact must be mirrored to `/Users/sihaoli/Knowledge/_raw/solar-harness/`.
+14. Every analysis/design/contract/eval artifact must be mirrored to `/Users/lisihao/Knowledge/_raw/solar-harness/`.
 
 ## Stop Rules
 

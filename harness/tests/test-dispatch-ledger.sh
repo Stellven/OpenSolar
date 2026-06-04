@@ -170,6 +170,13 @@ terminal_depth=$(queue_depth "sprint-terminal")
 check "queue_consume_all leaves depth 0" "$terminal_depth" "0"
 terminal_line=$(grep -m1 'test_terminal_passed' "$_QUEUE_DIR/sprint-terminal.jsonl" || true)
 check_contains "queue_consume_all records reason" "$terminal_line" "test_terminal_passed"
+if [[ ! -e "$_QUEUE_DIR/sprint-terminal.jsonl.lock" ]]; then
+    echo "  ✅ queue_consume_all removes empty terminal lock"
+    PASS=$((PASS+1))
+else
+    echo "  ❌ queue_consume_all removes empty terminal lock"
+    FAIL=$((FAIL+1))
+fi
 
 # T23: intent-prefix consume only marks matching pending items
 queue_enqueue "sprint-prefix" "pm_prd_fix|role=pm|file=x.dispatch.md" 80 >/dev/null

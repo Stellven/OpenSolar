@@ -251,7 +251,7 @@ HARNESS_TEST=1 bash ~/.solar/harness/test-obsidian-wiki-integration.sh status
 HARNESS_TEST=1 OBSIDIAN_VAULT_PATH="$TMPVAULT" \
   ~/.solar/harness/integrations/obsidian-wiki.sh status --json | \
   python3 -c 'import sys, json, jsonschema; \
-    schema=json.load(open("/Users/sihaoli/.solar/harness/schemas/obsidian-wiki-status.schema.json")); \
+    schema=json.load(open("/Users/lisihao/.solar/harness/schemas/obsidian-wiki-status.schema.json")); \
     data=json.load(sys.stdin); jsonschema.validate(data, schema); print("OK")'
 # 预期: "OK"
 

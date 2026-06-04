@@ -19,21 +19,21 @@ related:
 
 ## Intent
 
-Make Solar's default knowledge context actually retrieve from the user's knowledge base before work starts. The existing `UserPromptSubmit` hook is installed, but it only succeeds when `~/.solar/solar.db` has matching rows. `/Users/sihaoli/Knowledge` is already searchable through `qmd -c solar-wiki`, so the default context path must fall back to qmd when Solar DB/FTS misses.
+Make Solar's default knowledge context actually retrieve from the user's knowledge base before work starts. The existing `UserPromptSubmit` hook is installed, but it only succeeds when `~/.solar/solar.db` has matching rows. `/Users/lisihao/Knowledge` is already searchable through `qmd -c solar-wiki`, so the default context path must fall back to qmd when Solar DB/FTS misses.
 
 The user-facing rule is simple: if `qmd search "大模型热力学" -c solar-wiki` can find a note, then Solar's default work context must also be able to inject that note as sourced `<solar-knowledge-context>`.
 
 ## Current Evidence
 
-- Hook is registered in `/Users/sihaoli/.claude/settings.json` under `UserPromptSubmit`:
-  - `/Users/sihaoli/.claude/hooks/solar-knowledge-context.sh`
+- Hook is registered in `/Users/lisihao/.claude/settings.json` under `UserPromptSubmit`:
+  - `/Users/lisihao/.claude/hooks/solar-knowledge-context.sh`
 - Retrieval script exists:
-  - `/Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py`
+  - `/Users/lisihao/.solar/harness/lib/solar-knowledge-context.py`
 - Current retrieval misses vault content:
   - `python3 ~/.solar/harness/lib/solar-knowledge-context.py --query '大模型热力学' --json`
   - observed result: `"hits": []`
 - qmd can find the same knowledge:
-  - `/Users/sihaoli/.npm-global/bin/qmd search '大模型热力学' -c solar-wiki --json -n 3`
+  - `/Users/lisihao/.npm-global/bin/qmd search '大模型热力学' -c solar-wiki --json -n 3`
   - observed result: `qmd://solar-wiki/synthesis/大模型热力学-thermodynamics-of-large-models.md`
 - `obsidian_vault_index` is not currently present in `~/.solar/solar.db`, so relying only on Solar DB/FTS is insufficient.
 
@@ -52,7 +52,7 @@ The user-facing rule is simple: if `qmd search "大模型热力学" -c solar-wik
    - Use qmd collection `solar-wiki` by default.
    - Locate qmd via:
      - `$QMD_BIN`
-     - `/Users/sihaoli/.npm-global/bin/qmd`
+     - `/Users/lisihao/.npm-global/bin/qmd`
      - `command -v qmd`
    - Parse `--json` output.
    - Convert qmd results to the existing hit schema:
@@ -66,7 +66,7 @@ The user-facing rule is simple: if `qmd search "大模型热力学" -c solar-wik
    - Keep timeout and max-char budgets.
 
 2. **Hook-level default behavior**
-   - `/Users/sihaoli/.claude/hooks/solar-knowledge-context.sh` must keep fail-open behavior.
+   - `/Users/lisihao/.claude/hooks/solar-knowledge-context.sh` must keep fail-open behavior.
    - It must inject context when qmd fallback hits, not silently return empty.
    - It must remain disabled by `SOLAR_KB_CONTEXT=0`.
 
@@ -79,7 +79,7 @@ The user-facing rule is simple: if `qmd search "大模型热力学" -c solar-wik
 
 4. **Tests**
    - Add or extend a regression test, for example:
-     - `/Users/sihaoli/.solar/harness/tests/test-solar-kb-qmd-fallback.sh`
+     - `/Users/lisihao/.solar/harness/tests/test-solar-kb-qmd-fallback.sh`
    - Tests must cover:
      - DB miss + qmd hit
      - qmd unavailable -> fail-open empty hits
@@ -107,7 +107,7 @@ Required:
 Verify:
 
 ```bash
-python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
+python3 /Users/lisihao/.solar/harness/lib/solar-knowledge-context.py \
   --query '大模型热力学' --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["hits"], d; assert any("大模型" in (h.get("title","")+h.get("snippet","")) for h in d["hits"]), d'
 ```
@@ -121,7 +121,7 @@ Verify:
 
 ```bash
 printf '{"user_prompt":"帮我基于大模型热力学分析注意力机制"}' \
-  | /Users/sihaoli/.claude/hooks/solar-knowledge-context.sh \
+  | /Users/lisihao/.claude/hooks/solar-knowledge-context.sh \
   | grep -q '<solar-knowledge-context>'
 ```
 
@@ -135,7 +135,7 @@ Verify:
 
 ```bash
 QMD_BIN=/tmp/no-such-qmd \
-python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
+python3 /Users/lisihao/.solar/harness/lib/solar-knowledge-context.py \
   --query '大模型热力学' --json --fail-open \
   | python3 -c 'import json,sys; json.load(sys.stdin)'
 ```
@@ -149,7 +149,7 @@ Verify:
 
 ```bash
 out=$(printf '{"user_prompt":"大模型热力学"}' \
-  | SOLAR_KB_CONTEXT=0 /Users/sihaoli/.claude/hooks/solar-knowledge-context.sh)
+  | SOLAR_KB_CONTEXT=0 /Users/lisihao/.claude/hooks/solar-knowledge-context.sh)
 test -z "$out"
 ```
 
@@ -162,7 +162,7 @@ Required:
 Verify:
 
 ```bash
-python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
+python3 /Users/lisihao/.solar/harness/lib/solar-knowledge-context.py \
   --query '大模型热力学' --json --max-chars 500 \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["total_chars"] <= 500, d'
 ```
@@ -172,7 +172,7 @@ python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-solar-kb-qmd-fallback.sh
+bash /Users/lisihao/.solar/harness/tests/test-solar-kb-qmd-fallback.sh
 ```
 
 ## Implementation Notes

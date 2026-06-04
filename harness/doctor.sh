@@ -19,6 +19,7 @@ LAB_SESSION_NAME="solar-harness-lab"
 doctor_json() {
   python3 << 'PYEOF'
 import json, subprocess, os, re, sys
+from pathlib import Path
 
 SESSION_NAME = "solar-harness"
 LAB_SESSION_NAME = "solar-harness-lab"
@@ -56,7 +57,17 @@ result = {
         "checked": False,
         "ok": False,
         "script": os.path.join(os.path.expanduser("~/.solar/harness"), "test-gateway-compat.sh")
-    }
+    },
+    "task_graph_gate_audit": {
+        "present": False,
+        "status": "missing",
+        "summary": "N/A",
+        "graphs_changed": 0,
+        "graphs_unresolved": 0,
+        "generated_at": "",
+        "report_path": "",
+        "markdown_report_path": ""
+    },
 }
 
 layout_personas = {}
@@ -362,6 +373,35 @@ if os.path.isfile(gateway_script):
 else:
     result["warnings"].append("gateway compatibility check missing: test-gateway-compat.sh")
 
+reports_dir = Path(HARNESS_DIR) / "reports"
+audit_reports = sorted(reports_dir.glob("task-graph-gate-backfill-audit-*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+if audit_reports:
+    latest = audit_reports[0]
+    try:
+        audit = json.loads(latest.read_text(encoding="utf-8"))
+        md_path = str(audit.get("markdown_report") or audit.get("markdown_report_path") or "")
+        if not md_path:
+            inferred_md = latest.with_suffix(".md")
+            if inferred_md.exists():
+                md_path = str(inferred_md)
+        unresolved = int(audit.get("graphs_unresolved") or 0)
+        changed = int(audit.get("graphs_changed") or 0)
+        result["task_graph_gate_audit"] = {
+            "present": True,
+            "status": "warn" if unresolved else "ok",
+            "summary": f"{changed} changed / {unresolved} unresolved",
+            "graphs_changed": changed,
+            "graphs_unresolved": unresolved,
+            "generated_at": str(audit.get("generated_at") or ""),
+            "report_path": str(latest),
+            "markdown_report_path": md_path,
+        }
+        if unresolved:
+            result["warnings"].append(f"task_graph gate audit unresolved: {unresolved} graph(s)")
+            result["repairs_available"].append(f"task-graph-gate-audit: inspect {latest}")
+    except Exception as e:
+        result["warnings"].append(f"task_graph gate audit unreadable: {e}")
+
 print(json.dumps(result, indent=2, ensure_ascii=False))
 PYEOF
 }
@@ -371,7 +411,7 @@ doctor_summary() {
   local json_output
   json_output=$(doctor_json)
 
-  local tmux_alive lab_alive coord_alive watchdog_alive gateway_ok qmd_ok qmd_pending bash_ver panes_count warnings_count
+  local tmux_alive lab_alive coord_alive watchdog_alive gateway_ok qmd_ok qmd_pending bash_ver panes_count warnings_count gate_audit_summary
   tmux_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin)['tmux_session_alive'])" 2>/dev/null)
   lab_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin).get('lab_session_alive', False))" 2>/dev/null)
   coord_alive=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin)['coordinator_alive'])" 2>/dev/null)
@@ -382,6 +422,7 @@ doctor_summary() {
   bash_ver=$(echo "$json_output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('bash_version','?'))" 2>/dev/null)
   panes_count=$(echo "$json_output" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['panes']))" 2>/dev/null)
   warnings_count=$(echo "$json_output" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['warnings']))" 2>/dev/null)
+  gate_audit_summary=$(echo "$json_output" | python3 -c "import json,sys; print(json.load(sys.stdin).get('task_graph_gate_audit',{}).get('summary','N/A'))" 2>/dev/null)
 
   echo ""
   echo "  ┌─ Doctor Summary ─────────────────────────┐"
@@ -393,6 +434,7 @@ doctor_summary() {
   echo "  │ gateway:$([ "$gateway_ok" == "True" ] && echo " ✅ compat" || echo " ❌ check")"
   echo "  │ qmd:    $([ "$qmd_ok" == "True" ] && echo "✅ resolver" || echo "❌ check") ${qmd_pending:0:22}"
   echo "  │ panes:  ${panes_count}"
+  echo "  │ gates:  ${gate_audit_summary:0:30}"
   echo "  │ warns:  ${warnings_count}"
   echo "  └────────────────────────────────────────────┘"
 

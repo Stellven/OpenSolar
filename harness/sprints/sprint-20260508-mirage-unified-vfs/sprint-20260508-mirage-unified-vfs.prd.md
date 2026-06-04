@@ -9,7 +9,7 @@
 
 ## 背景 / Context
 
-Solar 当前已经有多套数据入口：`~/.solar/solar.db`、Cortex 代码和数据、`/Users/sihaoli/Knowledge` Obsidian vault、QMD/MinerU 文档索引、盘上项目文件、sprint 产物、以及潜在的 Google Drive。问题是这些入口对 agent 暴露方式不统一：有的靠 SQLite 查询，有的靠 grep，有的靠 `solar-harness wiki`，有的靠 MCP/技能，有的尚未接入。
+Solar 当前已经有多套数据入口：`~/.solar/solar.db`、Cortex 代码和数据、`/Users/lisihao/Knowledge` Obsidian vault、QMD/MinerU 文档索引、盘上项目文件、sprint 产物、以及潜在的 Google Drive。问题是这些入口对 agent 暴露方式不统一：有的靠 SQLite 查询，有的靠 grep，有的靠 `solar-harness wiki`，有的靠 MCP/技能，有的尚未接入。
 
 Mirage 是 Strukto 的统一虚拟文件系统：把 Disk、Google Drive、GitHub、Postgres、Redis、Notion、Slack 等后端挂成一棵文件树，并通过熟悉的 `ls/cat/find/grep/jq` 风格 shell 操作。它默认不需要 host FUSE；FUSE 只是让 Claude Code/Codex 这类 CLI 看到真实挂载点的可选表面。
 
@@ -42,13 +42,13 @@ Mirage 是 Strukto 的统一虚拟文件系统：把 Disk、Google Drive、GitHu
 
 ### R2 — Solar Mirage Workspace Manifest
 
-- 新增 `/Users/sihaoli/.solar/harness/config/mirage.solar.yaml`。
+- 新增 `/Users/lisihao/.solar/harness/config/mirage.solar.yaml`。
 - 至少定义以下逻辑 mount：
-  - `/knowledge` -> `/Users/sihaoli/Knowledge`，read by default。
-  - `/raw` -> `/Users/sihaoli/Knowledge/_raw`，write allowed only for ingestion staging。
-  - `/sprints` -> `/Users/sihaoli/.solar/harness/sprints`，read by default。
-  - `/solar` -> `/Users/sihaoli/.solar`，read by default with secret filtering.
-  - `/cortex` -> `/Users/sihaoli/.claude/core/cortex`，read by default。
+  - `/knowledge` -> `/Users/lisihao/Knowledge`，read by default。
+  - `/raw` -> `/Users/lisihao/Knowledge/_raw`，write allowed only for ingestion staging。
+  - `/sprints` -> `/Users/lisihao/.solar/harness/sprints`，read by default。
+  - `/solar` -> `/Users/lisihao/.solar`，read by default with secret filtering.
+  - `/cortex` -> `/Users/lisihao/.claude/core/cortex`，read by default。
   - `/projects` -> allowlisted local project roots only，不挂整个 `$HOME`。
   - `/drive` -> Google Drive resource，credential missing 时显示 degraded，不阻塞本地 mounts。
   - `/qmd` -> QMD/MinerU collection view or command adapter，至少支持 search/read bridge。
@@ -112,7 +112,7 @@ Mirage 是 Strukto 的统一虚拟文件系统：把 Disk、Google Drive、GitHu
 ### R8 — Security Model
 
 - 默认只读。
-- Mount allowlist 必须显式，禁止默认挂 `/Users/sihaoli` 整个家目录。
+- Mount allowlist 必须显式，禁止默认挂 `/Users/lisihao` 整个家目录。
 - Secret redaction 覆盖 token、Bearer、sk-、api_key、refresh_token、client_secret、Google OAuth。
 - 写操作必须记录 event，并区分 local staging write vs remote write。
 - Mirage command 超时、输出大小、路径遍历、symlink escape 都要有测试。

@@ -10,7 +10,7 @@
 ## 总判定: PASS
 
 **Round 2 → Round 3 修复对照**:
-- **A2 (Round 2 FAIL → Round 3 PASS)**: `_vault_hits()` 现返回绝对路径 `source=str(VAULT_PATH)='/Users/sihaoli/Knowledge'`, `path=str(VAULT_PATH/fpath)='/Users/sihaoli/Knowledge/references/...'`. 多 token 查询 ("orbital data center Lumen Orbit") 返回 8 hits, 其中 5 个来自 vault 含 "Knowledge" 路径
+- **A2 (Round 2 FAIL → Round 3 PASS)**: `_vault_hits()` 现返回绝对路径 `source=str(VAULT_PATH)='/Users/lisihao/Knowledge'`, `path=str(VAULT_PATH/fpath)='/Users/lisihao/Knowledge/references/...'`. 多 token 查询 ("orbital data center Lumen Orbit") 返回 8 hits, 其中 5 个来自 vault 含 "Knowledge" 路径
 - **A5 (Round 2 FAIL → Round 3 PASS)**: 修改正确文件 `lib/symphony/status-server.py` (port 8765). Round 2 误改 `integrations/wiki-capture-server.py` (port 8788) 已不再是问题路径
 - **回归**: A1/A3/A4/A6/A7 全部保持 PASS
 
@@ -21,8 +21,8 @@
 | # | 条件 | 判定 | Live cmd 输出 |
 |---|------|------|--------------|
 | A1 | Default Solar KB Context Is Real | PASS | `A1_HITS: 6 ELAPSED_MS: 582.2` (< 800ms 限制) |
-| A2 | Obsidian Vault Is Indexed Into Solar Search | PASS | 8 hits 中 5 个来自 Knowledge vault, source/path 均为绝对 `/Users/sihaoli/Knowledge/...` |
-| A3 | Solar DB Exports To Obsidian Incrementally | PASS | `/Users/sihaoli/Knowledge/_raw/solar-db-export/` 存在, 含 5 个表 (cortex_sources, evo_memory_semantic, knowledge_claims, knowledge_entities, solar_kb_entries) |
+| A2 | Obsidian Vault Is Indexed Into Solar Search | PASS | 8 hits 中 5 个来自 Knowledge vault, source/path 均为绝对 `/Users/lisihao/Knowledge/...` |
+| A3 | Solar DB Exports To Obsidian Incrementally | PASS | `/Users/lisihao/Knowledge/_raw/solar-db-export/` 存在, 含 5 个表 (cortex_sources, evo_memory_semantic, knowledge_claims, knowledge_entities, solar_kb_entries) |
 | A4 | memory-influence.sh No Longer Silently Misses Semantic Memory | PASS | `bash -n` 通过 + `evo_memory_semantic` 查询返回 |
 | A5 | Sync Is Automatic And Observable | PASS | `curl /status` 包含 `solar_kb` (ok=true, indexed=156) + `obsidian_sync` (ok=true, vault_exists=true) |
 | A6 | Fail-Open Safety | PASS | SOLAR_DB=/tmp/missing 时返回 `hits: []` (graceful) |
@@ -49,8 +49,8 @@ cmd: python3 lib/solar-knowledge-context.py --query 'orbital data center Lumen O
 stdout (节选):
   HITS_COUNT: 8
   VAULT_HITS_WITH_KNOWLEDGE_PATH: 5
-    source='/Users/sihaoli/Knowledge' | path='/Users/sihaoli/Knowledge/references/lumen-orbit-why-train-ai-in-space-2024.md'
-    source='/Users/sihaoli/Knowledge' | path='/Users/sihaoli/Knowledge/references/hot-chips-9yr-ai-chip-evolution-next-1000x.md'
+    source='/Users/lisihao/Knowledge' | path='/Users/lisihao/Knowledge/references/lumen-orbit-why-train-ai-in-space-2024.md'
+    source='/Users/lisihao/Knowledge' | path='/Users/lisihao/Knowledge/references/hot-chips-9yr-ai-chip-evolution-next-1000x.md'
     [...更多 vault hits...]
   A2_PASS: True
 conclusion: 多 token 查询命中 5 个 vault 文件, source 和 path 均为绝对路径包含 Knowledge → PASS (Round 2 根因已修)
@@ -59,7 +59,7 @@ conclusion: 多 token 查询命中 5 个 vault 文件, source 和 path 均为绝
 ### Smoke 3: A3 solar-db-export 目录
 
 ```
-cmd: test -d /Users/sihaoli/Knowledge/_raw/solar-db-export && ls
+cmd: test -d /Users/lisihao/Knowledge/_raw/solar-db-export && ls
 stdout:
   A3_DIR_EXISTS
   cortex_sources / evo_memory_semantic / knowledge_claims / knowledge_entities / solar_kb_entries
@@ -124,7 +124,7 @@ conclusion: 10/10 → PASS
 | 项 | 合约 Done 原文 | 建设者实现 | 判定 |
 |----|--------------|-----------|------|
 | A2 source 字段 | "vault path 出现在 source 或 path 中" | source=str(VAULT_PATH) (line 169) | 合约一致 ✅ |
-| A2 path 字段 | "/Users/sihaoli/Knowledge 出现" | path=str(VAULT_PATH / fpath) (line 167) | 合约一致 ✅ |
+| A2 path 字段 | "/Users/lisihao/Knowledge 出现" | path=str(VAULT_PATH / fpath) (line 167) | 合约一致 ✅ |
 | A5 端点 | port 8765 (合约 verify cmd) | lib/symphony/status-server.py port 8765 ✅ | 合约一致 ✅ |
 
 无合约偏离。
@@ -140,7 +140,7 @@ verify-all skill 未在 evaluator pane 调用。手动 12 项替代 (C1-C7 + Q1-
 | C1 功能完备 | 7/7 verify cmds + 10/10 tests | OK |
 | C2 无断头 | _vault_hits 在 line 381 被调用; _solar_kb_status/_obsidian_sync_status 在 _status_payload 注入 | OK |
 | C3 自动触发 | status 端点对所有 GET 请求自动返回新 key; vault hits 在 retrieve fallback chain 中 | OK |
-| C4 默认使用 | OBSIDIAN_VAULT_PATH 默认 /Users/sihaoli/Knowledge, 无需配置 | OK |
+| C4 默认使用 | OBSIDIAN_VAULT_PATH 默认 /Users/lisihao/Knowledge, 无需配置 | OK |
 | C5 激活口令 | curl /status 即触发, 无需特殊 query | OK |
 | C6 错误处理 | _solar_kb_status 用 timeout=0.3 防 DB 锁; _obsidian_sync_status 容错 manifest 缺失 | OK |
 | C7 持久化 | obsidian_vault_index 156 行落 ~/.solar/solar.db (非 /tmp) | OK |
@@ -158,8 +158,8 @@ verify-all skill 未在 evaluator pane 调用。手动 12 项替代 (C1-C7 + Q1-
 
 | Round 2 FAIL 现象 | Round 2 根因 | Round 3 修复 | Round 3 验证 |
 |------------------|------------|------------|------------|
-| A2 source 返回 "obsidian" 字面值 | DB 列 source 直接返回, 未替换 | line 169 `"source": str(VAULT_PATH)` | live: source='/Users/sihaoli/Knowledge' ✅ |
-| A2 path 返回相对路径 | 未拼 VAULT_PATH | line 167 `abs_path = str(VAULT_PATH / fpath)` | live: path='/Users/sihaoli/Knowledge/references/...' ✅ |
+| A2 source 返回 "obsidian" 字面值 | DB 列 source 直接返回, 未替换 | line 169 `"source": str(VAULT_PATH)` | live: source='/Users/lisihao/Knowledge' ✅ |
+| A2 path 返回相对路径 | 未拼 VAULT_PATH | line 167 `abs_path = str(VAULT_PATH / fpath)` | live: path='/Users/lisihao/Knowledge/references/...' ✅ |
 | A2 多 token 查询不命中 | LIKE 对整个字符串单次匹配 | 按空格分割每 token 生成独立 OR 子句 | live: 4 token query 命中 5 vault docs ✅ |
 | A5 改了错误文件 | wiki-capture-server.py port 8788 ≠ harness status server | helpers 改入 lib/symphony/status-server.py port 8765 | live: curl 8765/status 返回双 key ✅ |
 
@@ -182,7 +182,7 @@ verify-all skill 未在 evaluator pane 调用。手动 12 项替代 (C1-C7 + Q1-
 | 2 | `lib/symphony/status-server.py` | UPDATED | line 884 (_solar_kb_status), line 904 (_obsidian_sync_status), line 938-939 (payload 注入) |
 | 3 | `tests/test-solar-kb-obsidian-autouse.sh` | (carry-over) | 10 测试用例 |
 | 4 | `obsidian_vault_index` (DB table) | (carry-over) | 156 已索引行 |
-| 5 | `/Users/sihaoli/Knowledge/_raw/solar-db-export/` | (carry-over) | 5 表导出目录 |
+| 5 | `/Users/lisihao/Knowledge/_raw/solar-db-export/` | (carry-over) | 5 表导出目录 |
 
 ---
 

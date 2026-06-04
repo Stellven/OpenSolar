@@ -60,4 +60,3 @@ Children order is preserved.
 ## Operational Notes
 
 `graph-dispatch` could not assign S05 work due to `no_matching_worker`; this handoff records local-equivalent evidence instead of hiding the dispatch failure.
-

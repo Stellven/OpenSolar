@@ -161,6 +161,117 @@ def _check_status_json(sprint_id: str) -> Dict[str, Any]:
         return {"ok": False, "warn": True, "message": f"corrupt: {exc}"}
 
 
+def _artifact_exists_for_sprint(sprint_id: str, suffix: str) -> bool:
+    base = Path(SPRINTS_DIR)
+    if (base / f"{sprint_id}.{suffix}").exists():
+        return True
+    if suffix in {"design.md", "plan.md", "handoff.md", "eval.md", "eval.json"}:
+        return any(base.glob(f"{sprint_id}.*-{suffix}"))
+    return False
+
+
+def _normalize_state_entry(entry: Any) -> str:
+    if isinstance(entry, dict):
+        return str(entry.get("status", "")).lower()
+    return str(entry or "").lower()
+
+
+def _check_state_surface_drift(sprint_id: str) -> Dict[str, Any]:
+    """Compare status / graph / state surfaces for obvious closeout drift."""
+    status_path = Path(SPRINTS_DIR) / f"{sprint_id}.status.json"
+    graph_path = Path(SPRINTS_DIR) / f"{sprint_id}.task_graph.json"
+    state_path = Path(SPRINTS_DIR) / f"{sprint_id}.task_dag.state.json"
+    issues: List[str] = []
+    details: Dict[str, Any] = {
+        "status_path": str(status_path),
+        "graph_path": str(graph_path),
+        "state_path": str(state_path),
+        "status": {},
+        "graph_parent_ready": None,
+        "artifact_evidence": {},
+    }
+
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() else {}
+    except Exception as exc:
+        return {"ok": False, "warn": True, "message": f"status corrupt: {exc}"}
+
+    status_value = str(status.get("status", "")).lower()
+    phase_value = str(status.get("phase", "")).lower()
+    terminal = status_value in {"passed", "completed", "eval_passed", "failed", "cancelled", "archived", "skipped", "superseded"}
+    terminal_pass_like = status_value in {"passed", "completed", "eval_passed"}
+    handoff_exists = _artifact_exists_for_sprint(sprint_id, "handoff.md")
+    eval_exists = _artifact_exists_for_sprint(sprint_id, "eval.md") or _artifact_exists_for_sprint(sprint_id, "eval.json")
+    details["artifact_evidence"] = {"handoff": handoff_exists, "eval": eval_exists}
+    details["status"] = {
+        "status": status_value,
+        "phase": phase_value,
+        "stage": str(status.get("stage", "")).lower(),
+        "task_graph_status": str(status.get("task_graph_status", "")).lower(),
+    }
+
+    graph_ready: Optional[bool] = None
+    state_closed: Optional[bool] = None
+
+    if graph_path.exists():
+        try:
+            graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            issues.append(f"graph_corrupt:{exc}")
+            graph = {}
+        if graph:
+            try:
+                sys.path.insert(0, os.path.dirname(__file__))
+                from graph_scheduler import parent_ready_check  # noqa: WPS433
+
+                parent = parent_ready_check(graph)
+            except Exception as exc:
+                parent = {"ready": False, "error": str(exc)}
+            details["graph_parent_ready"] = parent
+            graph_ready = parent.get("ready") is True
+            if terminal_pass_like and parent.get("ready") is not True:
+                issues.append("terminal_status_parent_not_ready")
+
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            issues.append(f"state_corrupt:{exc}")
+            state = {}
+        if state:
+            node_results = state.get("node_results") if isinstance(state.get("node_results"), dict) else {}
+            gate_results = state.get("gate_results") if isinstance(state.get("gate_results"), dict) else {}
+            open_state_nodes = sorted(
+                node_id for node_id, entry in node_results.items()
+                if _normalize_state_entry(entry) not in {"passed", "failed", "cancelled", "skipped", "completed", "eval_passed"}
+            )
+            open_state_gates = sorted(
+                gate_id for gate_id, entry in gate_results.items()
+                if _normalize_state_entry(entry) not in {"passed", "failed", "cancelled", "skipped", "completed", "eval_passed"}
+            )
+            details["state_open_nodes"] = open_state_nodes
+            details["state_open_gates"] = open_state_gates
+            state_closed = not open_state_nodes and not open_state_gates
+            if terminal_pass_like and (open_state_nodes or open_state_gates):
+                issues.append("terminal_status_state_not_closed")
+
+    if handoff_exists and eval_exists and not terminal:
+        if graph_ready is True:
+            if state_closed is not False:
+                issues.append("terminal_evidence_nonterminal_status")
+        elif graph_ready is None:
+            issues.append("terminal_evidence_nonterminal_status")
+
+    message = "no drift" if not issues else ",".join(issues[:6])
+    return {
+        "ok": not issues,
+        "warn": bool(issues),
+        "message": message,
+        "issues": issues,
+        "details": details,
+    }
+
+
 def _check_interface_health(sprint_id: str) -> Dict[str, Any]:
     """Check runtime interface layer health: modules importable, adapters exist."""
     sys.path.insert(0, os.path.dirname(__file__))
@@ -462,6 +573,7 @@ def doctor_sprint(
         "duplicate_commands": _check_duplicate_commands(sprint_id),
         "stale_activities":  _check_stale_activities(sprint_id),
         "status_json":       _check_status_json(sprint_id),
+        "state_surface_drift": _check_state_surface_drift(sprint_id),
         "interface_health": _check_interface_health(sprint_id),
         "context_runtime": _check_context_runtime(sprint_id),
         "model_call_runtime": _check_model_call_runtime(sprint_id),

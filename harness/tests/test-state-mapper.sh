@@ -31,6 +31,13 @@ print(json.dumps(d))
     echo "$sf"
 }
 
+make_task_graph() {
+    local sid="$1"
+    cat > "$TMPDIR_FIXTURES/${sid}.task_graph.json" <<'JSON'
+{"nodes":[{"id":"N1","title":"fixture","write_scope":["sprints/fixture.handoff.md"]}]}
+JSON
+}
+
 check() {
     local label="$1" got="$2" want_lc="$3" want_role="$4"
     local got_lc got_role
@@ -70,6 +77,7 @@ check "drafting+prd_ready (no handoff_to) → prd_ready/planner" "$result" "prd_
 
 # ── Fixture 4: active → planning_complete/builder_main ───────────────────────
 make_fixture "fx4" "active" "" "" >/dev/null
+make_task_graph "fx4"
 result=$(map_canonical_state "fx4")
 check "active → planning_complete/builder_main" "$result" "planning_complete" "builder_main"
 
@@ -80,6 +88,7 @@ check "reviewing → build_complete/evaluator" "$result" "build_complete" "evalu
 
 # ── Fixture 5b: planning_complete status → planning_complete/builder_main ───
 make_fixture "fx5b" "planning_complete" "planning_complete" "builder_main" >/dev/null
+make_task_graph "fx5b"
 result=$(map_canonical_state "fx5b")
 check "status=planning_complete → planning_complete/builder_main" "$result" "planning_complete" "builder_main"
 
@@ -122,6 +131,11 @@ check "failed → failed/none" "$result" "failed" "none"
 make_fixture "fx8" "failed_review" "" "" >/dev/null
 result=$(map_canonical_state "fx8")
 check "failed_review → blocked/builder_main" "$result" "blocked" "builder_main"
+
+# ── Fixture 8b: blocked → blocked/planner ────────────────────────────────────
+make_fixture "fx8b" "blocked" "" "" >/dev/null
+result=$(map_canonical_state "fx8b")
+check "blocked → blocked/planner" "$result" "blocked" "planner"
 
 # ── Fixture 9: corrupt/missing JSON → corrupt/none ───────────────────────────
 echo "NOT VALID JSON{{{{" > "$TMPDIR_FIXTURES/fx9.status.json"

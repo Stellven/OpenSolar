@@ -1,34 +1,32 @@
-{"ts": "2026-05-10T14:41:32Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:41:55Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatched", "by": "coordinator"}
-{"ts": "2026-05-10T14:46:20Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260510-contract-housekeeping"}
-{"ts": "2026-05-10T14:46:42Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_dispatch_queued_pane_occupied", "severity": "warn", "data": {"target": "solar-harness:0.3", "type": "pane_idle_with_pending_artifact", "reason": "pane_leased", "detail": {"pane": "solar-harness:0.3", "sid": "sprint-20260510-solar-mia-full-integration", "dispatch_id": "d-20260510T143946Z-8f6ead", "acquired_at": "2026-05-10T14:39:46Z", "expires_at": "2026-05-10T14:49:46Z", "ttl_sec": 600, "active": true, "seconds_left": 183}}}
-{"ts": "2026-05-10T14:47:23Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:47:42Z", "sid": "sprint-20260510-contract-housekeeping", "event": "pane_assignment_released", "by": "coordinator"}
-{"ts": "2026-05-10T14:48:00Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T14:49:39Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:50:00Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T14:52:01Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:52:24Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T14:53:51Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:54:11Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T14:55:04Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:55:40Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T14:57:56Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:58:14Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-10T14:58:30Z", "sid": "sprint-20260510-contract-housekeeping"}
-{"ts": "2026-05-10T14:58:31Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_queue_dispatched", "severity": "info", "data": {"target": "solar-harness:0.3", "type": "pane_idle_with_pending_artifact", "attempts": 1}}
-{"ts": "2026-05-10T14:59:09Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T14:59:34Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatched", "by": "coordinator"}
-{"ts": "2026-05-10T15:02:12Z", "event": "eval_failed", "by": "evaluator", "verdict": "fail", "sid": "sprint-20260510-contract-housekeeping"}
-{"ts": "2026-05-10T15:03:18Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T15:03:34Z", "sid": "sprint-20260510-contract-housekeeping", "event": "failed_followup_generated", "by": "coordinator"}
-{"ts":"2026-05-10T15:03:35Z","event":"planner_notified","by":"coordinator","data":{"status":"failed"}}
-{"ts": "2026-05-10T15:03:52Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T15:04:13Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
-{"ts": "2026-05-11T14:44:29Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
-{"ts":"2026-05-11T14:44:31Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
-{"ts": "2026-05-11T14:44:45Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-11T14:45:00Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
-{"ts": "2026-05-11T14:45:17Z", "sid": "sprint-20260510-contract-housekeeping", "event": "handle_passed_completed", "by": "coordinator"}
-{"ts": "2026-05-11T14:45:17Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.accepted.md", "bytes": 8345, "source_hash": "3a4847e9244ef2135e7a219f9221dcb052871515d88f86168f8caca31ee871c2"}
-{"ts": "2026-05-11T14:45:17Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-contract-housekeeping.dispatch.md"}
+{"ts": "2026-05-24T01:51:13Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.accepted.md", "bytes": 5170, "source_hash": "629a488020e87bab5220f9e28a2921461ce13502c041a25efcc97880ba1063f3", "sidecars": {"source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.source_artifact_index.md", "summary:eval": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.eval.summary.md", "summary:status": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.status.summary.md", "summary:task_graph": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260510-contract-housekeeping.task_graph.summary.md"}}
+{"ts": "2026-05-24T01:51:13Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260510-contract-housekeeping.dispatch.md"}
+{"ts": "2026-05-26T18:06:56Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-26T18:07:21Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_lease_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_live_lease_without_active_graph_node", "lease": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260526T180656Z-3721d5", "acquired_at": "2026-05-26T18:06:56Z", "expires_at": "2026-05-26T18:16:56Z", "ttl_sec": 600}}}
+{"ts": "2026-05-26T18:10:15Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-26T18:12:31Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-26T22:13:25Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-26T22:13:26Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_lease_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_live_lease_without_active_graph_node", "lease": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260526T221326Z-49addf", "acquired_at": "2026-05-26T22:13:26Z", "expires_at": "2026-05-26T22:23:26Z", "ttl_sec": 600}}}
+{"ts": "2026-05-26T22:16:34Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-26T22:18:46Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-26T23:45:48Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-26T23:47:08Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_lease_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_live_lease_without_active_graph_node", "lease": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260526T234549Z-8f2acc", "acquired_at": "2026-05-26T23:45:49Z", "expires_at": "2026-05-26T23:55:49Z", "ttl_sec": 600}}}
+{"ts": "2026-05-26T23:49:42Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-26T23:52:38Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-27T02:07:08Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-27T02:07:12Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_lease_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_live_lease_without_active_graph_node", "lease": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260527T020709Z-e99d8a", "acquired_at": "2026-05-27T02:07:09Z", "expires_at": "2026-05-27T02:17:09Z", "ttl_sec": 600}}}
+{"ts": "2026-05-27T02:12:19Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-27T02:17:12Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-27T04:05:15Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-27T04:05:51Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_lease_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_live_lease_without_active_graph_node", "lease": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260527T040517Z-953123", "acquired_at": "2026-05-27T04:05:17Z", "expires_at": "2026-05-27T04:15:17Z", "ttl_sec": 600}}}
+{"ts": "2026-05-27T04:09:36Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-27T04:13:08Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-27T11:47:27Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-27T11:50:01Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_lease_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_live_lease_without_active_graph_node", "lease": {"pane": "solar-harness:0.2", "sid": "sprint-20260510-contract-housekeeping", "dispatch_id": "d-20260527T114728Z-a8e10c", "acquired_at": "2026-05-27T11:47:28Z", "expires_at": "2026-05-27T11:57:28Z", "ttl_sec": 600}}}
+{"ts": "2026-05-27T11:50:01Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_assignment_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_assignment_without_active_graph_node", "assignment": {"sid": "sprint-20260510-contract-housekeeping", "assigned_at": 1779882501.0, "age_sec": 100}}}
+{"ts": "2026-05-27T11:50:11Z", "sid": "sprint-20260510-contract-housekeeping", "event": "round_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T11:50:58Z", "event": "handoff_submitted", "by": "builder", "sid": "sprint-20260510-contract-housekeeping"}
+{"ts": "2026-05-27T12:18:32Z", "sprint_id": "sprint-20260510-contract-housekeeping", "actor": "solar-autopilot", "event": "autopilot_reconcile_assignment_cleared", "severity": "info", "data": {"pane": "solar-harness:0.2", "reason": "stale_assignment_without_active_graph_node", "assignment": {"sid": "sprint-20260510-contract-housekeeping", "assigned_at": 1779882501.0, "age_sec": 1811}}}
+{"ts": "2026-05-27T12:47:21Z", "sid": "sprint-20260510-contract-housekeeping", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-27T12:49:00Z", "sid": "sprint-20260510-contract-housekeeping", "event": "dag_node_results_auto_reconciled", "by": "coordinator"}
+{"ts": "2026-05-27T12:50:40Z", "sid": "sprint-20260510-contract-housekeeping", "event": "parent_review_blocked", "by": "coordinator"}
+{"event": "graph_parent_ready_passed", "by": "graph-dispatch", "data": {"node_count": 2, "required_gates": ["audit-pass", "cleanup-pass"]}, "ts": "2026-05-29T02:32:58Z", "sid": "sprint-20260510-contract-housekeeping"}

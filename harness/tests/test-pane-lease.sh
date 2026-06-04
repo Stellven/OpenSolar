@@ -73,6 +73,12 @@ check "release wrong did → released=False" "$released" "False"
 rel2=$(release_pane_lease "$PANE" "$DID1" "test_done")
 released2=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('released',''))" "$rel2" 2>/dev/null)
 check "release correct did → released=True" "$released2" "True"
+if [[ ! -e "$_PANE_LEASE_DIR/${PANE//:/_}.json.lock" ]]; then
+    release_lock_removed=1
+else
+    release_lock_removed=0
+fi
+check "release correct did removes lock file" "$release_lock_removed" "1"
 
 # T6: after release, pane is free again
 result3=$(acquire_pane_lease "$PANE" "sprint-new" "d-20260508T100002Z-112233" 600)
@@ -97,13 +103,21 @@ acquired4=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('acqu
 check "acquire after reap → acquired=True" "$acquired4" "True"
 release_pane_lease "solar-harness:0.3" "d-20260508T100004Z-000000" >/dev/null 2>&1 || true
 
-# T8b: release leaves lock files by design, but reaper must clean orphan locks.
+# T8b: reaper must clean orphan locks.
 ORPHAN_LOCK="solar-harness_0_9.json.lock"
 : > "$_PANE_LEASE_DIR/$ORPHAN_LOCK"
 reaped_orphan=$(reap_expired_leases)
 [[ ! -e "$_PANE_LEASE_DIR/$ORPHAN_LOCK" ]] && orphan_removed=1 || orphan_removed=0
 check "reap_expired_leases removes orphan lock" "$orphan_removed" "1"
 check "orphan lock reap counted" "$(( reaped_orphan >= 1 ))" "1"
+
+# T8c: release on an already-missing lease must still remove the orphan lock.
+MISSING_PANE="solar-harness:0.8"
+MISSING_LOCK="solar-harness_0_8.json.lock"
+: > "$_PANE_LEASE_DIR/$MISSING_LOCK"
+release_pane_lease "$MISSING_PANE" "d-missing" "missing_lease_cleanup" >/dev/null 2>&1 || true
+[[ ! -e "$_PANE_LEASE_DIR/$MISSING_LOCK" ]] && missing_lock_removed=1 || missing_lock_removed=0
+check "release missing lease removes orphan lock" "$missing_lock_removed" "1"
 
 echo ""
 echo "--- python lease compatibility ---"

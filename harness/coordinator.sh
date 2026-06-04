@@ -76,19 +76,20 @@ set +e
 set +u
 set +o pipefail 2>/dev/null || true
 
-# Pane targets are session-qualified. Product Delivery and Strategy Lab are
+# Pane targets are session-qualified. Product Delivery and Builder Lab are
 # separate tmux sessions, so bare pane indexes are no longer safe identifiers.
+# Main Product Delivery now reserves pane 0.2 for monitor, not builder work.
 PANE_NOTIFY="$SESSION_NAME:0.0"       # PM/product notification lane
 PANE_PLANNER_DEFAULT="$SESSION_NAME:0.1"
-PANE_BUILDER_DEFAULT="$SESSION_NAME:0.2"
+PANE_BUILDER_DEFAULT="$LAB_SESSION_NAME:0.0"
 PANE_EVALUATOR_DEFAULT="$SESSION_NAME:0.3"
-PANE_LEGACY_BUILDER="$SESSION_NAME:0.1"
-PANE_LEGACY_EVALUATOR="$SESSION_NAME:0.2"
+PANE_LEGACY_BUILDER="$LAB_SESSION_NAME:0.0"
+PANE_LEGACY_EVALUATOR="$SESSION_NAME:0.3"
 PANE_LEGACY_ARCHITECT="$SESSION_NAME:0.3"
 PANE_LAB_ARCHITECT="$LAB_SESSION_NAME:0.0"
-PANE_LAB_BUILDER="$LAB_SESSION_NAME:0.1"
-PANE_LAB_EVALUATOR="$LAB_SESSION_NAME:0.2"
-PANE_LAB_OBSERVER="$LAB_SESSION_NAME:0.3"
+PANE_LAB_BUILDER="$LAB_SESSION_NAME:0.0"
+PANE_LAB_EVALUATOR="$LAB_SESSION_NAME:0.1"
+PANE_LAB_OBSERVER="$SESSION_NAME:0.2"
 # Compatibility variables used by older call sites; route helpers below
 # dynamically discover the actual persona target when sessions are alive.
 PANE_BUILDER="$PANE_BUILDER_DEFAULT"
@@ -327,6 +328,27 @@ choose_available_builder_pane() {
 
 sprint_queue_priority() {
   local sid="$1" sf="$SPRINTS_DIR/${sid}.status.json"
+  local compile_boost
+  compile_boost=$(python3 -c "
+import json, pathlib
+sf=pathlib.Path('$sf')
+sid=sf.name.replace('.status.json','')
+d=json.load(open(sf))
+phase=str(d.get('phase',''))
+handoff=str(d.get('handoff_to',''))
+root=sf.parent
+req=(root/f'{sid}.requirement_ir.json').exists()
+graph=(root/f'{sid}.task_graph.json').exists()
+planning=(root/f'{sid}.plan.md').exists() and (root/f'{sid}.design.md').exists()
+if req and (phase in {'drafting','prd_ready'} or handoff=='planner' or not graph or not planning):
+    print('1')
+else:
+    print('0')
+" 2>/dev/null || echo "0")
+  if [[ "$compile_boost" == "1" ]]; then
+    echo 1000
+    return 0
+  fi
   local p
   p=$(python3 -c "import json; print(str(json.load(open('$sf')).get('priority','P1')).upper())" 2>/dev/null || echo "P1")
   case "$p" in
@@ -430,12 +452,28 @@ choose_lab_observer_pane() {
   discover_pane_by_persona "$LAB_SESSION_NAME" 0 "observer" "$PANE_LAB_OBSERVER"
 }
 
+role_pool_candidates_via_python() {
+  local role="$1"
+  local helper="$HARNESS_DIR/lib/pane_role_pool.py"
+  [[ -f "$helper" ]] || return 1
+  python3 "$helper" discover-role-pool --role "$role" 2>/dev/null | \
+    python3 -c 'import json,sys; data=json.load(sys.stdin); [print(item.get("pane","")) for item in data.get("panes",[]) if item.get("pane")]' 2>/dev/null
+}
+
 role_candidate_panes() {
   local role="$1" seen="" pane
+  while IFS= read -r pane; do
+    [[ -z "$pane" ]] && continue
+    case "$seen" in *" $pane "*) continue ;; esac
+    printf '%s\n' "$pane"
+    seen+=" $pane "
+  done < <(role_pool_candidates_via_python "$role" 2>/dev/null || true)
   case "$role" in
     builder)
       pane="$(choose_builder_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       while IFS= read -r pane; do
         [[ -z "$pane" ]] && continue
         case "$seen" in *" $pane "*) continue ;; esac
@@ -445,7 +483,9 @@ role_candidate_panes() {
       ;;
     pm)
       pane="$(choose_pm_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       while IFS= read -r pane; do
         [[ -z "$pane" ]] && continue
         case "$seen" in *" $pane "*) continue ;; esac
@@ -455,7 +495,9 @@ role_candidate_panes() {
       ;;
     evaluator)
       pane="$(choose_evaluator_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       while IFS= read -r pane; do
         [[ -z "$pane" ]] && continue
         case "$seen" in *" $pane "*) continue ;; esac
@@ -465,7 +507,9 @@ role_candidate_panes() {
       ;;
     planner)
       pane="$(choose_planner_pane)"
-      [[ -n "$pane" ]] && printf '%s\n' "$pane" && seen=" $pane "
+      if [[ -n "$pane" ]]; then
+        case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
+      fi
       pane="$(choose_architect_pane 2>/dev/null || true)"
       if [[ -n "$pane" ]]; then
         case "$seen" in *" $pane "*) ;; *) printf '%s\n' "$pane"; seen+=" $pane " ;; esac
@@ -511,6 +555,10 @@ dispatch_to_role() {
   local role="$1" sid="$2" intent="${3:-${role}_dispatch}" instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
   local message="${5:-}"
   local pane tried=0 last_rc=0
+  local terminal_suppressible=0
+  case "$intent" in
+    passed_notify|failed_max_rounds) terminal_suppressible=1 ;;
+  esac
   while IFS= read -r -u 9 pane; do
     [[ -n "$pane" ]] || continue
     pane_target_exists "$pane" || continue
@@ -529,11 +577,17 @@ dispatch_to_role() {
     if (( last_rc == 0 )); then
       return 0
     fi
+    if (( last_rc == 3 && terminal_suppressible == 1 )); then
+      log "${Y}[worker-select] suppress terminal ${role} dispatch sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
+      emit_event "$sid" "dispatch_suppressed" "coordinator" \
+        "{\"role\":\"${role}\",\"intent\":\"${intent}\",\"reason\":\"terminal_phase_wake_detected\"}"
+      return 0
+    fi
     log "${Y}[worker-select] ${role} target=${pane} dispatch rc=${last_rc}; trying next candidate${N}"
   done 9< <(role_candidate_panes "$role" 2>/dev/null || true)
 
-  if [[ "$intent" == "passed_notify" && "$last_rc" == "3" ]]; then
-    log "${Y}[worker-select] suppress terminal ${role} notify queue sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
+  if (( last_rc == 3 && terminal_suppressible == 1 )); then
+    log "${Y}[worker-select] suppress terminal ${role} queue sid=${sid} intent=${intent} reason=terminal_phase_wake_detected${N}"
     emit_event "$sid" "dispatch_suppressed" "coordinator" \
       "{\"role\":\"${role}\",\"intent\":\"${intent}\",\"reason\":\"terminal_phase_wake_detected\"}"
     return 0
@@ -1050,12 +1104,22 @@ is_pane_present() {
 
 capture_pane_tail() {
   local pane="$1" lines="${2:-3}"
-  tmux capture-pane -t "$pane" -p 2>/dev/null | tail -n "$lines"
+  tmux capture-pane -t "$pane" -p 2>/dev/null | python3 -c "
+import sys
+lines = sys.stdin.read().rstrip().splitlines()
+n = int(sys.argv[1])
+print('\n'.join(lines[-n:]))
+" "$lines"
 }
 
 pane_is_thinking_snapshot() {
   local snapshot="$1"
   printf '%s\n' "$snapshot" | grep -qE '(✻ Baked|✻ Worked|✻ Vibing|✻ Churned|✶ Flummoxing|·.* Vibing)'
+}
+
+pane_has_runtime_blocker_snapshot() {
+  local snapshot="$1"
+  printf '%s\n' "$snapshot" | grep -qiE "You've hit your limit|hit your limit|rate[- ]limit|usage limit|/upgrade to increase your usage limit|resets .*\\(America/Toronto\\)|How is Claude doing this session|1:[[:space:]]*Bad[[:space:]]+2:[[:space:]]*Fine[[:space:]]+3:[[:space:]]*Good[[:space:]]+0:[[:space:]]*Dismiss"
 }
 
 pane_is_idle_snapshot() {
@@ -1246,6 +1310,13 @@ wait_for_dispatch_window() {
     # 实测: builder pane respawn 后空白行多, ❯ 可能在倒数第 13 行
     # 修复: tail 30 行确保 ❯ 在窗口内,即使有大量空白行
     snapshot=$(capture_pane_tail "$pane" 30)
+
+    # Runtime quota/rate-limit and Claude feedback modals can still show the
+    # normal edit-mode footer. Treat them as unavailable before idle detection.
+    if pane_has_runtime_blocker_snapshot "$snapshot"; then
+      log "${Y}目标 pane 处于 runtime/modal blocker，跳过本轮派发: ${pane}${N}"
+      return 1
+    fi
 
     if pane_is_idle_snapshot "$snapshot"; then
       return 0
@@ -1513,7 +1584,7 @@ ensure_state_read_preflight() {
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-`/Users/sihaoli/.solar/STATE.md`
+`~/.solar/STATE.md`
 
 不要用 `cat` 替代这一步；本地 `state-read-enforcer.sh` hook 只认 Read 工具标记。
 
@@ -1524,6 +1595,55 @@ ensure_state_read_preflight() {
 EOF
   cat "$dispatch_file" >> "$tmp"
   mv "$tmp" "$dispatch_file"
+}
+
+# ensure_ack_contract — make coordinator ack-watcher observable by workers.
+# The watcher waits for sprints/<sid>.ack-<dispatch_id>.json, so every real
+# dispatch must carry the exact write contract with the current dispatch id.
+ensure_ack_contract() {
+  local dispatch_file="${1:-}"
+  local sid="${2:-}"
+  local dispatch_id="${3:-}"
+  local pane="${4:-unknown}"
+  [[ -z "$dispatch_file" || ! -f "$dispatch_file" ]] && return 0
+  [[ -z "$sid" || -z "$dispatch_id" ]] && return 0
+  grep -q "SOLAR_ACK_CONTRACT" "$dispatch_file" 2>/dev/null && return 0
+
+  cat >> "$dispatch_file" <<EOF
+
+<!-- SOLAR_ACK_CONTRACT -->
+## Dispatch ACK Contract
+
+确认已读取本 dispatch 并开始处理后，必须立即写 ACK 文件：
+
+\`~/.solar/harness/sprints/${sid}.ack-${dispatch_id}.json\`
+
+可直接执行：
+
+\`\`\`bash
+python3 - <<'PY'
+import datetime
+import json
+from pathlib import Path
+
+ack_path = Path.home() / ".solar" / "harness" / "sprints" / "${sid}.ack-${dispatch_id}.json"
+ack_path.parent.mkdir(parents=True, exist_ok=True)
+ack = {
+    "dispatch_id": "${dispatch_id}",
+    "sid": "${sid}",
+    "role": "${pane}",
+    "status": "in_progress",
+    "exit_code": 0,
+    "message": "dispatch read and accepted",
+    "artifacts": [],
+    "wrote_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+ack_path.write_text(json.dumps(ack, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+\`\`\`
+
+后续状态更新仍按 sprint 的 status / handoff / evidence 要求执行；ACK 只证明本 dispatch 已被真实读取并接收。
+EOF
 }
 
 # experience_pre_dispatch — advisory hook (fail-open, 50ms timeout)
@@ -1552,6 +1672,51 @@ except Exception as e:
   return 0
 }
 
+infer_dispatch_role_for_pane() {
+  local pane="$1" title=""
+  title="$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || true)"
+  if [[ "$title" =~ PM|产品经理 ]]; then
+    echo "pm"
+    return 0
+  fi
+  if [[ "$title" =~ Planner|规划者 ]]; then
+    echo "planner"
+    return 0
+  fi
+  if [[ "$title" =~ Evaluator|审判官 ]]; then
+    echo "evaluator"
+    return 0
+  fi
+  if [[ "$title" =~ Architect|架构师 ]]; then
+    echo "planner"
+    return 0
+  fi
+  if [[ "$title" =~ Builder|建设者|lab-builder ]]; then
+    echo "builder"
+    return 0
+  fi
+  case "$pane" in
+    "$SESSION_NAME:0.0") echo "pm" ;;
+    "$SESSION_NAME:0.1") echo "planner" ;;
+    "$SESSION_NAME:0.3") echo "evaluator" ;;
+    *) echo "builder" ;;
+  esac
+}
+
+ensure_clean_dispatch_boundary() {
+  local pane="$1" role="$2"
+  local helper="$HARNESS_DIR/lib/pane_role_pool.py"
+  [[ -f "$helper" ]] || return 0
+  local result rc=0
+  result="$(python3 "$helper" ensure-clean --pane "$pane" --role "$role" --registry "$HARNESS_DIR/run/pane-hygiene.json" 2>/dev/null)" || rc=$?
+  if (( rc != 0 )); then
+    log "${Y}[dispatch] /clear gate failed: pane=${pane} role=${role} result=${result:-N/A}${N}"
+    return 1
+  fi
+  log "${C}[dispatch] /clear gate passed: pane=${pane} role=${role}${N}"
+  return 0
+}
+
 # 向 pane 发送指令 (核心调度动作)
 # 原理: 长消息写到指令文件，tmux 只发一行短命令让 Claude 读文件
 dispatch_paused() {
@@ -1565,6 +1730,8 @@ dispatch_to_pane() {
   local message="$2"
   local sid="${3:-dispatch}"
   local instruction_file="${4:-$SPRINTS_DIR/${sid}.dispatch.md}"
+  local role
+  role="$(infer_dispatch_role_for_pane "$pane")"
 
   if dispatch_paused; then
     log "${Y}[dispatch] paused by no-dispatch flag; refusing pane dispatch sid=${sid} pane=${pane}${N}"
@@ -1607,7 +1774,7 @@ dispatch_to_pane() {
   local lock_dir="$HARNESS_DIR/.dispatch-pane-${pane_idx}.lock"
   clear_stale_dispatch_lock "$lock_dir" "$pane" || true
   if ! mkdir "$lock_dir" 2>/dev/null; then
-    log "${Y}[dispatch] pane ${pane} lock 忙, 拒派 ${sid}${N}"
+    log "${Y}[dispatch] pane ${pane} lock 忙 (dir=${lock_dir}), 拒派 ${sid}${N}"
     emit_event "$sid" "dispatch_blocked" "coordinator" \
       "{\"pane\":\"${pane}\",\"reason\":\"lock_busy\"}"
     return 2
@@ -1743,6 +1910,15 @@ dispatch_to_pane() {
 
   ensure_state_read_preflight "$instruction_file" || true
 
+  if ! ensure_clean_dispatch_boundary "$pane" "$role"; then
+    [[ -n "${_dispatch_id:-}" ]] && type release_pane_lease &>/dev/null && \
+      release_pane_lease "$pane" "$_dispatch_id" "clear_gate_failed" 2>/dev/null || true
+    rm -rf "$lock_dir"
+    emit_event "$sid" "dispatch_failed" "coordinator" \
+      "{\"pane\":\"${pane}\",\"reason\":\"clear_gate_failed\",\"role\":\"${role}\"}"
+    return 1
+  fi
+
   # 派发前预解锁输入态，避免 modal / plan mode / 残留输入吞键
   if [[ "$pane" =~ \.[0-9]+$ ]]; then
     exit_tmux_copy_mode_if_needed "$pane"
@@ -1792,6 +1968,7 @@ dispatch_to_pane() {
 
   # sprint-20260509-solar-capability-plane-unification D4: inject skills+KB context before dispatch
   inject_dispatch_context "$instruction_file" "$sid" "$pane" "${_dispatch_id:-}" || true
+  ensure_ack_contract "$instruction_file" "$sid" "${_dispatch_id:-}" "$pane" || true
   set_pane_capability_title "$pane" "$instruction_file"
 
   local visibility_text
@@ -1829,13 +2006,29 @@ dispatch_to_pane() {
     sleep 4
 
     local verify_output
-    # tail 10 → 30: keyword 在 chat history 里, idle 后会被滚到 tail 后面
-    verify_output=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -30)
-    local has_keyword=0 has_processing=0
-    printf '%s\n' "$verify_output" | grep -q "$dispatch_keyword" && has_keyword=1
-    # Claude 真在处理的特征: Crafting/Cogitating/Read(/⎿/✻/✻/Wandering/Sock-hopping
-    printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Read\(|Bash\(|Edit\(|Write\(|⎿|✻|✶|✳' && has_processing=1
-    if (( has_keyword && has_processing )); then
+    # tail 10 → 30 → 120: Claude Code TUI wraps long dispatch paths across
+    # multiple rows and may push the filename out of a narrow tail while the
+    # pane is already executing Read/Bash calls.  Use a wider window and accept
+    # either the dispatch basename, sprint id, or generic dispatch.md reference.
+    verify_output=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -120)
+    local has_keyword=0 has_processing=0 has_runtime_blocker=0
+    printf '%s\n' "$verify_output" | grep -qF "$dispatch_keyword" && has_keyword=1
+    (( has_keyword == 0 )) && printf '%s\n' "$verify_output" | grep -qF "$sid" && has_keyword=1
+    (( has_keyword == 0 )) && printf '%s\n' "$verify_output" | grep -qF "dispatch.md" && has_keyword=1
+    # Quota/rate-limit errors also render with the generic "⎿" marker.  Do not
+    # treat those as successful dispatch evidence, otherwise the pane assignment
+    # is persisted while the worker never actually accepts the task.
+    printf '%s\n' "$verify_output" | grep -qiE "You've hit your limit|hit your limit|rate[- ]limit|usage limit|/upgrade to increase your usage limit|resets .*\\(America/Toronto\\)" && has_runtime_blocker=1
+    # Claude Code survey prompts can contain generic activity glyphs/keywords, but
+    # they are modal human-feedback screens and cannot accept dispatch input.
+    printf '%s\n' "$verify_output" | grep -qiE "How is Claude doing this session|1:[[:space:]]*Bad[[:space:]]+2:[[:space:]]*Fine[[:space:]]+3:[[:space:]]*Good[[:space:]]+0:[[:space:]]*Dismiss" && has_runtime_blocker=1
+    # Claude 真在处理的特征。Claude Code 2.x frequently uses
+    # Ideating/Musing/Orbiting/Reticulating before a tool call; treating those
+    # as idle causes false dispatch failures while the pane is actually working.
+    printf '%s\n' "$verify_output" | grep -qE 'Crafting|Cogitating|Wandering|Sock-hopping|Crunched|Puzzling|Gusting|Ideating|Musing|Orbiting|Reticulating|Read\(|Bash\(|Edit\(|Write\(|按 dispatch|合约、PRD 读毕|What should Claude do|⎿|✻|✶|✳|✢' && has_processing=1
+    if (( has_runtime_blocker )); then
+      log "${Y}[dispatch] runtime limit/blocker detected; not assigning pane=${pane} sid=${sid} try=$((tries + 1))/${max_tries}${N}"
+    elif (( has_keyword && has_processing )); then
       PANE_CURRENT_SPRINT[$pane]="$sid"
       PANE_ASSIGN_TS[$pane]=$(date +%s)
       save_pane_assignments
@@ -2198,7 +2391,7 @@ generate_dispatch() {
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-\`/Users/sihaoli/.solar/STATE.md\`
+\`~/.solar/STATE.md\`
 
 不要用 \`cat\` 替代这一步；本地 \`state-read-enforcer.sh\` hook 只认 Read 工具标记。
 
@@ -2219,7 +2412,7 @@ generate_dispatch() {
 硬性判定：没有证据，不许报喜；存在未验证项时只能标 \`未验证\` 或 \`风险\`，不能标完成。
 
 ## 通用步骤说明
-1. 先用 Read 工具读取 \`/Users/sihaoli/.solar/STATE.md\`
+1. 先用 Read 工具读取 \`~/.solar/STATE.md\`
 2. 读取合约: 路径格式 \`~/.solar/harness/sprints/<sid>.contract.md\`
 3. 按指令执行，不超出范围
 4. 完成后写 handoff/eval + 更新 status.json
@@ -2264,6 +2457,22 @@ append_dispatch() {
 
 $*
 EOF
+}
+
+annotate_requirement_matrix_for_planning() {
+  local sid="$1"
+  local coverage_tool="$HARNESS_DIR/lib/requirement_coverage.py"
+  [[ -f "$SPRINTS_DIR/${sid}.requirement_ir.json" ]] || return 0
+  [[ -f "$coverage_tool" ]] || return 0
+  [[ -f "$SPRINTS_DIR/${sid}.design.md" ]] || return 1
+  [[ -f "$SPRINTS_DIR/${sid}.plan.md" ]] || return 1
+  python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.design.md" --requested-verdict pass >/dev/null || return 1
+  python3 "$coverage_tool" annotate-markdown --sid "$sid" --sprints-dir "$SPRINTS_DIR" --target-file "$SPRINTS_DIR/${sid}.plan.md" --requested-verdict pass >/dev/null || return 1
+  local render_tool="$HARNESS_DIR/lib/render_sprint_html.py"
+  if [[ -f "$render_tool" ]]; then
+    python3 "$render_tool" render --sid "$sid" --kind design --register >/dev/null 2>&1 || true
+    python3 "$render_tool" render --sid "$sid" --kind planning --register >/dev/null 2>&1 || true
+  fi
 }
 
 # D4: 从 eval.json 提取失败项 (短路)
@@ -2654,8 +2863,7 @@ handle_queued() {
     return 0
   fi
   if [[ "$phase" == "epic_waiting_dependency" || "$dependency_policy" == "activated_by_epic_dag" ]]; then
-    log "${Y}Queued epic child ${sid} 由 epic DAG/autopilot 激活，coordinator 不直接推进 PM intake${N}"
-    return 0
+    log "${G}Queued epic child ${sid} 依赖已满足，解除 epic_waiting_dependency 并回到 workflow guard 主链${N}"
   fi
 
   log "${G}Queued sprint ${sid} 阻塞已解除 → 推进 drafting/PM intake${N}"
@@ -2709,7 +2917,10 @@ PY
 
 4. 额外写人读 HTML artifact 到:
    ~/.solar/harness/sprints/${sid}.prd.html
-   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 prd.md。必须 self-contained，不依赖外部 CSS/JS/CDN；必须用清晰版式、卡片、表格、风险矩阵、锚点目录或 SVG 结构图组织信息，不能只是 Markdown 转 HTML。
+   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 prd.md。必须 self-contained，不依赖外部 CSS/JS/CDN。
+   优先使用统一渲染器生成:
+   python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind prd --register
+   \`prd.html\` 和后续 \`planning.html\` 必须统一为同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；不能只是 Markdown 转 HTML，也不能退化成朴素米色文档页。
 
 5. 写完 HTML 后注册并自动打开:
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind prd_html --path ~/.solar/harness/sprints/${sid}.prd.html
@@ -2789,15 +3000,28 @@ PY
 5. 写机器可执行 DAG 任务图到:
    ~/.solar/harness/sprints/${sid}.task_graph.json
 
+5.1 显式维护需求映射:
+   - task_graph.json 的每个节点都必须写出 `requirement_ids`，表示它覆盖哪些 requirement
+   - 每个节点都必须写出 `acceptance_ids`
+   - 禁止只依赖默认占位映射；Planner 必须把 requirement -> node 的关系写清楚
+
 6. 额外写人读 HTML artifact 到:
+   ~/.solar/harness/sprints/${sid}.design.html
    ~/.solar/harness/sprints/${sid}.planning.html
-   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN；必须展示架构方案、DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
+   HTML 是给用户阅读和审阅的可视化 artifact，不能替代 design.md、plan.md 或 task_graph.json。必须 self-contained，不依赖外部 CSS/JS/CDN。
+   `design.html` 用来承载架构设计视图，`planning.html` 用来承载执行计划 / DAG 视图；两者必须属于同一套 html-anything 默认视觉系统。
+   优先使用统一渲染器生成:
+   python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind design --register
+   python3 ~/.solar/harness/lib/render_sprint_html.py render --sid ${sid} --kind planning --register
+   \`design.html\` / \`planning.html\` 必须和 PM 侧 \`prd.html\` 保持同一套 richer 视觉系统：深色 hero、锚点目录 TOC、卡片分区、流程/架构图、技术栈/算子绑定区、风险矩阵；禁止回退成旧的朴素米色 planning 页。`design.html` 必须突出架构方案与技术栈绑定，`planning.html` 必须突出 DAG/并发边界、文件级写范围、验证命令、风险矩阵和 stop rules。
 
 7. 写完 HTML 后注册并自动打开:
+   python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind design_html --path ~/.solar/harness/sprints/${sid}.design.html
    python3 ~/.solar/harness/lib/html_artifact.py register --sid ${sid} --kind planning_html --path ~/.solar/harness/sprints/${sid}.planning.html
    helper 失败只记录 warn，不允许阻断 Planner -> Builder 主链路。
 
-8. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost。没有 write_scope 的节点不得并行。
+8. task_graph.json 每个节点必须包含: id、goal、depends_on、write_scope、read_scope、required_skills、preferred_model、gate、acceptance、estimated_cost、priority、required_phase、required_node_id、required_node_status、requirement_ids、acceptance_ids。没有 write_scope 的节点不得并行。
+   requirement_ids 必须是显式覆盖映射，不允许留空，不允许全部节点都机械复制同一组 id 除非你能在 design.md 里解释原因。
 
 9. plan 必须包含: 交付切片顺序、文件级写入范围、并发边界、验证命令、no-live-pane-mutation 保护、rollback/stop rule。
 
@@ -2805,6 +3029,7 @@ PY
    - status: active
    - phase: planning_complete
    - handoff_to: builder_main
+   - artifacts 追加 design_html: sprints/${sid}.design.html
    - artifacts 追加 planning_html: sprints/${sid}.planning.html
    - history 追加 planner_plan_completed
 
@@ -2828,6 +3053,13 @@ PY
     fi
     mark_drafting_flow "$sid" "planner"
     emit_event "$sid" "dispatched" "coordinator" "{\"to\":\"planner\",\"task\":\"implementation_plan\"}"
+    return 0
+  fi
+
+  if ! annotate_requirement_matrix_for_planning "$sid"; then
+    log "${R}Planner 产物存在但 Requirement Trace Matrix 注入失败，阻止推进 planning_complete${N}"
+    emit_event "$sid" "gate_blocked" "coordinator" "{\"stage\":\"planning\",\"reason\":\"requirement_trace_annotation_failed\"}"
+    rollback_state_cache "$sid"
     return 0
   fi
 
@@ -3358,11 +3590,14 @@ handle_approved() {
 
 1. 读取你的计划:
    cat ~/.solar/harness/sprints/${sid}.plan.md
+   cat ~/.solar/harness/sprints/${sid}.requirement_ir.json 2>/dev/null
+   cat ~/.solar/harness/sprints/${sid}.requirement_trace.json 2>/dev/null
 
 2. 按计划逐步实现代码
 
 3. 实现完成后写 handoff 文档到 ~/.solar/harness/sprints/${sid}.handoff.md
    必须包含: \`## 变更文件\`, \`## Done 达成\`, \`## 验证方法\`
+   还要逐条说明你完成了哪些 requirement，以及哪些仍待下轮完成；不要只写泛化总结。
 
 4. 更新状态:
    \`\`\`bash
@@ -3564,6 +3799,85 @@ handle_reviewing() {
     local parent_check parent_ready
     parent_check=$(bash "$HARNESS_DIR/solar-harness.sh" graph-scheduler parent-check --graph "$graph_path" 2>/dev/null || true)
     parent_ready=$(python3 -c "import json,sys; raw=sys.argv[1]; d=json.loads(raw) if raw.strip() else {}; print('1' if d.get('ready') else '0')" "$parent_check" 2>/dev/null || echo 0)
+    if [[ "$parent_ready" != "1" && -f "$SPRINTS_DIR/${sid}.handoff.md" ]]; then
+      local reconcile_result reconcile_changed
+      reconcile_result=$(python3 - "$graph_path" "$HARNESS_DIR" <<'PY' 2>/dev/null || true
+import datetime
+import json
+import pathlib
+import sys
+
+graph_path = pathlib.Path(sys.argv[1])
+harness_dir = pathlib.Path(sys.argv[2])
+try:
+    graph = json.loads(graph_path.read_text())
+except Exception as exc:
+    print(json.dumps({"ok": False, "error": str(exc)}))
+    raise SystemExit(0)
+
+nodes = graph.get("nodes") or []
+results = graph.setdefault("node_results", {})
+changed = []
+now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def artifact_exists(item: str) -> bool:
+    p = pathlib.Path(str(item))
+    if not p.is_absolute():
+        p = harness_dir / p
+    if p.is_file():
+        return p.stat().st_size > 0
+    if p.is_dir():
+        try:
+            return any(child.is_file() and child.stat().st_size > 0 for child in p.rglob("*"))
+        except OSError:
+            return False
+    return False
+
+for node in nodes:
+    node_id = str(node.get("id") or "")
+    if not node_id:
+        continue
+    result = results.get(node_id) if isinstance(results.get(node_id), dict) else {}
+    status = str(result.get("status") or node.get("status") or "").lower()
+    if status in {"passed", "done", "completed"}:
+        continue
+    write_scope = node.get("write_scope") or []
+    if not write_scope or not all(artifact_exists(item) for item in write_scope):
+        continue
+    gate = node.get("gate")
+    node["status"] = "passed"
+    results[node_id] = {
+        "status": "passed",
+        "gate_status": "passed" if gate else "",
+        "updated_at": now,
+        "note": "coordinator auto-reconciled from complete write_scope artifacts before evaluator dispatch",
+    }
+    changed.append(node_id)
+
+if changed:
+    gate_results = graph.setdefault("gate_results", {})
+    for gate in {str(n.get("gate")) for n in nodes if n.get("gate")}:
+        gated_nodes = [n for n in nodes if str(n.get("gate") or "") == gate]
+        if gated_nodes and all(str((results.get(str(n.get("id") or "")) or {}).get("status") or n.get("status") or "").lower() in {"passed", "done", "completed"} for n in gated_nodes):
+            gate_results[gate] = {
+                "status": "passed",
+                "updated_at": now,
+                "note": "coordinator auto-reconciled after write_scope artifact completion",
+            }
+    graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n")
+
+print(json.dumps({"ok": True, "changed": changed}, ensure_ascii=False))
+PY
+)
+      reconcile_changed=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]) if sys.argv[1].strip() else {}; print(len(d.get('changed') or []))" "$reconcile_result" 2>/dev/null || echo 0)
+      if (( reconcile_changed > 0 )); then
+        log "${Y}[handle_reviewing] reconciled ${reconcile_changed} DAG node result(s) from write_scope artifacts for ${sid}${N}"
+        emit_event "$sid" "dag_node_results_auto_reconciled" "coordinator" "$reconcile_result"
+        append_history "$sf" "dag_node_results_auto_reconciled" "coordinator"
+        parent_check=$(bash "$HARNESS_DIR/solar-harness.sh" graph-scheduler parent-check --graph "$graph_path" 2>/dev/null || true)
+        parent_ready=$(python3 -c "import json,sys; raw=sys.argv[1]; d=json.loads(raw) if raw.strip() else {}; print('1' if d.get('ready') else '0')" "$parent_check" 2>/dev/null || echo 0)
+      fi
+    fi
     if [[ "$parent_ready" != "1" ]]; then
       log "${Y}[handle_reviewing] ${sid} has task_graph but parent-check not ready; block parent evaluator dispatch${N}"
       emit_event "$sid" "parent_review_blocked" "coordinator" "{\"reason\":\"dag_parent_not_ready\",\"parent_check\":$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$parent_check")}"
@@ -3610,11 +3924,15 @@ handle_reviewing() {
 
 2. 读取 handoff:
    cat ~/.solar/harness/sprints/${sid}.handoff.md
+   cat ~/.solar/harness/sprints/${sid}.requirement_trace.json 2>/dev/null
+   cat ~/.solar/harness/sprints/${sid}.coverage_report.json 2>/dev/null
+   cat ~/.solar/harness/sprints/${sid}.acceptance_verdict.json 2>/dev/null
 
 3. 逐条检查 Done 定义，查看实际代码，运行测试验证
 
 4. 写评估报告到 ~/.solar/harness/sprints/${sid}.eval.md
    必须包含: \`## 总判定\` (PASS/FAIL), \`## Done 条件逐条\`
+   还必须对照 requirement coverage，说明 partial / missing 是否已经清零。
 
 5. **写结构化反馈到 ${sid}.eval.json** (eval.json schema 见 evaluator.md)
 
@@ -4190,6 +4508,58 @@ generate_architect_dispatch() {
   log "architect dispatch written: $out"
 }
 
+ensure_knowledge_closure_or_block() {
+  local sid="$1" sf="$2"
+  local aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
+  if [[ ! -f "$aae" ]]; then
+    python3 - "$sf" "accepted-artifact-export.py not found: $aae" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+err = sys.argv[2]
+data = json.loads(path.read_text())
+data["knowledge_closure_required"] = True
+data["knowledge_closure_status"] = "failed"
+data["knowledge_closure_error"] = err
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
+    log "${R}[knowledge-closure] BLOCK finalize: $sid — missing accepted-artifact-export.py${N}"
+    return 1
+  fi
+  local out rc
+  out=$(python3 "$aae" export --sid "$sid" --with-summaries --force-missing --json 2>&1)
+  rc=$?
+  mkdir -p "$HARNESS_DIR/logs"
+  printf '%s\n' "$out" >> "$HARNESS_DIR/logs/accepted-artifact-export.log"
+  if [[ "$rc" != "0" ]]; then
+    python3 - "$sf" "$out" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+err = sys.argv[2][-2000:]
+data = json.loads(path.read_text())
+data["knowledge_closure_required"] = True
+data["knowledge_closure_status"] = "failed"
+data["knowledge_closure_error"] = err
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
+    log "${R}[knowledge-closure] BLOCK finalize: $sid — accepted export failed${N}"
+    return 1
+  fi
+  python3 - "$sf" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+data["knowledge_closure_required"] = True
+data["knowledge_closure_status"] = "exported"
+data["knowledge_closure_error"] = None
+path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+PY
+  log "${G}[knowledge-closure] accepted artifact + summaries ready: $sid${N}"
+  return 0
+}
+
 # 审判官判定 PASS → 通知完成
 handle_passed() {
   local sid="$1" sf="$2"
@@ -4298,6 +4668,12 @@ else:
     fi
   fi
 
+  # P0 knowledge closure gate: finalized sprint must have accepted.md,
+  # source_artifact_index.md, and structured JSON/events summaries.
+  if ! ensure_knowledge_closure_or_block "$sid" "$sf"; then
+    return 1
+  fi
+
   touch "$finalized"
   # sprint-20260503-195627 D2: telemetry emit
   type telemetry_emit_run &>/dev/null && telemetry_emit_run "$sid" "passed" 2>> "$COORD_LOG" || true
@@ -4307,15 +4683,6 @@ else:
   append_history "$sf" "finalized" "coordinator"
   log "finalized: $sid"
 
-  # sprint-20260508-accepted-artifact-knowledge D4: async accepted artifact export (fail-open)
-  (
-    _aae="$HARNESS_DIR/lib/accepted-artifact-export.py"
-    if [[ -f "$_aae" ]]; then
-      mkdir -p "$HARNESS_DIR/logs"
-      python3 "$_aae" export --sid "$sid" 2>&1 | \
-        head -40 >> "$HARNESS_DIR/logs/accepted-artifact-export.log" || true
-    fi
-  ) &
 }
 
 # D5: needs_human_review 处理
@@ -4523,7 +4890,12 @@ with open('$patches_file','w') as f:
     rphase=$(get_field "$rsf" "phase")
     [[ -n "$rsid" ]] || continue
     if [[ ( "$rst" == "planning_complete" || "$rst" == "active" ) && ( "$rphase" == "planning_complete" || "$rphase" == "graph_dispatch_active" ) && -f "$SPRINTS_DIR/${rsid}.plan.md" ]]; then
-      if ! builder_flow_marked "$rsid" "builder_dispatch"; then
+      local recovery_guard_role
+      recovery_guard_role="$(workflow_guard_route_role "$rsid")"
+      if [[ "$recovery_guard_role" != "builder_main" && "$recovery_guard_role" != "builder" ]]; then
+        log "${Y}startup recovery: $rsid blocked before builder replay; workflow_guard=${recovery_guard_role:-none}${N}"
+        emit_event "$rsid" "startup_recovery_blocked_missing_task_graph" "coordinator" "{\"status\":\"${rst}\",\"phase\":\"${rphase}\",\"workflow_guard\":\"${recovery_guard_role:-none}\"}"
+      elif ! builder_flow_marked "$rsid" "builder_dispatch"; then
         ((planning_recovery_count+=1))
         log "startup recovery: replaying DAG-ready builder handoff for $rsid (status=${rst}, phase=${rphase})"
         handle_active "$rsid" "$rsf"
@@ -4705,12 +5077,10 @@ with open('$patches_file','w') as f:
               ;;
           esac
         else
-          # Recovery path: a previous coordinator version may have saved the
-          # eval_passed fingerprint before it knew how to dispatch the next
-          # dependency-ready slice. Keep this idempotent and only fire when the
-          # next slice is not already queued/in progress.
-          if [[ "$st" == "active" ]] && eval_passed_needs_progress "$sf"; then
-            log "${Y}[state-recovery] ${sid} eval_passed has dependency-ready next slice; driving handle_active despite unchanged fingerprint${N}"
+          # Recovery path: drive handle_active for active sprints with task_graph
+          # to ensure node evaluations/dispatches are processed without fingerprint changes
+          if [[ "$st" == "active" ]] && { eval_passed_needs_progress "$sf" || [[ -f "$SPRINTS_DIR/${sid}.task_graph.json" ]]; }; then
+            log "${Y}[state-recovery] ${sid} has task_graph or eval_passed; driving handle_active to ensure progress${N}"
             handle_active "$sid" "$sf"
           fi
         fi

@@ -32,7 +32,7 @@ Solar 完全不知道 Obsidian 库里有相关笔记
 ```
 
 监护人的实际工作流是:
-- 在 Obsidian (`/Users/sihaoli/Knowledge`) 写笔记
+- 在 Obsidian (`/Users/lisihao/Knowledge`) 写笔记
 - 通过 qmd CLI (`qmd search "X" -c solar-wiki`) 能搜到这些笔记
 - **但 Solar 默认上下文注入不走 qmd**, 只走 Solar DB
 
@@ -96,7 +96,7 @@ Solar 完全不知道 Obsidian 库里有相关笔记
 ### R1 — qmd Fallback in Retriever
 - 在 `solar-knowledge-context.py` 中：DB/FTS/vault-index 全部命中为空或部分命中后，**bounded** 调用 qmd
 - 默认 collection: `solar-wiki`
-- qmd 二进制定位顺序: `$QMD_BIN` → `/Users/sihaoli/.npm-global/bin/qmd` → `command -v qmd`
+- qmd 二进制定位顺序: `$QMD_BIN` → `/Users/lisihao/.npm-global/bin/qmd` → `command -v qmd`
 - 解析 qmd `--json` 输出
 - 转成现有 hit schema: `source / table / id / title / snippet / path / score`
 - `source` 字段标注为 `qmd:solar-wiki` (区别于 DB 来源)
@@ -153,7 +153,7 @@ Solar 完全不知道 Obsidian 库里有相关笔记
 
 ### A1 — Retriever 找到 qmd-only 知识
 ```bash
-python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
+python3 /Users/lisihao/.solar/harness/lib/solar-knowledge-context.py \
   --query '大模型热力学' --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["hits"], d; assert any("大模型" in (h.get("title","")+h.get("snippet","")) for h in d["hits"]), d'
 ```
@@ -161,14 +161,14 @@ python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
 ### A2 — Hook 注入 `<solar-knowledge-context>`
 ```bash
 printf '{"user_prompt":"帮我基于大模型热力学分析注意力机制"}' \
-  | /Users/sihaoli/.claude/hooks/solar-knowledge-context.sh \
+  | /Users/lisihao/.claude/hooks/solar-knowledge-context.sh \
   | grep -q '<solar-knowledge-context>'
 ```
 
 ### A3 — qmd 缺失 fail-open
 ```bash
 QMD_BIN=/tmp/no-such-qmd \
-python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
+python3 /Users/lisihao/.solar/harness/lib/solar-knowledge-context.py \
   --query '大模型热力学' --json --fail-open \
   | python3 -c 'import json,sys; json.load(sys.stdin)'
 ```
@@ -176,13 +176,13 @@ python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
 ### A4 — Disable Flag 生效
 ```bash
 out=$(printf '{"user_prompt":"大模型热力学"}' \
-  | SOLAR_KB_CONTEXT=0 /Users/sihaoli/.claude/hooks/solar-knowledge-context.sh)
+  | SOLAR_KB_CONTEXT=0 /Users/lisihao/.claude/hooks/solar-knowledge-context.sh)
 test -z "$out"
 ```
 
 ### A5 — Max-Chars 预算遵守
 ```bash
-python3 /Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py \
+python3 /Users/lisihao/.solar/harness/lib/solar-knowledge-context.py \
   --query '大模型热力学' --json --max-chars 500 \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["total_chars"] <= 500, d'
 ```
@@ -212,10 +212,10 @@ bash /Users/sihaori/.solar/harness/tests/test-solar-kb-qmd-fallback.sh
 ## 约束 / Constraints
 
 1. 写盘范围仅限:
-   - `/Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py`
-   - `/Users/sihaoli/.claude/hooks/solar-knowledge-context.sh` (如需微调)
-   - `/Users/sihaoli/.solar/harness/tests/test-solar-kb-qmd-fallback.sh` (新文件)
-   - `/Users/sihaoli/.solar/harness/runbooks/kb-default-context.md` (新文件 或追加到现有 runbook)
+   - `/Users/lisihao/.solar/harness/lib/solar-knowledge-context.py`
+   - `/Users/lisihao/.claude/hooks/solar-knowledge-context.sh` (如需微调)
+   - `/Users/lisihao/.solar/harness/tests/test-solar-kb-qmd-fallback.sh` (新文件)
+   - `/Users/lisihao/.solar/harness/runbooks/kb-default-context.md` (新文件 或追加到现有 runbook)
    - 选方案 (B) 时还允许动 dispatch 注入位置 (具体由 planner 指明)
 2. 不动 `solar.db` schema (不创建新表)
 3. 不引入新 Python 依赖 (只用 stdlib + 现有依赖)

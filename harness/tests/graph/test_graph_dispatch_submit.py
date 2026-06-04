@@ -145,6 +145,131 @@ class TestSendToPaneLiteral:
         assert graph["nodes"][0]["status"] == "pending"
         assert graph["nodes"][1]["status"] == "reviewing"
 
+    def test_stale_submit_ack_without_live_lease_does_not_resurrect_dispatch(self, tmp_harness, monkeypatch):
+        """Old ack files are not proof of a current dispatch after the lease expired."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "pending"
+        dispatch_id = f"graph-{sid}-N1-old"
+        dispatch_file = sprints / f"{sid}.N1-dispatch.md"
+        dispatch_file.write_text("# stale dispatch\n", encoding="utf-8")
+        ack_dir = sprints / "graph-acks"
+        ack_dir.mkdir()
+        (ack_dir / f"{sid}.N1-submit-ack.json").write_text(
+            json.dumps({"dispatch_id": dispatch_id, "pane": "solar-harness-lab:0.3"}) + "\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(gnd, "_ledger_dispatch_for", lambda *_: {"pane": "solar-harness-lab:0.3", "dispatch_id": dispatch_id})
+        monkeypatch.setattr(gnd, "read_lease", lambda *_: None)
+        monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda *_: "quota_exhausted")
+        monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: None)
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert graph["nodes"][0]["status"] == "pending"
+        assert "N1" not in graph["node_results"]
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": "solar-harness-lab:0.3",
+                "dispatch_id": dispatch_id,
+                "status": "pending",
+                "reason": "quota_exhausted",
+            }
+        ]
+
+    def test_active_dispatch_without_live_lease_requeues_pending(self, tmp_harness, monkeypatch):
+        """A dispatched node without a matching live lease must not stay dispatched."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "dispatched"
+        node["assigned_to"] = "solar-harness-lab:0.3"
+        node["dispatch_id"] = f"graph-{sid}-N1-old"
+        graph["node_results"]["N1"] = {
+            "status": "dispatched",
+            "assigned_to": node["assigned_to"],
+            "dispatch_id": node["dispatch_id"],
+        }
+
+        release_calls = []
+        monkeypatch.setattr(gnd, "read_lease", lambda *_: None)
+        monkeypatch.setattr(gnd, "_pane_title", lambda *_: "worker")
+        monkeypatch.setattr(gnd, "_pane_tail", lambda *_: "")
+        monkeypatch.setattr(gnd, "_pane_dispatch_prompt_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda *_: "")
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: release_calls.append(a) or {"released": True})
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert node["status"] == "pending"
+        assert "assigned_to" not in node
+        assert "dispatch_id" not in node
+        assert node["dispatch_retry_reason"] == "stale_submit_ack_without_live_lease"
+        assert "N1" not in graph["node_results"]
+        assert len(release_calls) == 1
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": "solar-harness-lab:0.3",
+                "dispatch_id": f"graph-{sid}-N1-old",
+                "status": "pending",
+                "reason": "stale_submit_ack_without_live_lease",
+            }
+        ]
+
+    def test_reconcile_accepts_lowercase_passed_eval_sidecar(self, tmp_harness, monkeypatch):
+        """Evaluator sidecars may write verdict=passed; reconcile must still close the node."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "reviewing"
+        graph["node_results"]["N1"] = {"status": "reviewing"}
+        (sprints / f"{sid}.N1-handoff.md").write_text("# handoff\n", encoding="utf-8")
+        (sprints / f"{sid}.N1-eval.json").write_text(
+            json.dumps({"verdict": "passed", "node_id": "N1"}) + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: {"released": True})
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert graph["nodes"][0]["status"] == "passed"
+        assert graph["node_results"]["N1"]["status"] == "passed"
+        assert graph["nodes"][0]["eval_json"] == str(sprints / f"{sid}.N1-eval.json")
+        assert repaired == [
+            {
+                "node": "N1",
+                "status": "passed",
+                "reason": "eval_sidecar_exists",
+                "handoff": str(sprints / f"{sid}.N1-handoff.md"),
+                "eval_json": str(sprints / f"{sid}.N1-eval.json"),
+                "verdict": "PASS",
+            }
+        ]
+
+    def test_assigned_pane_plan_mode_prompt_is_unavailable(self, tmp_harness, monkeypatch):
+        """A pane blocked in Claude plan-mode confirmation is not dispatchable."""
+        import graph_node_dispatcher as gnd
+
+        monkeypatch.setattr(gnd, "_pane_title", lambda *_: "Builder 3")
+        monkeypatch.setattr(gnd, "_pane_health", lambda *_: {})
+        monkeypatch.setattr(gnd, "_models_for_pane", lambda *_: ["glm"])
+        monkeypatch.setattr(
+            gnd,
+            "_pane_tail",
+            lambda *_args, **_kwargs: "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+        )
+
+        assert gnd._assigned_pane_unavailable_reason("solar-harness-lab:0.2") == "proceed_confirmation_prompt"
+
     def test_uses_confirmed_enter_submit(self, tmp_harness, monkeypatch):
         """_send_to_pane submits and verifies processing, avoiding prompt-stuck false positives."""
         calls_log = []
@@ -403,11 +528,11 @@ class TestQueueStateSemantics:
 
         tmp_path, sprints, sid, graph = tmp_harness
 
-        monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-1"})
+        monkeypatch.setattr("task_queue.enqueue", lambda sid, intent, priority, payload: {"ok": True, "id": "q-1", "intent": intent})
         result = enqueue_ready(
             graph,
             str(sprints / f"{sid}.task_graph.json"),
-            [{"pane": "test:0.1", "models": ["sonnet"], "skills": ["bash"], "capabilities": []}],
+            [{"pane": "test:0.1", "models": ["sonnet"], "skills": ["bash"], "capabilities": ["read", "shell", "bash"], "role": "builder", "dispatch_role": "builder", "host_role": "builder"}],
             lease=False,
         )
 
@@ -416,6 +541,7 @@ class TestQueueStateSemantics:
         assert graph["nodes"][0]["status"] == "assigned"
         assert graph["nodes"][0]["assigned_to"] == "test:0.1"
         assert graph["nodes"][0]["dispatch_id"]
+        assert "dispatch_id=" in result["enqueued"][0]["queue"].get("intent", "")
 
 
 # ---------------------------------------------------------------------------

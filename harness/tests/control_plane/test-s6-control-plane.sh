@@ -114,6 +114,8 @@ expired_ts = (datetime.datetime.utcnow() - datetime.timedelta(hours=2)).strftime
 fake = {'pane': 'solar-harness:0.9', 'sprint_id': 'test', 'dispatch_id': 'd-expired',
         'acquired_at': expired_ts, 'expires_at': expired_ts, 'ttl_sec': 600}
 (lease_dir / 'solar-harness_0_9.json').write_text(json.dumps(fake))
+(lease_dir / 'solar-harness_0_9.json.lock').write_text('')
+(lease_dir / 'solar-harness_0_8.json.lock').write_text('')
 
 # pane_state should return 'no_pane' (tmux not running in test env)
 from pane_lease import pane_state
@@ -124,9 +126,28 @@ assert s in ('no_pane', 'dead'), f'expected no_pane or dead, got {s}'
 from pane_lease import reap
 r = reap()
 assert r['reaped'] >= 1, f'reap count: {r}'
+assert not (lease_dir / 'solar-harness_0_9.json').exists()
+assert not (lease_dir / 'solar-harness_0_9.json.lock').exists()
+assert not (lease_dir / 'solar-harness_0_8.json.lock').exists()
+
+# release should remove its lock, including the already-gone case
+from pane_lease import release
+future_ts = (datetime.datetime.utcnow() + datetime.timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
+active = {'pane': 'solar-harness:0.7', 'sprint_id': 'test', 'dispatch_id': 'd-active',
+          'acquired_at': expired_ts, 'expires_at': future_ts, 'ttl_sec': 600}
+(lease_dir / 'solar-harness_0_7.json').write_text(json.dumps(active))
+(lease_dir / 'solar-harness_0_7.json.lock').write_text('')
+rel = release('solar-harness:0.7', 'd-active', 'test_release')
+assert rel['released'] is True, rel
+assert not (lease_dir / 'solar-harness_0_7.json').exists()
+assert not (lease_dir / 'solar-harness_0_7.json.lock').exists()
+(lease_dir / 'solar-harness_0_6.json.lock').write_text('')
+rel = release('solar-harness:0.6', 'd-missing', 'missing_release')
+assert rel['released'] is True, rel
+assert not (lease_dir / 'solar-harness_0_6.json.lock').exists()
 print('ok')
 " 2>/dev/null)
-check "pane_lease 3-state + reap" "$OUT" "ok"
+check "pane_lease 3-state + reap/release lock cleanup" "$OUT" "ok"
 
 # ── T9: autopilot fault-report (no tmux, no faults baseline) ─────────────────
 echo "T9: autopilot fault-report baseline"

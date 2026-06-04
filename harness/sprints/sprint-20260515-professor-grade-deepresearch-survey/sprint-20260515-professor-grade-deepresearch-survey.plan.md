@@ -28,4 +28,3 @@ Build survey-native package and gates without modifying the main harness archite
 - If source quality is poor, survey writing must stop rather than hallucinate.
 - If evaluator is too weak, it will rubber-stamp garbage.
 - If CLI absorbs survey logic, package architecture will rot.
-

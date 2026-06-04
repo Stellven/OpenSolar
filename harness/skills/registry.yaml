@@ -32,6 +32,12 @@ skills:
     entry: skills/builtins/review/SKILL.md
     promoted_at: "2026-05-09T00:00:00Z"
     promoted_by: s2-builder
+    # APO capability metadata (v2 extension fields)
+    apo_skill_id: skill.review
+    required_capabilities: [academic_critique, root_cause_debug]
+    mcp_tools: [git.read]
+    applicable_workflow_stages: [ReviewPatch]
+    output_artifacts: [review_report]
 
   - name: ship
     namespace: builtin
@@ -78,6 +84,12 @@ skills:
     entry: skills/user/brainstorm/SKILL.md
     promoted_at: "2026-05-09T00:00:00Z"
     promoted_by: s2-builder
+    # APO capability metadata (v2 extension fields)
+    apo_skill_id: skill.architecture-design
+    required_capabilities: [architecture_reasoning, long_context]
+    mcp_tools: [repo.read]
+    applicable_workflow_stages: [DesignSolution]
+    output_artifacts: [design_doc]
 
   - name: tdd
     namespace: user
@@ -100,6 +112,12 @@ skills:
     entry: skills/user/debug/SKILL.md
     promoted_at: "2026-05-09T00:00:00Z"
     promoted_by: s2-builder
+    # APO capability metadata (v2 extension fields)
+    apo_skill_id: skill.root-cause-debug
+    required_capabilities: [root_cause_debug, long_context]
+    mcp_tools: [git.read, repo.read]
+    applicable_workflow_stages: [DebugRCA]
+    output_artifacts: [root_cause_report, hypothesis_list]
 
   - name: qa
     namespace: user
@@ -122,3 +140,59 @@ skills:
     entry: skills/generated/investigate/SKILL.md
     promoted_at: null
     promoted_by: null
+    # APO capability metadata (v2 extension fields)
+    apo_skill_id: skill.context-scan
+    required_capabilities: [research_synthesis, long_context]
+    mcp_tools: [repo.read, git.read]
+    applicable_workflow_stages: [ScanContext]
+    output_artifacts: [context_summary, related_files]
+
+  # ─── APO-injected skill stubs — registered to satisfy classifier references ─
+
+  - name: benchmark-analysis
+    namespace: apo
+    status: draft
+    description: "Benchmark execution and analysis — run suite, collect metrics, compare before/after"
+    tags: [benchmark, performance, metrics]
+    min_score: 0.75
+    eval_pack: null
+    entry: null
+    promoted_at: null
+    promoted_by: null
+    apo_skill_id: skill.benchmark-analysis
+    required_capabilities: [test_execution, root_cause_debug]
+    mcp_tools: [shell.benchmark, artifact.write]
+    applicable_workflow_stages: [RunBenchmark]
+    output_artifacts: [benchmark_report, metrics_summary]
+
+  - name: implementation
+    namespace: apo
+    status: draft
+    description: "Code implementation — write and commit patch or feature module"
+    tags: [implementation, coding, patch]
+    min_score: 0.75
+    eval_pack: null
+    entry: null
+    promoted_at: null
+    promoted_by: null
+    apo_skill_id: skill.implementation
+    required_capabilities: [code_impl, test_generation]
+    mcp_tools: [repo.read, repo.write]
+    applicable_workflow_stages: [ImplementPatch]
+    output_artifacts: [patch_diff, implementation_summary]
+
+  - name: verification
+    namespace: apo
+    status: draft
+    description: "Evidence verification — confirm outputs, write ledger entry, sign-off"
+    tags: [verification, evidence, closeout]
+    min_score: 0.75
+    eval_pack: null
+    entry: null
+    promoted_at: null
+    promoted_by: null
+    apo_skill_id: skill.verification
+    required_capabilities: [test_execution, root_cause_debug]
+    mcp_tools: [artifact.write]
+    applicable_workflow_stages: [VerifyEvidence]
+    output_artifacts: [verification_report, evidence_ledger_entry]

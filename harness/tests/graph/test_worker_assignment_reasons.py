@@ -8,7 +8,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "lib"))
 
-from graph_scheduler import assign_workers  # noqa: E402
+from graph_scheduler import assign_workers, enqueue_ready  # noqa: E402
 
 
 def _worker(pane: str, *, busy: bool = False) -> dict:
@@ -33,7 +33,9 @@ def _node(node_id: str) -> dict:
 def test_queue_reason_distinguishes_capacity_from_no_matching_worker() -> None:
     result = assign_workers([_node("N1"), _node("N2")], [_worker("pane-a")])
     assert [item["node"] for item in result["assigned"]] == ["N1"]
-    assert result["queued"] == [{"node": "N2", "reason": "worker_capacity_exhausted"}]
+    assert result["queued"][0]["node"] == "N2"
+    assert result["queued"][0]["reason"] == "worker_capacity_exhausted"
+    assert "details" in result["queued"][0]
 
 
 def test_queue_reason_remains_no_matching_worker_when_skills_are_missing() -> None:
@@ -41,13 +43,16 @@ def test_queue_reason_remains_no_matching_worker_when_skills_are_missing() -> No
     worker["skills"] = ["python"]
     result = assign_workers([_node("N1")], [worker])
     assert result["assigned"] == []
-    assert result["queued"] == [{"node": "N1", "reason": "no_matching_worker"}]
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "no_matching_worker"
+    assert "pytest" in result["queued"][0]["details"]["missing_skills"]
 
 
-def test_queue_reason_capacity_when_matching_worker_is_busy() -> None:
+def test_busy_matching_worker_is_queued_instead_of_assigned() -> None:
     result = assign_workers([_node("N1")], [_worker("pane-a", busy=True)])
     assert result["assigned"] == []
-    assert result["queued"] == [{"node": "N1", "reason": "worker_capacity_exhausted"}]
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "worker_capacity_exhausted"
 
 
 def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue() -> None:
@@ -56,7 +61,21 @@ def test_queue_reason_runtime_not_running_when_matching_worker_is_shell_residue(
     worker["unavailable_reason"] = "worker_runtime_not_running"
     result = assign_workers([_node("N1")], [worker])
     assert result["assigned"] == []
-    assert result["queued"] == [{"node": "N1", "reason": "worker_runtime_not_running"}]
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "worker_runtime_not_running"
+
+
+def test_unavailable_matching_worker_is_not_assigned_even_when_not_busy() -> None:
+    worker = _worker("solar-harness-multi-task:0.0")
+    worker["busy"] = False
+    worker["unavailable_reason"] = "multi_task_shell_not_direct_worker"
+    result = assign_workers([_node("N1")], [worker])
+    assert result["assigned"] == []
+    assert result["queued"][0]["node"] == "N1"
+    assert result["queued"][0]["reason"] == "multi_task_shell_not_direct_worker"
+    assert result["queued"][0]["details"]["unavailable_reasons"] == [
+        "multi_task_shell_not_direct_worker"
+    ]
 
 
 def test_enriched_dag_capabilities_are_assignable() -> None:
@@ -90,3 +109,224 @@ def test_skill_labels_can_satisfy_required_capabilities() -> None:
     result = assign_workers([node], [worker])
     assert result["queued"] == []
     assert result["assigned"][0]["node"] == "N1"
+
+
+def test_control_plane_aliases_can_bind_specialized_builder_nodes() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "workflow.planning", "technical-writing", "algorithm"]
+    worker["capabilities"] = ["documentation", "governance"]
+    node = {
+        "id": "N1",
+        "preferred_model": "sonnet",
+        "required_skills": ["python", "solar-harness-control-plane", "architecture-writing"],
+        "required_capabilities": ["algorithm_design", "documentation"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_product_analytics_nodes_bind_general_builder_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "product.requirements", "planning", "analytics"]
+    worker["capabilities"] = ["product.requirements", "analytics"]
+    node = {
+        "id": "N1",
+        "preferred_model": "glm-5.1",
+        "required_skills": ["analytics", "product.requirements"],
+        "required_capabilities": ["analytics", "product.requirements"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_rag_reporting_nodes_bind_general_builder_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "docs", "harness.knowledge", "technical-writing"]
+    worker["capabilities"] = ["harness.model_routing", "harness.reporting"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": ["ai-rag-pipeline", "reporting"],
+        "required_capabilities": ["model.routing", "reporting"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_social_signal_nodes_bind_browser_collector_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "browser", "collector", "social"]
+    worker["capabilities"] = ["browser.automation", "web.capture", "social.signal", "link.extract"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": [],
+        "required_capabilities": ["browser.browse", "social_links", "entity.extract"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_sqlite_alias_nodes_bind_sqlite3_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "sqlite3"]
+    worker["capabilities"] = ["python"]
+    node = {
+        "id": "N1",
+        "preferred_model": "sonnet",
+        "required_skills": ["python", "sqlite"],
+        "required_capabilities": [],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_observability_skill_nodes_bind_observability_builders() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "observability"]
+    worker["capabilities"] = ["observability"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": ["python", "observability"],
+        "required_capabilities": [],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_capability_match_accepts_any_alias_per_required_label() -> None:
+    worker = _worker("pane-a")
+    worker["capabilities"] = ["harness.model_routing"]
+    node = {
+        "id": "N1",
+        "preferred_model": None,
+        "required_skills": [],
+        "required_capabilities": ["model.routing"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_code_impl_and_test_generation_aliases_bind_general_builder_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "pytest", "refactor", "ImplementationWorker"]
+    worker["capabilities"] = ["testing"]
+    node = {
+        "id": "N1",
+        "preferred_model": "glm-5.1",
+        "required_skills": [],
+        "required_capabilities": ["code_impl", "test_generation"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
+def test_enqueue_ready_marks_no_matching_worker_nodes_as_worker_blocked(tmp_path: Path, monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid",
+        "nodes": [
+            {
+                "id": "N1",
+                "depends_on": [],
+                "required_skills": ["python", "solar-harness-control-plane"],
+                "required_capabilities": ["algorithm_design"],
+            }
+        ],
+    }
+    graph_path = tmp_path / "sid.task_graph.json"
+    graph_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-1"})
+    result = enqueue_ready(
+        graph,
+        str(graph_path),
+        [{"pane": "pane-a", "models": ["sonnet"], "skills": ["python"], "capabilities": ["python"]}],
+        lease=False,
+        dry_run=False,
+    )
+    assert result["queued"][0]["reason"] == "no_matching_worker"
+    assert result["worker_blocked"][0]["node"] == "N1"
+    assert graph["nodes"][0]["status"] == "worker_blocked"
+    assert graph["node_results"]["N1"]["blocking_reason"] == "no_matching_worker"
+
+
+def test_worker_blocked_nodes_are_retryable_after_capability_fix(tmp_path: Path, monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid",
+        "nodes": [
+            {
+                "id": "N1",
+                "depends_on": [],
+                "status": "worker_blocked",
+                "required_skills": [],
+                "required_capabilities": ["code_impl", "test_generation"],
+                "preferred_model": "glm-5.1",
+            }
+        ],
+    }
+    graph_path = tmp_path / "sid.task_graph.json"
+    graph_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr("task_queue.enqueue", lambda *a, **kw: {"ok": True, "id": "q-2"})
+    result = enqueue_ready(
+        graph,
+        str(graph_path),
+        [{
+            "pane": "pane-a",
+            "models": ["glm-5.1"],
+            "skills": ["python", "pytest", "ImplementationWorker"],
+            "capabilities": ["testing"],
+            "busy": False,
+        }],
+        lease=False,
+        dry_run=False,
+    )
+    assert result["enqueued"][0]["node"] == "N1"
+    assert result["queued"] == []
+    assert graph["nodes"][0]["status"] == "assigned"
+
+
+def test_worker_blocked_node_becomes_queued_when_matching_worker_is_pane_busy(tmp_path: Path, monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid",
+        "nodes": [
+            {
+                "id": "N1",
+                "depends_on": [],
+                "status": "worker_blocked",
+                "required_skills": ["python", "sqlite"],
+                "required_capabilities": [],
+            }
+        ],
+    }
+    graph_path = tmp_path / "sid.task_graph.json"
+    graph_path.write_text("{}", encoding="utf-8")
+
+    def fake_acquire(*_args, **_kwargs):
+        return {"acquired": False, "reason": "pane_busy"}
+
+    monkeypatch.setattr("pane_lease.acquire", fake_acquire)
+    result = enqueue_ready(
+        graph,
+        str(graph_path),
+        [{
+            "pane": "pane-a",
+            "models": ["sonnet"],
+            "skills": ["python", "sqlite3"],
+            "capabilities": ["python"],
+            "busy": False,
+        }],
+        lease=True,
+        dry_run=False,
+    )
+    assert result["queued"][0]["reason"] == "pane_busy"
+    assert result["worker_blocked"] == []
+    assert graph["nodes"][0]["status"] == "queued"
+    assert graph["node_results"]["N1"]["blocking_reason"] == "pane_busy"

@@ -10,6 +10,17 @@
       "type": "string",
       "minLength": 1
     },
+    "dag_variant": {
+      "type": "string",
+      "enum": ["short", "standard", "parallel_spec", "research"]
+    },
+    "research_mode": {
+      "type": "boolean"
+    },
+    "evidence_policy": {
+      "type": "object",
+      "additionalProperties": true
+    },
     "required_gates": {
       "type": "array",
       "items": {
@@ -40,7 +51,7 @@
   "$defs": {
     "node": {
       "type": "object",
-      "required": ["id", "goal", "depends_on", "acceptance"],
+      "required": ["id", "goal", "depends_on", "acceptance", "priority", "required_phase", "required_node_id", "required_node_status"],
       "additionalProperties": true,
       "properties": {
         "id": {
@@ -90,12 +101,51 @@
           },
           "uniqueItems": true
         },
+        "logical_operator": {
+          "type": "string"
+        },
+        "verifier_required": {
+          "type": "boolean"
+        },
+        "research_stage": {
+          "type": "string"
+        },
+        "evidence_policy": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "capability_inference": {
           "type": "object",
           "additionalProperties": true
         },
         "preferred_model": {
           "type": "string"
+        },
+        "priority": {
+          "type": "number"
+        },
+        "required_phase": {
+          "type": ["string", "null"]
+        },
+        "required_node_id": {
+          "type": ["string", "null"]
+        },
+        "required_node_status": {
+          "type": ["string", "null"]
+        },
+        "requirement_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "acceptance_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
         },
         "gate": {
           "type": "string"

@@ -60,7 +60,7 @@ end tell
 ## 3. 导出文件格式
 
 ```
-/Users/sihaoli/Knowledge/_raw/apple-notes/20260508/note-abc123.md
+/Users/lisihao/Knowledge/_raw/apple-notes/20260508/note-abc123.md
 ```
 
 文件内容结构：
@@ -133,7 +133,7 @@ Delta 算法：`note_id + updated_at + content_hash` 三合一 — 任一变化 
 每次导出后生成 dispatch 文件：
 
 ```
-/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/apple-notes-<id>-<ts>.json
+/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/apple-notes-<id>-<ts>.json
 ```
 
 Dispatch 内容指示大模型：
@@ -147,13 +147,13 @@ Dispatch 内容指示大模型：
 ## 7. Scheduler (launchd)
 
 ```xml
-<!-- /Users/sihaoli/Library/LaunchAgents/com.solar.apple-notes-ingest.plist -->
+<!-- /Users/lisihao/Library/LaunchAgents/com.solar.apple-notes-ingest.plist -->
 <key>StartInterval</key>
 <integer>7200</integer>
 <key>ProgramArguments</key>
 <array>
   <string>/usr/bin/python3</string>
-  <string>/Users/sihaoli/.solar/harness/lib/apple_notes_ingest.py</string>
+  <string>/Users/lisihao/.solar/harness/lib/apple_notes_ingest.py</string>
   <string>scan</string>
   <string>--once</string>
 </array>

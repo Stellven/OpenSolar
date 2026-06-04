@@ -36,24 +36,24 @@ Verify and close the loop on all Solar workstreams recently requested and/or dis
 
 ## Deliverables
 
-1. `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.plan.md`
+1. `/Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.plan.md`
    - Planner-owned verification plan.
    - Must freeze new feature scope and sequence verification before fixes.
 
-2. `/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.md`
+2. `/Users/lisihao/.solar/harness/reports/solar-workstream-verification-20260508.md`
    - One matrix covering all workstreams.
    - For each: status, artifact evidence, command evidence, gaps, next action.
 
-3. `/Users/sihaoli/.solar/harness/reports/solar-workstream-verification-20260508.json`
+3. `/Users/lisihao/.solar/harness/reports/solar-workstream-verification-20260508.json`
    - Machine-readable version of the matrix.
 
-4. `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md`
+4. `/Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md`
    - Dispatch file listing only required fixes, grouped by owner/pane.
 
-5. `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.handoff.md`
+5. `/Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.handoff.md`
    - Builder/observer handoff summarizing completed verification and fixes.
 
-6. `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.eval.md`
+6. `/Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.eval.md`
    - Evaluator final verdict.
 
 ## Acceptance Criteria
@@ -72,17 +72,17 @@ Required behavior:
 Verify:
 
 ```bash
-python3 /Users/sihaoli/.solar/harness/tools/verify-workstream-ledger.py --json \
+python3 /Users/lisihao/.solar/harness/tools/verify-workstream-ledger.py --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "sprints" in d and d["summary"]["checked"] >= 8'
 ```
 
-<!-- verify: cmd="python3 /Users/sihaoli/.solar/harness/tools/verify-workstream-ledger.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"sprints\" in d and d[\"summary\"][\"checked\"] >= 8'" -->
+<!-- verify: cmd="python3 /Users/lisihao/.solar/harness/tools/verify-workstream-ledger.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"sprints\" in d and d[\"summary\"][\"checked\"] >= 8'" -->
 
 ### A2 — Obsidian Wiki Integration Still Works
 
 Required behavior:
 - `solar-harness wiki status --json` succeeds.
-- Vault path is `/Users/sihaoli/Knowledge`.
+- Vault path is `/Users/lisihao/Knowledge`.
 - Codex/Claude/Agents skills are installed.
 - At least one query or qmd search returns wiki pages.
 
@@ -90,12 +90,12 @@ Verify:
 
 ```bash
 solar-harness wiki status --json \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["configured"] and d["vault_path"] == "/Users/sihaoli/Knowledge"'
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["configured"] and d["vault_path"] == "/Users/lisihao/Knowledge"'
 solar-harness wiki qmd-search "Solar Harness Obsidian" -n 2 --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d) >= 1'
 ```
 
-<!-- verify: cmd="solar-harness wiki status --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"configured\"] and d[\"vault_path\"] == \"/Users/sihaoli/Knowledge\"' && solar-harness wiki qmd-search 'Solar Harness Obsidian' -n 2 --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d) >= 1'" -->
+<!-- verify: cmd="solar-harness wiki status --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"configured\"] and d[\"vault_path\"] == \"/Users/lisihao/Knowledge\"' && solar-harness wiki qmd-search 'Solar Harness Obsidian' -n 2 --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert len(d) >= 1'" -->
 
 ### A3 — QMD/MinerU Is Indexed And Its Limitation Is Explicit
 
@@ -137,18 +137,18 @@ curl -fsS http://127.0.0.1:8765/status \
 Required behavior:
 - Run the A1-A7 verify commands from `sprint-20260508-solar-kb-obsidian-autouse.contract.md`.
 - Create eval files:
-  - `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.md`
-  - `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.json`
+  - `/Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.md`
+  - `/Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.json`
 - If any acceptance fails, do not mark PASS; generate targeted fix dispatch.
 
 Verify:
 
 ```bash
-test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.md
-test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.json
+test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.md
+test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.json
 ```
 
-<!-- verify: cmd="test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.md && test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.json" -->
+<!-- verify: cmd="test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.md && test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-solar-kb-obsidian-autouse.eval.json" -->
 
 ### A6 — Mirage VFS Does Not Fake Progress
 
@@ -163,13 +163,13 @@ Required behavior:
 Verify:
 
 ```bash
-test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s1.md
-test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s2.md
+test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s1.md
+test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s2.md
 solar-harness mirage doctor --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "drive" in d and d["drive"]["status"] in ("ok","warn","degraded","disabled")'
 ```
 
-<!-- verify: cmd="test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s1.md && test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s2.md && solar-harness mirage doctor --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"drive\" in d and d[\"drive\"][\"status\"] in (\"ok\",\"warn\",\"degraded\",\"disabled\")'" -->
+<!-- verify: cmd="test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s1.md && test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-mirage-unified-vfs.handoff-s2.md && solar-harness mirage doctor --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"drive\" in d and d[\"drive\"][\"status\"] in (\"ok\",\"warn\",\"degraded\",\"disabled\")'" -->
 
 ### A7 — Accepted Artifact Knowledge Is Either Implemented Or Properly Blocked
 
@@ -182,17 +182,17 @@ Required behavior:
 Verify:
 
 ```bash
-test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.contract.md
-python3 -m json.tool /Users/sihaoli/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.status.json >/dev/null
+test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.contract.md
+python3 -m json.tool /Users/lisihao/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.status.json >/dev/null
 ```
 
-<!-- verify: cmd="test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.contract.md && python3 -m json.tool /Users/sihaoli/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.status.json >/dev/null" -->
+<!-- verify: cmd="test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.contract.md && python3 -m json.tool /Users/lisihao/.solar/harness/sprints/sprint-20260508-accepted-artifact-knowledge.status.json >/dev/null" -->
 
 ### A8 — Capture Server And Auto Ingest Are Verified
 
 Required behavior:
 - Verify capture server status if intended to stay running.
-- Verify copy/paste capture writes into `/Users/sihaoli/Knowledge/_raw`.
+- Verify copy/paste capture writes into `/Users/lisihao/Knowledge/_raw`.
 - Verify file upload path under `_raw/file-uploads`.
 - Verify dispatch watcher or scheduler processes raw files automatically, or report exact missing daemon.
 
@@ -200,10 +200,10 @@ Verify:
 
 ```bash
 solar-harness wiki capture-server status
-test -d /Users/sihaoli/Knowledge/_raw
+test -d /Users/lisihao/Knowledge/_raw
 ```
 
-<!-- verify: cmd="solar-harness wiki capture-server status && test -d /Users/sihaoli/Knowledge/_raw" -->
+<!-- verify: cmd="solar-harness wiki capture-server status && test -d /Users/lisihao/Knowledge/_raw" -->
 
 ### A9 — Pane Orchestration And Model Routing Are Stable Enough
 
@@ -232,25 +232,25 @@ Required behavior:
 Verify:
 
 ```bash
-test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md
-rg -n "Owner|Write Scope|Verify|Rollback" /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md
+test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md
+rg -n "Owner|Write Scope|Verify|Rollback" /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md
 ```
 
-<!-- verify: cmd="test -s /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md && rg -n 'Owner|Write Scope|Verify|Rollback' /Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md" -->
+<!-- verify: cmd="test -s /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md && rg -n 'Owner|Write Scope|Verify|Rollback' /Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.fix-dispatch.md" -->
 
 ## Stop Rules
 
 - Stop if evaluator is asked to PASS without running the verify commands.
 - Stop if a status field is treated as proof without corresponding artifact.
 - Stop if a fix tries to write real Google Drive.
-- Stop if a fix mounts all of `/Users/sihaoli`.
-- Stop if a test writes outside temp paths except explicit `/Users/sihaoli/Knowledge/_raw` smoke.
+- Stop if a fix mounts all of `/Users/lisihao`.
+- Stop if a test writes outside temp paths except explicit `/Users/lisihao/Knowledge/_raw` smoke.
 - Stop if a new feature sprint is started before this closeout report is produced.
 
 ## Planner Instructions
 
 1. Produce:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.plan.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-workstream-verification-closeout.plan.md`
 2. Build the verification matrix first; do not fix before matrix.
 3. Use observer/evaluator style: commands, artifacts, status, pane state.
 4. If fixes are required, generate `fix-dispatch.md` with small independent tasks.

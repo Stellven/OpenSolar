@@ -73,4 +73,3 @@ Frozen harness runtime files:
 - N5 join passes after traceability patch `children[4].verification_release_ready=true`.
 - Final handoff/eval/report exists.
 - Raw knowledge archive exists or the blocker is explicitly recorded.
-

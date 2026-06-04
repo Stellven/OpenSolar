@@ -2,8 +2,8 @@
 # Solar Chain Watcher v3 — 全文件扫描 + 通知 + flock 防多开
 # sprint-20260503-111139: 扩展扫描到 review-/research-/其它 + PLANNER-INBOX 通知
 # 1. 扫 ~/.solar/codex-bridge/from-codex/ 所有 .md (排除 template) → 按 prefix 分发
-# 2. contract-/execution-contract- → 起自动 sprint
-# 3. review-/research-/其它 → 写 PLANNER-INBOX 通知
+# 2. contract-/execution-contract-/review-/research-/其它 → 只捕获 RawIntent
+# 3. 后续 Requirement Compiler / PM / Planner 链路从 RawIntent 消费，不在 bridge 里直接建任务或塞 pane
 # 4. 检测无 active sprint → 起队列下一个 drafting
 
 # D4: mkdir 原子锁防多开 (chain-watcher.pid) — flock 在 macOS 不可用
@@ -30,6 +30,49 @@ notify_planner_codex_file() {
   ts=$(date -u +"%Y-%m-%dT%H:%MZ")
   mkdir -p "$(dirname "$PLANNER_INBOX")"
   printf '%s\n' "- [ ] [${ts}] [${type}] ${base} (~/.solar/codex-bridge/from-codex/)" >> "$PLANNER_INBOX"
+}
+
+
+
+capture_codex_raw_intent_file() {
+  local cf="$1" kind="$2" base out rc intent_id mode
+  base=$(basename "$cf")
+  mode="delivery"
+  case "$kind" in
+    CODEX-RESEARCH) mode="research" ;;
+    CODEX-REVIEW) mode="review" ;;
+    CODEX-CONTRACT) mode="delivery" ;;
+    *) mode="delivery" ;;
+  esac
+
+  out=$(SOLAR_HARNESS_DIR="$HARNESS_DIR" SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" \
+    python3 "$HARNESS_DIR/lib/intent_gateway.py" capture \
+      --source-channel codex_bridge \
+      --actor codex \
+      --device mac_mini \
+      --repo "$HARNESS_DIR" \
+      --source-trust codex_bridge_file \
+      --mode "$mode" \
+      --file "$cf" \
+      --json 2>&1)
+  rc=$?
+  if [ "$rc" != "0" ]; then
+    echo "[$(date '+%H:%M:%S')] codex RawIntent capture FAILED: ${base} rc=${rc}"
+    printf '%s\n' "$out" | tail -5
+    return 1
+  fi
+  intent_id=$(printf '%s\n' "$out" | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("intent_id", ""))' 2>/dev/null || true)
+  echo "[$(date '+%H:%M:%S')] codex RawIntent captured: ${base} -> ${intent_id:-unknown} (${kind})"
+  if [ -n "$intent_id" ]; then
+    SOLAR_HARNESS_DIR="$HARNESS_DIR" SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" \
+      python3 "$HARNESS_DIR/lib/intent_consumer.py" consume --intent-id "$intent_id" --json >/tmp/solar-intent-consumer-${intent_id}.json 2>/tmp/solar-intent-consumer-${intent_id}.err || {
+        echo "[$(date '+%H:%M:%S')] codex RawIntent consume FAILED: ${intent_id}"
+        tail -5 /tmp/solar-intent-consumer-${intent_id}.err 2>/dev/null || true
+        return 1
+      }
+  fi
+  type ledger_emit &>/dev/null && ledger_emit "raw_intent" "${intent_id:-$base}" "{\"source\":\"codex_bridge\",\"file\":\"$base\",\"kind\":\"$kind\"}" 2>/dev/null || true
+  return 0
 }
 
 # sprint-20260503-150911 — Planner 强制通知
@@ -126,67 +169,71 @@ ingest_single_contract() {
 
   cp "$cf" "$HOME/.solar/harness/sprints/$SID.contract.md"
 
-  # Codex remote execution path: contracts with bypass_pm:true are already fully
-  # specified. Route them directly to builder by materializing a minimal plan and
-  # promoting status, instead of downgrading them into PM intake.
+  # Codex remote execution path: bypass_pm may skip PM authorship, but it must
+  # not skip Planner's machine DAG.  Materialize a PRD from the contract and
+  # route to Planner; Builder dispatch is allowed only after workflow_guard sees
+  # design.md + plan.md + task_graph.json.
   if grep -Eq '^bypass_pm:[[:space:]]*true[[:space:]]*$' "$cf"; then
-    python3 - "$SID" "$cf" "$HOME/.solar/harness/sprints/$SID.status.json" "$HOME/.solar/harness/sprints/$SID.plan.md" <<'PY_CHAIN_WATCHER_BYPASS'
+    python3 - "$SID" "$cf" "$HOME/.solar/harness/sprints/$SID.status.json" "$HOME/.solar/harness/sprints/$SID.prd.md" <<'PY_CHAIN_WATCHER_BYPASS'
 import json, sys, datetime
 from pathlib import Path
 
-sid, contract, status, plan = sys.argv[1:]
+sid, contract, status, prd = sys.argv[1:]
 now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 contract_p = Path(contract)
 status_p = Path(status)
-plan_p = Path(plan)
+prd_p = Path(prd)
 
 try:
     d = json.loads(status_p.read_text())
 except Exception:
     d = {"id": sid, "history": []}
 
-d["status"] = "active"
-d["phase"] = "planning_complete"
-d["handoff_to"] = "builder"
+d["status"] = "drafting"
+d["phase"] = "prd_ready"
+d["handoff_to"] = "planner"
+d["target_role"] = "planner"
 d["updated_at"] = now
 d.setdefault("history", []).append({
     "ts": now,
-    "event": "bypass_pm_contract_promoted_to_builder",
+    "event": "bypass_pm_contract_routed_to_planner",
     "by": "chain-watcher",
     "contract": str(contract_p),
 })
 status_p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
-plan_p.write_text(f"""# Plan — {sid}
+contract_text = contract_p.read_text(errors="ignore")
+prd_p.write_text(f"""# PRD — {sid}
 
-## Intent
+## Source Contract
 
-Execute the already bounded bypass_pm contract exactly as written.
+`{contract_p}`
 
-## Write Scope
+## User Goal
 
-- Only files explicitly allowed by the contract.
-- For this sprint, write handoff/evidence under `~/.solar/harness/sprints/`.
+Execute the contract, but preserve Solar's mandatory PM -> Planner -> task_graph -> Builder lifecycle.
 
-## Steps
+## Scope
 
-1. Read `{contract_p}`.
-2. Execute only the Required Work and Acceptance Criteria in the contract.
-3. Write `~/.solar/harness/sprints/{sid}.handoff.md` unless the contract explicitly requires a different handoff path.
-4. Run the contract verification commands.
-5. Submit with `bash ~/.solar/harness/solar-harness.sh handoff-submit {sid}`.
+The Planner must convert this PRD and the contract into design.md, plan.md, and task_graph.json before Builder dispatch.
+
+## Contract Body
+
+```text
+{contract_text}
+```
 
 ## Stop Rules
 
-- Stop on any action outside the contract boundary.
-- Do not repair unrelated Solar/Codex/harness state.
+- Do not dispatch Builder without a valid task_graph.json.
+- Do not use bypass_pm as a Builder shortcut.
 """)
 PY_CHAIN_WATCHER_BYPASS
     if [[ -f "$HARNESS_DIR/lib/events.sh" ]]; then
       # shellcheck source=/dev/null
       source "$HARNESS_DIR/lib/events.sh"
-      events_emit "chain-watcher" "bypass_pm_promoted" "info" "$SID" "{\"to\":\"builder\",\"plan\":\"$HARNESS_DIR/sprints/$SID.plan.md\"}" 2>/dev/null || true
+      events_emit "chain-watcher" "bypass_pm_routed_to_planner" "info" "$SID" "{\"to\":\"planner\",\"prd\":\"$HARNESS_DIR/sprints/$SID.prd.md\"}" 2>/dev/null || true
     fi
-    echo "  ✅ → $SID (bypass_pm:true → active/planning_complete, builder route)"
+    echo "  ✅ → $SID (bypass_pm:true → drafting/prd_ready, planner route)"
   else
     echo "  ✅ → $SID (drafting,等 chain 起)"
   fi
@@ -209,34 +256,32 @@ ingest_codex_all_files() {
 
     case "$base" in
       contract-*|execution-contract-*)
-        if ingest_single_contract "$cf"; then
+        if capture_codex_raw_intent_file "$cf" "CODEX-CONTRACT"; then
           cp "$cf" "$CODEX_PROCESSED/$base"
           rm "$cf"
           n_contracts=$((n_contracts + 1))
         fi
         ;;
       review-*)
-        notify_planner_codex_file "CODEX-REVIEW" "$base"
-        notify_pane0_planner "CODEX-REVIEW" "$base"
-        type ledger_emit &>/dev/null && ledger_emit "consumed" "$base" "{\"source\":\"chain-watcher\"}" 2>/dev/null || true
-        cp "$cf" "$CODEX_PROCESSED/$base"
-        rm "$cf"
-        n_reviews=$((n_reviews + 1))
+        if capture_codex_raw_intent_file "$cf" "CODEX-REVIEW"; then
+          cp "$cf" "$CODEX_PROCESSED/$base"
+          rm "$cf"
+          n_reviews=$((n_reviews + 1))
+        fi
         ;;
       research-*)
-        notify_planner_codex_file "CODEX-RESEARCH" "$base"
-        notify_pane0_planner "CODEX-RESEARCH" "$base"
-        type ledger_emit &>/dev/null && ledger_emit "consumed" "$base" "{\"source\":\"chain-watcher\"}" 2>/dev/null || true
-        cp "$cf" "$CODEX_PROCESSED/$base"
-        rm "$cf"
-        n_research=$((n_research + 1))
+        if capture_codex_raw_intent_file "$cf" "CODEX-RESEARCH"; then
+          cp "$cf" "$CODEX_PROCESSED/$base"
+          rm "$cf"
+          n_research=$((n_research + 1))
+        fi
         ;;
       *)
-        notify_planner_codex_file "CODEX-UNKNOWN" "$base"
-        notify_pane0_planner "CODEX-UNKNOWN" "$base"
-        cp "$cf" "$CODEX_PROCESSED/$base"
-        rm "$cf"
-        n_unknown=$((n_unknown + 1))
+        if capture_codex_raw_intent_file "$cf" "CODEX-UNKNOWN"; then
+          cp "$cf" "$CODEX_PROCESSED/$base"
+          rm "$cf"
+          n_unknown=$((n_unknown + 1))
+        fi
         ;;
     esac
   done
@@ -250,9 +295,11 @@ QUEUE_NEXT() {
   done
 }
 
-drafting_has_plan() {
+workflow_guard_builder_ready() {
   local sid="$1"
-  [ -f "$SPRINTS_DIR/$sid.plan.md" ]
+  local role
+  role=$(HARNESS_DIR="$HARNESS_DIR" SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null || true)
+  [[ "$role" == "builder_main" || "$role" == "builder" ]]
 }
 
 # D10: 启动恢复 — flock 后先扫一轮清积压
@@ -267,14 +314,19 @@ while true; do
   if [ -z "$ACTIVE" ]; then
     NEXT=$(QUEUE_NEXT)
     if [ -n "$NEXT" ]; then
-      if ! drafting_has_plan "$NEXT"; then
-        echo "[$(date '+%H:%M:%S')] auto-chain: skip $NEXT (drafting without plan.md; coordinator PM→planner flow owns it)"
+      if ! workflow_guard_builder_ready "$NEXT"; then
+        echo "[$(date '+%H:%M:%S')] auto-chain: skip $NEXT (blocked_missing_task_graph; workflow_guard has not approved builder)"
+        if [[ -f "$HARNESS_DIR/lib/events.sh" ]]; then
+          # shellcheck source=/dev/null
+          source "$HARNESS_DIR/lib/events.sh"
+          events_emit "chain-watcher" "blocked_missing_task_graph" "warn" "$NEXT" "{\"reason\":\"workflow_guard_not_builder_ready\"}" 2>/dev/null || true
+        fi
         sleep 60
         continue
       fi
 
-      echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT (plan.md ready)"
-      python3 "$HARNESS_DIR/lib/runtime_status.py" "$SPRINTS_DIR/$NEXT.status.json" "active" "auto_chain" "chain-watcher" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"plan.md exists; promoted drafting sprint to active"}' >/dev/null 2>&1 || true
+      echo "[$(date '+%H:%M:%S')] auto-chain: 起 $NEXT (workflow_guard builder ready)"
+      python3 "$HARNESS_DIR/lib/runtime_status.py" "$SPRINTS_DIR/$NEXT.status.json" "active" "auto_chain" "chain-watcher" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main"},"note":"workflow_guard confirmed planner artifacts and task_graph before auto-chain activation"}' >/dev/null 2>&1 || true
       sleep 60
     fi
   fi

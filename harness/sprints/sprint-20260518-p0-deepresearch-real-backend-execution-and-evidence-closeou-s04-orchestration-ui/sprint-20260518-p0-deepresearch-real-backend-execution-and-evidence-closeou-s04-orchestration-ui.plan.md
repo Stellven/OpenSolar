@@ -54,14 +54,14 @@ join gate `G_S04_ORCHUI_READY`: N2..N8 全 passed 才允许 N9/N10 收尾。
 
 | Node | Write Scope | Read Scope |
 |------|-------------|------------|
-| N1 | `sprints/*-s04-orchestration-ui.ui-codebase-recon.md` | `/Users/sihaoli/Solar/harness/{status-server,tools}/`, `/Users/sihaoli/Solar/core/{dashboard,ui}/` (read-only) |
-| N2 | `/Users/sihaoli/Solar/harness/status-server/research_routes.py` (扩展函数返回 dict) | S03 report_metrics.py, schema_adapter.py, design §5 |
-| N3 | `/Users/sihaoli/Solar/harness/tools/solar-autopilot-monitor.py` (新增 subcmd) | sprint status.json schema, design §7 |
-| N4 | `/Users/sihaoli/Solar/harness/tools/solar-runtime-soak.py` (新增函数) | S02 footer_fields.md, design §8 |
-| N5 | `/Users/sihaoli/Solar/harness/status-server/templates/research.html` | N2 payload schema, design §6 |
-| N6 | `/Users/sihaoli/Solar/harness/status-server/static/livework_panel.js` | N2 payload schema, design §6 |
-| N7 | `/Users/sihaoli/Solar/core/dashboard/server.ts`, `/Users/sihaoli/Solar/core/ui/dashboard.ts` | N2 payload schema, design §9 |
-| N8 | `/Users/sihaoli/Solar/tests/ui/test_research_routes_s03_fields.py`, `..._autopilot_epic_visibility.py`, `..._runtime_soak_footer_check.py`, `..._dashboard_research_render.py` | N2-N7 |
+| N1 | `sprints/*-s04-orchestration-ui.ui-codebase-recon.md` | `/Users/lisihao/Solar/harness/{status-server,tools}/`, `/Users/lisihao/Solar/core/{dashboard,ui}/` (read-only) |
+| N2 | `/Users/lisihao/Solar/harness/status-server/research_routes.py` (扩展函数返回 dict) | S03 report_metrics.py, schema_adapter.py, design §5 |
+| N3 | `/Users/lisihao/Solar/harness/tools/solar-autopilot-monitor.py` (新增 subcmd) | sprint status.json schema, design §7 |
+| N4 | `/Users/lisihao/Solar/harness/tools/solar-runtime-soak.py` (新增函数) | S02 footer_fields.md, design §8 |
+| N5 | `/Users/lisihao/Solar/harness/status-server/templates/research.html` | N2 payload schema, design §6 |
+| N6 | `/Users/lisihao/Solar/harness/status-server/static/livework_panel.js` | N2 payload schema, design §6 |
+| N7 | `/Users/lisihao/Solar/core/dashboard/server.ts`, `/Users/lisihao/Solar/core/ui/dashboard.ts` | N2 payload schema, design §9 |
+| N8 | `/Users/lisihao/Solar/tests/ui/test_research_routes_s03_fields.py`, `..._autopilot_epic_visibility.py`, `..._runtime_soak_footer_check.py`, `..._dashboard_research_render.py` | N2-N7 |
 | N9 | `sprints/*-s04-orchestration-ui.planning.html` | design.md, plan.md, N1-N7 产物 |
 | N10 | `sprints/*-s04-orchestration-ui.handoff.md` | 全部 |
 
@@ -87,25 +87,25 @@ join gate `G_S04_ORCHUI_READY`: N2..N8 全 passed 才允许 N9/N10 收尾。
 ## 6. 代码地形踏勘清单 (N1 builder 必读, read-only)
 
 ```bash
-ls /Users/sihaoli/Solar/harness/status-server/
-head -250 /Users/sihaoli/Solar/harness/status-server/research_routes.py
-grep -nE "def build_research_payload|def generate_markdown_report|def discover_" /Users/sihaoli/Solar/harness/status-server/research_routes.py
-cat /Users/sihaoli/Solar/harness/status-server/templates/research.html
-head -80 /Users/sihaoli/Solar/harness/status-server/static/livework_panel.js
-ls /Users/sihaoli/Solar/harness/status-server/routes/
-head -60 /Users/sihaoli/Solar/harness/status-server/routes/livework_routes.py
+ls /Users/lisihao/Solar/harness/status-server/
+head -250 /Users/lisihao/Solar/harness/status-server/research_routes.py
+grep -nE "def build_research_payload|def generate_markdown_report|def discover_" /Users/lisihao/Solar/harness/status-server/research_routes.py
+cat /Users/lisihao/Solar/harness/status-server/templates/research.html
+head -80 /Users/lisihao/Solar/harness/status-server/static/livework_panel.js
+ls /Users/lisihao/Solar/harness/status-server/routes/
+head -60 /Users/lisihao/Solar/harness/status-server/routes/livework_routes.py
 
-head -150 /Users/sihaoli/Solar/harness/tools/solar-autopilot-monitor.py
-grep -nE "def main|argparse" /Users/sihaoli/Solar/harness/tools/solar-autopilot-monitor.py
-head -100 /Users/sihaoli/Solar/harness/tools/solar-runtime-soak.py
-grep -nE "def run|def check_" /Users/sihaoli/Solar/harness/tools/solar-runtime-soak.py
+head -150 /Users/lisihao/Solar/harness/tools/solar-autopilot-monitor.py
+grep -nE "def main|argparse" /Users/lisihao/Solar/harness/tools/solar-autopilot-monitor.py
+head -100 /Users/lisihao/Solar/harness/tools/solar-runtime-soak.py
+grep -nE "def run|def check_" /Users/lisihao/Solar/harness/tools/solar-runtime-soak.py
 
-ls /Users/sihaoli/Solar/core/dashboard/
-head -60 /Users/sihaoli/Solar/core/dashboard/server.ts
-head -60 /Users/sihaoli/Solar/core/ui/dashboard.ts
-grep -nE "route\|Route\|express\|fastify" /Users/sihaoli/Solar/core/dashboard/server.ts
+ls /Users/lisihao/Solar/core/dashboard/
+head -60 /Users/lisihao/Solar/core/dashboard/server.ts
+head -60 /Users/lisihao/Solar/core/ui/dashboard.ts
+grep -nE "route\|Route\|express\|fastify" /Users/lisihao/Solar/core/dashboard/server.ts
 
-git -C /Users/sihaoli/Solar status --short
+git -C /Users/lisihao/Solar status --short
 ```
 
 **禁止修改**这些文件 (N1 阶段)。
@@ -128,7 +128,7 @@ git -C /Users/sihaoli/Solar status --short
 - 10 节点全 passed。
 - `solar-harness graph-scheduler validate` 退出 0; `layers` 输出 ≥ 5 layers; `doctor` 无 critical。
 - `pytest tests/ui/` 退出 0 (4 测试文件)。
-- `git -C /Users/sihaoli/Solar status --short` 仅显示 `harness/status-server/` + `harness/tools/` + `core/dashboard/` + `core/ui/` + `tests/ui/` 变更, 无 `lib/research/` 改动 (S03 边界禁线)。
+- `git -C /Users/lisihao/Solar status --short` 仅显示 `harness/status-server/` + `harness/tools/` + `core/dashboard/` + `core/ui/` + `tests/ui/` 变更, 无 `lib/research/` 改动 (S03 边界禁线)。
 - handoff.md §3 表所有 grep / pytest / curl 输出真实截断。
 - status.json `artifacts` 含 `design / plan / task_graph / planning_html / handoff`。
 

@@ -35,7 +35,7 @@ This sprint is about **closing broken joins** between existing systems, not rebu
 - `state` table contains malformed JSON (`key=test_pragma value=test`), so state is not schema-clean.
 - `sqlite3` already hit `database is locked`, so write/read concurrency is not fully controlled.
 - `v_solar_resources` returns 99 resources, but `access_count=0` and `last_accessed_at IS NULL` for all checked rows, suggesting the resource layer exists but is not feeding actual retrieval telemetry.
-- `solar` CLI currently shells into `/Users/sihaoli/.agents/skills/solar/scripts/run.sh` and writes only local `.solar/flow-state.json`, not the shared Solar DB / harness control plane.
+- `solar` CLI currently shells into `/Users/lisihao/.agents/skills/solar/scripts/run.sh` and writes only local `.solar/flow-state.json`, not the shared Solar DB / harness control plane.
 - `cortex_task_capsules` has only 1 row and `sys_capsule_executions` has 0 rows, so the capsule execution branch looks architecturally present but operationally dead.
 
 ## Non-Goals

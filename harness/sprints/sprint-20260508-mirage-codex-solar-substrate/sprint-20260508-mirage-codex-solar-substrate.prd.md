@@ -37,7 +37,7 @@ Solar Harness 上一轮 sprint `sprint-20260508-mirage-unified-vfs` Round 3 PASS
 
 - **US1**: 作为**监护人昊哥**，我打开 `http://127.0.0.1:8789/`，可以看到 "Mirage: enabled, 5 mounts ready, last probe 2 min ago"，不用 ssh 进 shell 跑 doctor。
 - **US2**: 作为 **Codex 化身**，我要找一段 "OpenAI Symphony orchestration" 的引用，我跑 `solar-harness mirage search "Symphony orchestration" --json`，拿到 mirage_path + qmd + solar_db 三类源的 hits，**不用**自己 rg ~/Knowledge 再去 sqlite cortex 再去 qmd 拼三遍。
-- **US3**: 作为 **planner 化身**，我要核对一个 sprint 合约现状，我直接 `mirage exec -- 'cat /sprints/<sid>.contract.md'`，**不用**记 host 绝对路径，且就算我手滑写 `/Users/sihaoli/...` 也会被拦。
+- **US3**: 作为 **planner 化身**，我要核对一个 sprint 合约现状，我直接 `mirage exec -- 'cat /sprints/<sid>.contract.md'`，**不用**记 host 绝对路径，且就算我手滑写 `/Users/lisihao/...` 也会被拦。
 - **US4**: 作为 **builder 化身**，我把整理的草稿写到 `/raw/2026-05-08/draft.md`，知道这是允许的；如果我想写 `/knowledge/concept-x.md` 会被拒，提示 "use wiki ingest"。
 - **US5**: 作为**评估化身 (evaluator)**，我跑 sprint 验证时不靠肉眼，自动化脚本一并跑 sandbox 探针 + cross-source search，结果写进 eval.md 证据段。
 - **US6**: 作为**监护人**，我换工作目录 (e.g. workspace_id 切换) 时，从 Solar Config UI 改一个下拉框就完成；改完 doctor 自动重跑、status 自动刷新。
@@ -47,9 +47,9 @@ Solar Harness 上一轮 sprint `sprint-20260508-mirage-unified-vfs` Round 3 PASS
 
 ### R1 — Sandbox 边界自动化探针 (P0 前置门)
 - 在 `tests/test-mirage-substrate.sh` 中加入**回归探针套件**：
-  - 探针 P1: `mirage exec -- 'cat /Users/sihaoli/.zshrc'` → 必须 exit_code != 0 且 stderr 含 "mount not allowed" 或类似拦截语；
+  - 探针 P1: `mirage exec -- 'cat /Users/lisihao/.zshrc'` → 必须 exit_code != 0 且 stderr 含 "mount not allowed" 或类似拦截语；
   - 探针 P2: `mirage exec -- 'ls /etc/passwd'` → 同上；
-  - 探针 P3: `mirage exec -- 'head /Users/sihaoli/.aws/credentials'` (如不存在用 `/Users/sihaoli/.ssh/config`) → 同上；
+  - 探针 P3: `mirage exec -- 'head /Users/lisihao/.aws/credentials'` (如不存在用 `/Users/lisihao/.ssh/config`) → 同上；
   - 探针 P4: `mirage exec --json -- 'echo x > /knowledge/_probe.md'` → JSON 中 exit_code != 0 且 stderr 非空 (write deny);
   - 探针 P5: `mirage exec -- 'find /knowledge -name "*.md" | head -5'` → 仍然成功 (保证不是把 exec 锁死);
   - 探针 P6: `mirage exec -- 'cat /raw/$(date +%Y-%m-%d)/_probe.md'` (先 `/raw` 写一个再读) → write+read 都成功 (verify rw mount works)。
@@ -59,7 +59,7 @@ Solar Harness 上一轮 sprint `sprint-20260508-mirage-unified-vfs` Round 3 PASS
 ### R2 — Codex/Solar 默认入口推广
 - 修订 `~/.solar/harness/docs/mirage-data-substrate-codex-solar.md`：
   - 把 "推荐使用" 改为 **"Canonical entry — 必须使用"**；
-  - 列出**禁用的反模式** (e.g. 化身在 prompt 中直接 rg ~/Knowledge / sqlite3 ~/.solar/solar.db / find /Users/sihaoli/.solar/harness/sprints)；
+  - 列出**禁用的反模式** (e.g. 化身在 prompt 中直接 rg ~/Knowledge / sqlite3 ~/.solar/solar.db / find /Users/lisihao/.solar/harness/sprints)；
   - 给出**正例** ≥6 条覆盖：跨源搜索、读 sprint 合约、读 Knowledge 文档、读 cortex 段、读 qmd 资源、写 /raw 草稿。
 - 在 `~/.solar/CLAUDE.md` 与 `~/.solar/harness/CODEX-USAGE.md` (新建或合并) 中加一条**铁律**: "Solar 角色读跨源数据，第一选择 `solar-harness mirage search/exec`；除非有专用接口 (wiki ingest / coordinator / config UI) 否则不绕过。"
 - Codex pane 的 system prompt / dispatch template 中显式注入 "use mirage" 提示。

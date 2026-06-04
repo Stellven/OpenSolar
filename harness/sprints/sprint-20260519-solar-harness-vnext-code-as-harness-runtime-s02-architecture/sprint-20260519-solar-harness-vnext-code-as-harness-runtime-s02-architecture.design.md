@@ -276,4 +276,3 @@ S02 通过条件：
 - `plan.md` 明确 S03/S04/S05 执行顺序和验收。
 - `task_graph.json` 通过 `solar-harness graph-scheduler validate`。
 - Builder 不得在缺 `task_graph.json` 时执行。
-

@@ -249,7 +249,7 @@ tests/external-integrations/
 绝对不动：
 - 任何 sprint 的 contract.md（immutable）
 - `~/.solar/harness/trajectories/`
-- `/Users/sihaoli/Knowledge/concepts`、`/Users/sihaoli/Knowledge/canonical` 等正式知识库目录
+- `/Users/lisihao/Knowledge/concepts`、`/Users/lisihao/Knowledge/canonical` 等正式知识库目录
 - 凭据存储路径（包括 `.config/google-oauth.json` 之类）
 - mermaid 渲染逻辑（mermaid 是 ok 状态，不动）
 

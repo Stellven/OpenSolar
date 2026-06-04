@@ -180,10 +180,41 @@ else
   fail "T10" "missing actionable browser hint"
 fi
 
-if bash -n "$HOME/.solar/harness/solar-harness.sh"; then
-  pass "T11 solar-harness shell syntax ok"
+cat > "$TMP/rich-browser.json" <<'JSON'
+{
+  "source": "chrome-extension",
+  "capture_schema_version": 2,
+  "url": "https://chatgpt.com/c/rich",
+  "canonical_url": "https://chatgpt.com/c/rich",
+  "conversation_id": "rich",
+  "title": "ChatGPT - Rich Capture",
+  "captured_at": "2026-05-21T10:00:00Z",
+  "capture_method": "chatgpt-role-attribute",
+  "content_hash": "hash-rich-capture",
+  "selected_text": "关键选中文本",
+  "metadata": {"site_name": "ChatGPT", "language": "zh-CN"},
+  "messages": [
+    {"turn_index": 1, "message_id": "m-user", "role": "user", "text": "如何保存 ChatGPT 网页？"},
+    {"turn_index": 2, "message_id": "m-assistant", "role": "assistant", "text": "插件应该抓取结构化消息、来源 URL、内容 hash，并写入知识库 raw ingest。"}
+  ]
+}
+JSON
+rich_out="$(python3 "$SCRIPT" --source "$TMP/rich-browser.json" --out-root "$TMP/out" --batch-id test-rich-browser --no-dispatch --json)"
+if echo "$rich_out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["conversations_written"] == 1 and d["files"][0]["content_hash"] == "hash-rich-capture"' 2>/dev/null && \
+   grep -R "capture_schema_version: \"2\"" "$TMP/out/test-rich-browser" >/dev/null && \
+   grep -R "content_hash: \"hash-rich-capture\"" "$TMP/out/test-rich-browser" >/dev/null && \
+   grep -R "## Capture Metadata" "$TMP/out/test-rich-browser" >/dev/null && \
+   grep -R "## Full Transcript" "$TMP/out/test-rich-browser" >/dev/null && \
+   grep -R "m-assistant" "$TMP/out/test-rich-browser" >/dev/null; then
+  pass "T11 rich browser capture metadata preserved"
 else
-  fail "T11" "bash -n failed"
+  fail "T11" "$rich_out"
+fi
+
+if bash -n "$HOME/.solar/harness/solar-harness.sh"; then
+  pass "T12 solar-harness shell syntax ok"
+else
+  fail "T12" "bash -n failed"
 fi
 
 echo ""

@@ -15,7 +15,7 @@ Make Solar default knowledge context find qmd-backed Obsidian notes such as `大
 
 Add qmd fallback to `solar-knowledge-context.py`:
 
-- Locate qmd via `QMD_BIN`, `/Users/sihaoli/.npm-global/bin/qmd`, then `PATH`.
+- Locate qmd via `QMD_BIN`, `/Users/lisihao/.npm-global/bin/qmd`, then `PATH`.
 - Run `qmd search <query> -c solar-wiki --json -n <limit>` with remaining timeout budget.
 - Normalize results to existing hit schema with `source=qmd:solar-wiki`.
 - Dedupe DB/qmd hits by path/title.
@@ -59,4 +59,4 @@ Document verify commands, disable flag, qmd path, collection, and common failure
 
 ## Handoff
 
-Builder must write `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.handoff.md` with changed files, test output, and dispatch-path conclusion.
+Builder must write `/Users/lisihao/.solar/harness/sprints/sprint-20260508-kb-qmd-default-fallback.handoff.md` with changed files, test output, and dispatch-path conclusion.

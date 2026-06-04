@@ -42,7 +42,7 @@ Created: 2026-05-08T07:00:00Z
 │                                                            │
 │  ┌──────────────────────────────────────────────────────┐ │
 │  │ knowledge-sync.ts (TS, called by capture-server)     │ │
-│  │  - watch /Users/sihaoli/Knowledge/**/*.md            │ │
+│  │  - watch /Users/lisihao/Knowledge/**/*.md            │ │
 │  │  - manifest: ~/.solar/state/knowledge-manifest.json │ │
 │  │  - parse frontmatter + title + tags + summary       │ │
 │  │  - upsert into obsidian_vault_index (new table)     │ │
@@ -86,7 +86,7 @@ Created: 2026-05-08T07:00:00Z
 | `~/.solar/harness/lib/solar-knowledge-context.py` | NEW | bounded retrieval router (DB + vault) | S1 |
 | `~/.claude/hooks/solar-knowledge-context.sh` | NEW | UserPromptSubmit wrapper, 800ms timeout, fail-open | S1 |
 | `~/.claude/hooks/memory-influence.sh` | EDIT | fix `value` field + SQL parens | S1 |
-| `~/.claude/core/cortex/knowledge-sync.ts` | EDIT | add `/Users/sihaoli/Knowledge` as 1st-class vault, manifest | S2 |
+| `~/.claude/core/cortex/knowledge-sync.ts` | EDIT | add `/Users/lisihao/Knowledge` as 1st-class vault, manifest | S2 |
 | `~/.solar/harness/integrations/obsidian-wiki-bridge.sh` | EDIT | `--since`/`--no-dispatch` formal, manifest + secret redact | S2 |
 | `~/.solar/harness/lib/obsidian-vault-indexer.py` | NEW | parse frontmatter/title, upsert into `obsidian_vault_index` + fts | S2 |
 | `~/.solar/harness/integrations/wiki-capture-server.py` | EDIT | `/healthz` + `/status` payload (solar_kb, obsidian_sync) + scheduler | S3 |
@@ -107,7 +107,7 @@ Created: 2026-05-08T07:00:00Z
 ```sql
 CREATE TABLE IF NOT EXISTS obsidian_vault_index (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  vault_path TEXT NOT NULL,           -- 绝对路径，如 /Users/sihaoli/Knowledge/projects/x.md
+  vault_path TEXT NOT NULL,           -- 绝对路径，如 /Users/lisihao/Knowledge/projects/x.md
   rel_path TEXT NOT NULL,             -- 相对 vault 根
   title TEXT,
   tags TEXT,                          -- JSON array
@@ -129,7 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_obs_vault_mtime ON obsidian_vault_index(mtime);
 - `~/.solar/state/knowledge-manifest.json`
   ```json
   {
-    "vault_path": "/Users/sihaoli/Knowledge",
+    "vault_path": "/Users/lisihao/Knowledge",
     "last_full_scan_at": "2026-05-08T07:00:00Z",
     "last_incremental_at": "2026-05-08T07:01:00Z",
     "indexed_count": 0,
@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_obs_vault_mtime ON obsidian_vault_index(mtime);
     "last_error": null
   }
   ```
-- `/Users/sihaoli/Knowledge/_raw/.export-manifest.json` — DB→vault 导出 cursor (per-table last_id)
+- `/Users/lisihao/Knowledge/_raw/.export-manifest.json` — DB→vault 导出 cursor (per-table last_id)
 
 ## 5. 接口契约
 
@@ -162,7 +162,7 @@ python3 solar-knowledge-context.py \
   "truncated": false,
   "hits": [
     {"source":"db", "table":"cortex_sources", "id":"...", "title":"...", "snippet":"...", "score":0.83},
-    {"source":"vault", "path":"/Users/sihaoli/Knowledge/.../lumen-orbit-...md", "title":"...", "snippet":"...", "score":0.71}
+    {"source":"vault", "path":"/Users/lisihao/Knowledge/.../lumen-orbit-...md", "title":"...", "snippet":"...", "score":0.71}
   ]
 }
 ```
@@ -194,14 +194,14 @@ python3 solar-knowledge-context.py \
     "ok": true,
     "ts": "...",
     "solar_kb": {
-      "db_path": "/Users/sihaoli/.solar/solar.db",
+      "db_path": "/Users/lisihao/.solar/solar.db",
       "db_size_mb": 263.4,
       "indexed_pages": 142,
       "hook_enabled": true,
       "last_query_ms_p95": 187
     },
     "obsidian_sync": {
-      "vault_path": "/Users/sihaoli/Knowledge",
+      "vault_path": "/Users/lisihao/Knowledge",
       "last_sync_at": "2026-05-08T07:01:00Z",
       "pending_raw": 3,
       "indexed_count": 142,
@@ -219,7 +219,7 @@ python3 solar-knowledge-context.py \
 |----------|------|----------|
 | `~/.solar/solar.db` 缺失 | 文件不存在 | router 返回 `{hits:[],elapsed_ms:0}`，hook 输出空 |
 | DB 锁 (write 中) | sqlite BUSY | `PRAGMA busy_timeout=200` + try once，失败 fail-open |
-| Vault 路径不存在 | `/Users/sihaoli/Knowledge` 缺 | 仅查 DB，不报错 |
+| Vault 路径不存在 | `/Users/lisihao/Knowledge` 缺 | 仅查 DB，不报错 |
 | Python 启动慢 | 冷启动 >800ms | hook 端 `timeout 0.8`，超时 silent |
 | 索引腐败 | FTS 异常 | catch + 写 manifest.last_error，不抛栈 |
 | Secret 泄漏 | DB 行含 token/key | 导出端正则脱敏 (sk-/Bearer/api_key=) |
@@ -235,7 +235,7 @@ python3 solar-knowledge-context.py \
 
 ## 8. 关键决策
 
-- **不重写 knowledge-sync.ts**: 仅扩展 `/Users/sihaoli/Knowledge` 为 first-class，保留旧路径向后兼容。
+- **不重写 knowledge-sync.ts**: 仅扩展 `/Users/lisihao/Knowledge` 为 first-class，保留旧路径向后兼容。
 - **新表 vs 现有表**: 新建 `obsidian_vault_index` 而不是直接塞 `cortex_sources`，避免污染现有知识源、便于回滚（DROP TABLE 即可）。
 - **manifest 而非全扫**: 263MB DB + 不限大小 vault，必须增量。manifest 比 mtime-only 更可靠（处理时区跳变、touch 误触）。
 - **Python stdlib only**: status server 已是 stdlib，索引器也走 stdlib（sqlite3 + json + re），零新依赖。

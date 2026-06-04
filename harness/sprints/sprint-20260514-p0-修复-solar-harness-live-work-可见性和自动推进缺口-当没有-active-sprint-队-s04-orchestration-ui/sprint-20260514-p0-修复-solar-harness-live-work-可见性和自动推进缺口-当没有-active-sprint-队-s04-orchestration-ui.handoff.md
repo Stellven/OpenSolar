@@ -23,7 +23,7 @@ s05_can_start: true
 ## Verification Evidence
 
 ```bash
-cd /Users/sihaoli/.solar
+cd /Users/lisihao/.solar
 
 # N5 integration tests
 python3 -m pytest harness/tests/livework/test_integration_s04.py -v

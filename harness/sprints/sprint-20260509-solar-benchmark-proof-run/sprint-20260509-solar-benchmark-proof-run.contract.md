@@ -17,7 +17,7 @@ Prove the benchmark claims using the real Solar builder pane, not only Codex-loc
 2. Run `bash solar-harness.sh integrations platform-benchmark --threshold 80`.
 3. Run `bash solar-harness.sh verify-integrations`.
 4. Write a handoff to:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260509-solar-benchmark-proof-run.handoff.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260509-solar-benchmark-proof-run.handoff.md`
 
 ## Handoff Must Include
 

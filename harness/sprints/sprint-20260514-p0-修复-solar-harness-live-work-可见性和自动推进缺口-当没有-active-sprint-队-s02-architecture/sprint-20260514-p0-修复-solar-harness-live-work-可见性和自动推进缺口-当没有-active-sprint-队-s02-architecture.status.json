@@ -4,12 +4,12 @@
   "epic_id": "epic-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队",
   "title": "架构设计与接口契约",
   "status": "passed",
-  "phase": "finalized",
-  "handoff_to": "done",
-  "target_role": "done",
+  "phase": "completed",
+  "handoff_to": "",
+  "target_role": "",
   "priority": "P0",
   "created_at": "2026-05-14T14:43:09Z",
-  "updated_at": "2026-05-14T15:54:41Z",
+  "updated_at": "2026-05-29T01:45:25Z",
   "dependency_policy": "activated_by_epic_dag",
   "history": [
     {
@@ -184,6 +184,13 @@
       "ts": "2026-05-14T15:54:41Z",
       "event": "finalized",
       "by": "coordinator"
+    },
+    {
+      "ts": "2026-05-29T01:45:25Z",
+      "event": "autopilot_missing_status_cache_backfill",
+      "by": "solar-autopilot",
+      "graph_sync": true,
+      "graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s02-architecture.task_graph.json"
     }
   ],
   "round": 1,
@@ -216,9 +223,16 @@
     "missing_gates": []
   },
   "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s02-architecture.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s02-architecture.dispatch.md",
-  "knowledge_exported_at": "2026-05-14T15:54:41Z",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s02-architecture.accepted.md",
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s02-architecture.dispatch.md",
+  "knowledge_exported_at": "2026-05-24T01:51:13Z",
   "knowledge_ingested_at": null,
-  "knowledge_export_error": null
+  "knowledge_export_error": null,
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260514-p0-修复-solar-harness-live-work-可见性和自动推进缺口-当没有-active-sprint-队-s02-architecture.source_artifact_index.md",
+  "knowledge_summary_count": 2,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported",
+  "stage": "completed",
+  "active_node": null,
+  "task_graph_status": "passed"
 }

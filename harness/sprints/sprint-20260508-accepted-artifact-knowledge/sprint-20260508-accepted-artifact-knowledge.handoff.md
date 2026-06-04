@@ -87,7 +87,7 @@ RESULT: ✅ PASS
 ## 验证方法
 
 ```bash
-cd /Users/sihaoli/.solar/harness
+cd /Users/lisihao/.solar/harness
 
 # A1-A8 all cases
 bash tests/test-accepted-artifact-knowledge-sync.sh

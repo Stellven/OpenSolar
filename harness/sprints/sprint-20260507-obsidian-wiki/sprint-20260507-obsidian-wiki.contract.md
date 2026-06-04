@@ -86,8 +86,8 @@ The upstream repo is a skill-based Obsidian knowledge framework. Its setup flow 
 
 Read the product brief and design first:
 
-- `/Users/sihaoli/.solar/harness/sprints/sprint-20260507-obsidian-wiki.product-brief.md`
-- `/Users/sihaoli/.solar/harness/sprints/sprint-20260507-obsidian-wiki.design.md`
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260507-obsidian-wiki.product-brief.md`
+- `/Users/lisihao/.solar/harness/sprints/sprint-20260507-obsidian-wiki.design.md`
 
 Then produce:
 

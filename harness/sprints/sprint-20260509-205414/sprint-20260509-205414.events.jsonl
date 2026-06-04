@@ -1,35 +1,49 @@
-{"ts":"2026-05-10T00:54:14Z","event":"phase_transition","by":"solar-harness","sid":"sprint-20260509-205414","data":{"from":"none","to":"spec"}}
-{"event": "waked", "by": "wake", "data": {"from_status": "drafting", "target_pane": "solar-harness:0.1"}, "ts": "2026-05-10T00:54:24Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T00:55:03Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
-{"ts":"2026-05-10T00:55:04Z","event":"planner_notified","by":"coordinator","data":{"status":"drafting"}}
-{"ts": "2026-05-10T00:55:30Z", "event": "prd_completed", "by": "codex_pm", "sid": "sprint-20260509-205414", "data": {"phase": "prd_ready", "handoff_to": "planner"}}
-{"event": "waked", "by": "wake", "data": {"from_status": "drafting", "target_pane": "solar-harness:0.1"}, "ts": "2026-05-10T00:55:35Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T00:55:47Z", "sid": "sprint-20260509-205414", "event": "dispatch_failed", "by": "coordinator"}
-{"ts": "2026-05-10T00:56:08Z", "sid": "sprint-20260509-205414", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T00:56:24Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_ready_for_planner", "severity": "info", "data": {"target": "solar-harness:0.1"}}
-{"ts": "2026-05-10T00:56:27Z", "event": "prd_schema_repaired", "by": "codex_pm", "sid": "sprint-20260509-205414"}
-{"event": "waked", "by": "wake", "data": {"from_status": "drafting", "target_pane": "solar-harness:0.1"}, "ts": "2026-05-10T00:56:30Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T00:56:30Z", "sid": "sprint-20260509-205414", "event": "gate_blocked", "by": "coordinator"}
-{"ts": "2026-05-10T00:57:26Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T00:58:27Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T00:58:36Z", "event": "planner_completed_repaired", "by": "codex_controller", "sid": "sprint-20260509-205414", "data": {"phase": "planning_complete", "handoff_to": "builder_main"}}
-{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-10T00:58:39Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T00:58:44Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
-{"ts": "2026-05-10T00:59:31Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
-{"ts": "2026-05-10T00:59:31Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
-{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-10T00:59:35Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T00:59:48Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
-{"ts": "2026-05-10T01:04:36Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
-{"event": "waked", "by": "wake", "data": {"from_status": "active", "target_pane": "solar-harness:0.2"}, "ts": "2026-05-10T01:04:39Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T01:09:40Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_ready_for_builder", "severity": "info", "data": {"target": "solar-harness:0.2"}}
-{"event": "waked", "by": "wake", "data": {"from_status": "reviewing", "target_pane": "solar-harness:0.3"}, "ts": "2026-05-10T01:09:44Z", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T01:10:10Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
-{"ts": "2026-05-10T01:10:31Z", "sid": "sprint-20260509-205414", "event": "dispatched", "by": "coordinator"}
-{"ts": "2026-05-10T01:18:33Z", "event": "eval_passed", "by": "evaluator", "verdict": "pass", "sid": "sprint-20260509-205414"}
-{"ts": "2026-05-10T01:19:15Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
-{"ts":"2026-05-10T01:19:17Z","event":"planner_notified","by":"coordinator","data":{"status":"passed"}}
-{"ts": "2026-05-10T01:19:31Z", "sid": "sprint-20260509-205414", "event": "dispatch_queued", "by": "coordinator"}
-{"ts": "2026-05-10T01:19:45Z", "sid": "sprint-20260509-205414", "event": "dispatch_failed", "by": "coordinator"}
-{"ts": "2026-05-10T01:20:01Z", "sid": "sprint-20260509-205414", "event": "handle_passed_completed", "by": "coordinator"}
-{"ts": "2026-05-10T01:20:01Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260509-205414.accepted.md", "bytes": 40042, "source_hash": "03df8f717b748e410d403f0c7bb4eb54a290fe1709172409d4f53fbd01926ce3"}
-{"ts": "2026-05-10T01:20:01Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-205414.dispatch.md"}
+{"ts": "2026-05-24T01:51:13Z", "event": "accepted_artifact_exported", "source": "accepted-artifact-export", "path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-205414.accepted.md", "bytes": 40134, "source_hash": "b989df2a15d4e24c55ec5277b961f8b3aae6c9b8aea45ac50ac33a0aacc37280", "sidecars": {"source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-205414.source_artifact_index.md", "summary:eval": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-205414.eval.summary.md", "summary:status": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-205414.status.summary.md", "summary:task_graph": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260509-205414.task_graph.summary.md"}}
+{"ts": "2026-05-24T01:51:13Z", "event": "accepted_artifact_ingest_dispatched", "source": "accepted-artifact-export", "dispatch_file": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260509-205414.dispatch.md"}
+{"ts": "2026-05-26T18:02:07Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "planner", "stage": "prd_ready", "reason": "pm_prd_ready"}}
+{"ts": "2026-05-26T21:58:41Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-26T22:00:10Z", "sid": "sprint-20260509-205414", "event": "planner_notified", "by": "coordinator"}
+{"ts": "2026-05-26T22:01:23Z", "sid": "sprint-20260509-205414", "event": "prompt_quarantined", "by": "coordinator"}
+{"ts": "2026-05-26T22:03:32Z", "sid": "sprint-20260509-205414", "event": "dispatch_failed", "by": "coordinator"}
+{"ts": "2026-05-26T22:05:38Z", "sid": "sprint-20260509-205414", "event": "dispatched", "by": "coordinator"}
+{"ts": "2026-05-26T22:08:13Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_workflow_route_normalized", "severity": "info", "data": {"route_role": "builder_main", "stage": "planning_complete", "reason": "planner_artifacts_and_task_graph_ready"}}
+{"ts": "2026-05-26T22:08:13Z", "sprint_id": "sprint-20260509-205414", "actor": "solar-autopilot", "event": "autopilot_graph_doctor_repaired", "severity": "warn", "data": {"ok": false, "sprint_id": null, "issues": [{"type": "node_status_drift", "node": "N1", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N2", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N3", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N4", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N5", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N6", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N7", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}, {"type": "node_status_drift", "node": "N8", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed"}], "repairs": [{"type": "node_status_drift", "node": "N1", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N2", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N3", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N4", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N5", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N6", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N7", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}, {"type": "node_status_drift", "node": "N8", "inline_status": "skipped_parent_passed", "inline_updated_at": "2026-05-10T01:30:45Z", "result_status": "passed", "result_updated_at": "2026-05-10T01:10:00Z", "effective_status": "passed", "repair": "node_results_updated_from_inline"}], "parent": {"ok": true, "sprint_id": null, "ready": true, "node_count": 8, "open_nodes": [], "failed_nodes": [], "required_gates": ["schema-valid", "extractor-pass", "patterns-pass", "compressor-pass", "cli-pass", "backfill-pass", "hook-pass", "e2e-pass"], "missing_gates": []}, "repaired": true}}
+{"ts": "2026-05-26T23:33:44Z", "sid": "sprint-20260509-205414", "event": "state_changed", "by": "coordinator"}
+{"ts": "2026-05-26T23:35:38Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T01:25:06Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T01:53:49Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T03:24:00Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T03:52:47Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T05:23:34Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T11:23:07Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T11:38:39Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T12:41:32Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T13:49:51Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T14:55:44Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T15:30:20Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T16:04:11Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T16:54:02Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T17:32:44Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T18:07:33Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T19:15:41Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T20:05:44Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T21:05:45Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T22:23:26Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T23:14:17Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-27T23:55:53Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T00:41:25Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T01:28:04Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T02:24:24Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T05:19:24Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T06:11:10Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T07:12:29Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T08:03:34Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T08:44:57Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T09:23:32Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T10:00:30Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T10:37:37Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T11:14:48Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T11:54:18Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T15:20:25Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T16:42:01Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}
+{"ts": "2026-05-28T18:55:03Z", "sid": "sprint-20260509-205414", "event": "graph_nodes_dispatched", "by": "coordinator"}

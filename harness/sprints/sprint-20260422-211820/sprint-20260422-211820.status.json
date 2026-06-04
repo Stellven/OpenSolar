@@ -62,15 +62,19 @@
       }
     }
   ],
-  "updated_at": "2026-05-12T19:43:23Z",
+  "updated_at": "2026-05-24T01:51:11Z",
   "last_handoff_mtime": 1776866608.0,
   "phase": "eval_passed",
   "handoff_to": "done",
   "target_role": "done",
   "knowledge_export_status": "exported",
-  "knowledge_export_path": "/Users/sihaoli/Knowledge/_raw/solar-harness/accepted/sprint-20260422-211820.accepted.md",
-  "knowledge_ingest_dispatch": "/Users/sihaoli/Knowledge/_raw/solar-harness/.dispatch/sprint-20260422-211820.dispatch.md",
-  "knowledge_exported_at": "2026-05-12T19:43:23Z",
+  "knowledge_export_path": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260422-211820.accepted.md",
+  "knowledge_source_artifact_index": "/Users/lisihao/Knowledge/_raw/solar-harness/accepted/sprint-20260422-211820.source_artifact_index.md",
+  "knowledge_summary_count": 2,
+  "knowledge_ingest_dispatch": "/Users/lisihao/Knowledge/_raw/solar-harness/.dispatch/sprint-20260422-211820.dispatch.md",
+  "knowledge_exported_at": "2026-05-24T01:51:11Z",
   "knowledge_ingested_at": null,
+  "knowledge_closure_required": true,
+  "knowledge_closure_status": "exported",
   "knowledge_export_error": null
 }

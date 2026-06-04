@@ -18,13 +18,21 @@ from typing import Any
 
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
+REPORTS_DIR = HARNESS_DIR / "reports"
 
 
 def discover_eval_files(sprints_dir: Path | str, sid: str) -> list[Path]:
     """Find research_eval.*.json files matching the given sprint ID prefix."""
     sprints_dir = Path(sprints_dir)
-    pattern = str(sprints_dir / f"{sid}*research_eval*.json")
-    return sorted(Path(p) for p in glob.glob(pattern))
+    patterns = [str(sprints_dir / f"{sid}*research_eval*.json")]
+    if sid:
+        patterns.append(str(REPORTS_DIR / sid / "*research_eval*.json"))
+        patterns.append(str(REPORTS_DIR / f"{sid}*" / "*research_eval*.json"))
+    paths: list[Path] = []
+    for pattern in patterns:
+        paths.extend(Path(p) for p in glob.glob(pattern))
+    unique = sorted({str(path): path for path in paths}.values())
+    return unique
 
 
 def load_eval(path: Path) -> dict[str, Any]:
@@ -52,12 +60,18 @@ def _discover_artifacts_for_eval(eval_path: Path, data: dict[str, Any]) -> dict[
     run_id = str(data.get("run_id") or eval_path.name.replace("-research_eval.json", ""))
     report_ast = output_root / "report_ast.json"
     bibliography = output_root / "final.bibliography.json"
+    
+    figures_json = output_root / "figures.json"
+    figures_jsonl = output_root / "figures.jsonl"
+    figures_path = figures_json if figures_json.exists() else figures_jsonl
+
     artifacts = {
         "eval_json": str(eval_path),
         "output_dir": str(output_root),
         "final_md": final_md,
         "report_ast": str(report_ast),
         "bibliography": str(bibliography),
+        "figures": str(figures_path),
     }
     exists = {key: bool(value and Path(value).expanduser().exists()) for key, value in artifacts.items()}
     return {
@@ -325,6 +339,151 @@ def _load_execution_metrics(sprints_dir: Path, sid: str, runs: list[dict[str, An
     return {}
 
 
+def _figures_summary(figures_path_str: str, output_dir_str: str) -> dict[str, Any]:
+    """Parse figures from figures.json or figures.jsonl and validate their grounding against claims and evidence."""
+    if not figures_path_str or not Path(figures_path_str).exists():
+        return {
+            "count": 0,
+            "grounded_count": 0,
+            "ungrounded_count": 0,
+            "items": []
+        }
+        
+    path = Path(figures_path_str)
+    figures_data = []
+    try:
+        if path.name.endswith(".jsonl"):
+            # read JSONL
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    figures_data.append(json.loads(line))
+        else:
+            # read JSON array
+            figures_data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "count": 0,
+            "grounded_count": 0,
+            "ungrounded_count": 0,
+            "items": [],
+            "error": "figures_file_corrupt"
+        }
+
+    if not isinstance(figures_data, list):
+        return {
+            "count": 0,
+            "grounded_count": 0,
+            "ungrounded_count": 0,
+            "items": [],
+            "error": "figures_format_invalid"
+        }
+
+    # Load claims
+    claim_ids = set()
+    claims_path = Path(output_dir_str) / "claims.jsonl"
+    if claims_path.exists():
+        try:
+            for line in claims_path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    if row.get("id"):
+                        claim_ids.add(row["id"])
+                    elif row.get("claim_id"):
+                        claim_ids.add(row["claim_id"])
+        except Exception:
+            pass
+
+    # Load evidence
+    evidence_ids = set()
+    evidence_path = Path(output_dir_str) / "evidence.jsonl"
+    if evidence_path.exists():
+        try:
+            for line in evidence_path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    if row.get("id"):
+                        evidence_ids.add(row["id"])
+                    elif row.get("evidence_id"):
+                        evidence_ids.add(row["evidence_id"])
+        except Exception:
+            pass
+
+    valid_ids = claim_ids | evidence_ids
+    items = []
+    grounded_count = 0
+    ungrounded_count = 0
+
+    for fig in figures_data:
+        if not isinstance(fig, dict):
+            continue
+        fig_id = fig.get("figure_id") or fig.get("id") or "unknown"
+        title = fig.get("title") or "Untitled"
+        fig_type = fig.get("figure_type") or fig.get("type") or "unknown"
+        grounding_ids = fig.get("grounding_ids") or []
+        spec_data = fig.get("spec_data") or {}
+
+        # Validate grounding
+        errors = []
+        if not fig.get("figure_id") and not fig.get("id"):
+            errors.append("figure_id_missing")
+        if not fig.get("title"):
+            errors.append("figure_title_missing")
+        if fig_type not in {"architecture_diagram", "timeline"}:
+            errors.append(f"figure_type_invalid:{fig_type}")
+        if not grounding_ids:
+            errors.append("figure_grounding_empty")
+        else:
+            for gid in grounding_ids:
+                if gid not in valid_ids:
+                    errors.append(f"figure_grounding_unresolved:{gid}")
+        
+        if isinstance(spec_data, dict):
+            if fig_type == "architecture_diagram":
+                nodes = spec_data.get("nodes") or []
+                edges = spec_data.get("edges") or []
+                if not nodes:
+                    errors.append("figure_architecture_nodes_missing")
+                if not edges:
+                    errors.append("figure_architecture_edges_missing")
+                for node in nodes:
+                    if isinstance(node, dict) and node.get("grounding_id"):
+                        if node["grounding_id"] not in grounding_ids or node["grounding_id"] not in valid_ids:
+                            errors.append(f"figure_component_grounding_invalid:{node['grounding_id']}")
+                for edge in edges:
+                    if isinstance(edge, dict) and edge.get("grounding_id"):
+                        if edge["grounding_id"] not in grounding_ids or edge["grounding_id"] not in valid_ids:
+                            errors.append(f"figure_component_grounding_invalid:{edge['grounding_id']}")
+            elif fig_type == "timeline":
+                events = spec_data.get("events") or []
+                if not events:
+                    errors.append("figure_timeline_events_missing")
+                for event in events:
+                    if isinstance(event, dict) and event.get("grounding_id"):
+                        if event["grounding_id"] not in grounding_ids or event["grounding_id"] not in valid_ids:
+                            errors.append(f"figure_component_grounding_invalid:{event['grounding_id']}")
+
+        is_grounded = len(errors) == 0
+        if is_grounded:
+            grounded_count += 1
+        else:
+            ungrounded_count += 1
+
+        items.append({
+            "figure_id": fig_id,
+            "title": title,
+            "type": fig_type,
+            "status": "grounded" if is_grounded else "ungrounded",
+            "errors": errors
+        })
+
+    return {
+        "count": len(figures_data),
+        "grounded_count": grounded_count,
+        "ungrounded_count": ungrounded_count,
+        "items": items
+    }
+
+
 def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str, Any]:
     """Build JSON payload for GET /research/<sid>.
 
@@ -366,6 +525,7 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
         discovered = _discover_artifacts_for_eval(ef, data)
         embedded_metrics = data.get("execution_metrics") if isinstance(data.get("execution_metrics"), dict) else {}
         run_metrics = _normalize_execution_metrics(embedded_metrics)
+        fig_summary = _figures_summary(discovered["artifacts"].get("figures"), discovered["artifacts"].get("output_dir"))
         runs.append({
             "run_id": discovered["run_id"],
             "status": status or "unknown",
@@ -380,6 +540,7 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
             "artifact_exists": discovered["exists"],
             "report_ast_sections": discovered["report_ast_sections"],
             "execution_metrics": embedded_metrics,
+            "figures_summary": fig_summary,
             **run_metrics,
         })
 
@@ -403,6 +564,12 @@ def build_research_payload(sprints_dir: Path | str | None, sid: str) -> dict[str
         "latest": runs[-1] if runs else {},
         "human_search": discover_human_search_waiting(sprints_dir, sid),
         "quality_gates": discover_quality_gates(sprints_dir, sid),
+        "figures_summary": runs[-1].get("figures_summary") if runs else {
+            "count": 0,
+            "grounded_count": 0,
+            "ungrounded_count": 0,
+            "items": []
+        },
         **metrics_summary,
     }
 
@@ -464,7 +631,7 @@ def generate_markdown_report(sprints_dir: Path | str | None, sid: str) -> str:
     gate_items = quality_gates.get("items") or []
     if gate_items:
         lines.extend([
-            "## DeepResearch Quality Gates",
+            "## DeepDive Quality Gates",
             "",
             "| Node | Status | Verdict | Auto Run | Errors |",
             "|------|--------|---------|----------|--------|",
@@ -491,4 +658,21 @@ def generate_markdown_report(sprints_dir: Path | str | None, sid: str) -> str:
                 f"`{item.get('results_md', '')}` | `{item.get('import_command', '')}` |"
             )
         lines.append("")
+
+    figures_summary = data.get("figures_summary") or {}
+    if figures_summary.get("count", 0) > 0:
+        lines.extend([
+            "## Research Figures Summary",
+            "",
+            "| Figure ID | Title | Type | Grounding Status | Errors |",
+            "|-----------|-------|------|------------------|--------|",
+        ])
+        for fig in figures_summary.get("items", []):
+            err_str = ", ".join(fig.get("errors", [])) or "None"
+            lines.append(
+                f"| {fig.get('figure_id')} | {fig.get('title')} | "
+                f"{fig.get('type')} | {fig.get('status')} | {err_str} |"
+            )
+        lines.append("")
+
     return "\n".join(lines)

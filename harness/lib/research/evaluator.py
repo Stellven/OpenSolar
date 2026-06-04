@@ -84,6 +84,7 @@ BOILERPLATE_LINE_RE = re.compile(
 )
 VALIDATED_SOURCE_TYPES = {"paper", "code", "official_doc", "benchmark"}
 HIGH_AUTHORITY_THRESHOLD = 0.75
+CITE_EVIDENCE_RE = re.compile(r"\[cite:(ev_[A-Za-z0-9_-]+)\]")
 
 
 def _normalize_policy_profile(profile: dict[str, Any]) -> dict[str, Any]:
@@ -373,6 +374,17 @@ def _read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _evidence_text(row: dict[str, Any]) -> str:
+    return str(
+        row.get("content")
+        or row.get("span_text")
+        or row.get("clean_markdown")
+        or row.get("text")
+        or row.get("title")
+        or ""
+    )
+
+
 def _tokens(text: str) -> set[str]:
     return {tok.lower() for tok in TOKEN_RE.findall(text or "") if len(tok.strip()) >= 2}
 
@@ -396,6 +408,88 @@ def _source_token_sets(output_dir: Path) -> list[set[str]]:
         if len(toks) >= 6:
             token_sets.append(toks)
     return token_sets
+
+
+def _grounding_checks(text: str, cited_ids: set[str], evidence_by_id: dict[str, str]) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for line_no, line in enumerate((text or "").splitlines(), start=1):
+        line_citations = set(CITE_EVIDENCE_RE.findall(line))
+        if not line_citations:
+            continue
+        context_tokens = _tokens(line)
+        for evidence_id in sorted(line_citations):
+            evidence_tokens = _tokens(evidence_by_id.get(evidence_id, ""))
+            if not evidence_tokens:
+                checks.append({
+                    "evidence_id": evidence_id,
+                    "line": line_no,
+                    "ok": False,
+                    "reason": "evidence_span_text_missing",
+                    "overlap": [],
+                })
+                continue
+            overlap = sorted(context_tokens & evidence_tokens)
+            checks.append({
+                "evidence_id": evidence_id,
+                "line": line_no,
+                "ok": bool(overlap),
+                "reason": "" if overlap else "citation_context_not_grounded",
+                "overlap": overlap[:12],
+            })
+    for evidence_id in sorted(cited_ids):
+        if any(item.get("evidence_id") == evidence_id for item in checks):
+            continue
+        checks.append({
+            "evidence_id": evidence_id,
+            "line": None,
+            "ok": False,
+            "reason": "citation_context_missing",
+            "overlap": [],
+        })
+    return checks
+
+
+def _citation_grounding_metrics(final_text: str, output_dir: Path) -> tuple[dict[str, Any], list[str], list[str]]:
+    cited_ids = set(CITE_EVIDENCE_RE.findall(final_text or ""))
+    evidence_rows = _read_jsonl(output_dir / "evidence.jsonl")
+    evidence_by_id = {
+        str(row.get("id") or row.get("evidence_id") or ""): _evidence_text(row)
+        for row in evidence_rows
+        if str(row.get("id") or row.get("evidence_id") or "")
+    }
+    errors: list[str] = []
+    warnings: list[str] = []
+    missing_ids = sorted(evidence_id for evidence_id in cited_ids if evidence_id not in evidence_by_id)
+    if missing_ids:
+        errors.append("final_md_missing_cited_evidence:" + ",".join(missing_ids[:10]))
+    checks = _grounding_checks(final_text, cited_ids - set(missing_ids), evidence_by_id)
+    grounding_failures = [
+        {
+            "evidence_id": item.get("evidence_id"),
+            "line": item.get("line"),
+            "reason": item.get("reason"),
+        }
+        for item in checks
+        if not item.get("ok")
+    ]
+    if grounding_failures:
+        failing_ids = sorted(
+            {str(item.get("evidence_id") or "") for item in grounding_failures if item.get("evidence_id")}
+        )
+        errors.append("final_md_ungrounded_evidence_citations:" + ",".join(failing_ids[:10]))
+    grounded = sum(
+        1
+        for evidence_id in cited_ids
+        if any(item.get("ok") and item.get("evidence_id") == evidence_id for item in checks)
+    )
+    metrics = {
+        "final_md_citation_count": len(cited_ids),
+        "final_md_grounded_citation_count": grounded,
+        "final_md_missing_cited_evidence_count": len(missing_ids),
+        "final_md_ungrounded_citation_count": len(grounding_failures),
+        "final_md_grounding_failures": grounding_failures[:20],
+    }
+    return metrics, errors, warnings
 
 
 def _expert_analysis_lines(expert_text: str) -> list[str]:
@@ -907,8 +1001,13 @@ def evaluate_artifacts(
         final_text = final_path.read_text(encoding="utf-8", errors="replace")
         if not final_text.strip():
             errors.append("final_md_empty")
-        if not re.search(r"\[cite:ev_[A-Za-z0-9_-]+", final_text):
+        if not CITE_EVIDENCE_RE.search(final_text):
             errors.append("final_md_missing_evidence_citations")
+        else:
+            citation_metrics, citation_errors, citation_warnings = _citation_grounding_metrics(final_text, output_dir)
+            metrics.update(citation_metrics)
+            errors.extend(citation_errors)
+            warnings.extend(citation_warnings)
         metadata_noise = len(re.findall(r"(?im)^\s*-?\s*(Title|URL|Publisher|Published|Source Type):", final_text))
         metrics["metadata_noise_lines"] = metadata_noise
         if metadata_noise > 3:
@@ -974,6 +1073,11 @@ def evaluate_artifacts(
             else:
                 warnings.append("expert_synthesis_novelty_gate_skipped_no_source_material")
 
+    # Evaluate figures grounding if figures file exists
+    fig_ok, fig_errors, fig_warnings = evaluate_figures_grounding(output_dir)
+    errors.extend(fig_errors)
+    warnings.extend(fig_warnings)
+
     artifacts = {
         "eval_json": str(eval_path),
         "output_dir": str(output_dir),
@@ -1002,3 +1106,345 @@ def evaluate_artifacts(
             "strict_profile": strict_profile,
         },
     }
+
+
+def evaluate_final_closeout(
+    output_dir: str | Path,
+    strict: bool = True,
+    *,
+    min_finalized: int | None = None,
+    require_complete: bool = False,
+) -> dict[str, Any]:
+    """Single-source final closeout gate for DeepResearch runs.
+
+    Reads blueprint, section contracts, and evaluation/survey files.
+    Returns payload with verdict in {pass, repairable_fail, hard_fail}.
+    Persists final_closeout.json and run.finalized artifacts in output_dir.
+    """
+    import datetime
+    root = Path(output_dir).expanduser()
+
+    # 1. Determine if it is a survey run or standard run
+    is_survey = (root / "survey_report_ast.json").exists() or (root / "report_blueprint.json").exists()
+
+    # Ensure blueprint and contracts are persisted
+    from research.cli import _ensure_blueprint_and_contracts
+    _ensure_blueprint_and_contracts(root)
+
+    # 2. Get baseline verdict and issues
+    issues: list[str] = []
+    ok = True
+    base_data: dict[str, Any] = {}
+
+    if is_survey:
+        # Load survey evaluator
+        from research.survey.evaluator import evaluate_survey
+        # In strict closeout, strict=True
+        base_data = evaluate_survey(
+            root,
+            strict=strict,
+            min_finalized=min_finalized,
+            require_complete=require_complete,
+        )
+        ok = bool(base_data.get("ok"))
+        issues = (base_data.get("scorecard") or {}).get("issues") or []
+    else:
+        # Standard research run closeout
+        # Find eval_json
+        eval_json_candidates = [
+            root / "research_eval.json",
+            root / "eval_artifacts.json",
+            root / "eval.json",
+            root / "run-research_eval.json",
+        ]
+        if root.exists():
+            try:
+                for p in root.iterdir():
+                    if p.is_file() and p.name.endswith(("-research_eval.json", "-eval.json")):
+                        eval_json_candidates.append(p)
+            except Exception:
+                pass
+        eval_json = root / "eval.json"
+        for cand in eval_json_candidates:
+            if cand.exists():
+                eval_json = cand
+                break
+
+        # If no eval.json, check if we can run evaluate_artifacts
+        if not eval_json.exists():
+            ok = False
+            issues = [f"research_eval_json_missing:{eval_json}"]
+        else:
+            base_data = evaluate_artifacts(
+                eval_json,
+                strict_profile=strict,
+            )
+            ok = bool(base_data.get("ok"))
+            issues = base_data.get("errors") or []
+
+    # 3. Map ok/issues to pass | repairable_fail | hard_fail
+    if ok:
+        verdict = "pass"
+    else:
+        if is_survey:
+            # Check for hard fail indicators in survey issues
+            hard_fail_keys = {
+                "evidence_packs_missing",
+                "chapter_count_low",
+                "section_count_low",
+                "source_type_count_low",
+                "evidence_count_low",
+                "claim_count_low",
+                "evidence_source_coverage_low",
+                "claim_support_coverage_low",
+                "ready_pack_ratio_low",
+                "blocked_sections",
+                "taxonomy_depth_score_low",
+                "contradiction_coverage_low",
+                "section_factual_accuracy_low",
+                "section_grounding_accuracy_low",
+            }
+            has_hard_fail = any(
+                any(issue.startswith(key) for key in hard_fail_keys)
+                for issue in issues
+            )
+            if has_hard_fail:
+                verdict = "hard_fail"
+            else:
+                verdict = "repairable_fail"
+        else:
+            # Check standard deep research errors
+            hard_fail_keys = {
+                "research_eval_json_missing",
+                "source_count_zero",
+                "evidence_count_zero",
+                "claim_count_zero",
+                "section_count_zero",
+                "unsupported_rate_too_high",
+                "citation_accuracy_too_low",
+                "report_ast_missing",
+                "report_ast_has_no_sections",
+                "final_md_missing",
+                "final_md_empty",
+                "expert_synthesis_missing",
+                "figure_",
+            }
+            has_hard_fail = any(
+                any(issue.startswith(key) for key in hard_fail_keys)
+                for issue in issues
+            )
+            if has_hard_fail:
+                verdict = "hard_fail"
+            else:
+                verdict = "repairable_fail"
+
+    # 4. Construct final closeout gate payload
+    closeout_artifact = {
+        "verdict": verdict,
+        "ok": verdict == "pass",
+        "run_id": base_data.get("run_id") or root.name,
+        "output_dir": str(root),
+        "is_survey": is_survey,
+        "issues": issues,
+        "timestamp": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "base_eval_data": {
+            "verdict": base_data.get("verdict") or ("PASS" if ok else "FAIL"),
+            "scorecard": base_data.get("scorecard") if is_survey else None,
+            "metrics": base_data.get("metrics") if not is_survey else None,
+        }
+    }
+
+    # 5. Persist final_closeout.json
+    closeout_path = root / "final_closeout.json"
+    closeout_path.write_text(json.dumps(closeout_artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    # 6. run.finalized requires persisted final closeout artifact
+    run_finalized_path = root / "run.finalized"
+    if verdict == "pass":
+        run_finalized_data = {
+            "run_id": closeout_artifact["run_id"],
+            "finalized_at": closeout_artifact["timestamp"],
+            "closeout_artifact": "final_closeout.json",
+            "verdict": "pass"
+        }
+        run_finalized_path.write_text(json.dumps(run_finalized_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    else:
+        if run_finalized_path.exists():
+            try:
+                run_finalized_path.unlink()
+            except OSError:
+                pass
+
+    # Also write research_quality_gate field to eval.json/survey_eval.json for dispatcher compatibility
+    eval_json_path = root / ("survey_eval.json" if is_survey else "eval.json")
+    if eval_json_path.exists():
+        try:
+            eval_data = json.loads(eval_json_path.read_text(encoding="utf-8"))
+            if isinstance(eval_data, dict):
+                eval_data["research_quality_gate"] = {
+                    "ok": verdict == "pass",
+                    "verdict": "PASS" if verdict == "pass" else "FAIL",
+                    "closeout_verdict": verdict,
+                    "issues": issues,
+                    "errors": issues,
+                }
+                eval_json_path.write_text(json.dumps(eval_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+    return {
+        "ok": verdict == "pass",
+        "verdict": verdict,
+        "issues": issues,
+        "artifact_paths": {
+            "final_closeout": str(closeout_path),
+            "run_finalized": str(run_finalized_path) if verdict == "pass" else None,
+        }
+    }
+
+
+def evaluate_figures_grounding(output_dir: Path) -> tuple[bool, list[str], list[str]]:
+    """Determine figure grounding quality.
+    
+    Reads figures.json or figures.jsonl in output_dir, and validates them
+    against claim/evidence IDs.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    figures_json_path = output_dir / "figures.json"
+    figures_jsonl_path = output_dir / "figures.jsonl"
+    
+    figures_data = []
+    if figures_json_path.exists():
+        try:
+            with open(figures_json_path, "r", encoding="utf-8") as f:
+                figures_data = json.load(f)
+        except Exception as e:
+            errors.append(f"figure_json_corrupt: {e}")
+            return False, errors, warnings
+    elif figures_jsonl_path.exists():
+        try:
+            figures_data = _read_jsonl(figures_jsonl_path)
+        except Exception as e:
+            errors.append(f"figure_jsonl_corrupt: {e}")
+            return False, errors, warnings
+    else:
+        # If no figures file, pass by default (fail-open)
+        return True, [], []
+
+    if not isinstance(figures_data, list):
+        errors.append("figure_format_invalid: figures file must contain a list of figures")
+        return False, errors, warnings
+
+    # Load claims
+    claim_ids = set()
+    claims_path = output_dir / "claims.jsonl"
+    if claims_path.exists():
+        for r in _read_jsonl(claims_path):
+            if r.get("id"):
+                claim_ids.add(r["id"])
+            elif r.get("claim_id"):
+                claim_ids.add(r["claim_id"])
+
+    # Load evidence
+    evidence_ids = set()
+    evidence_path = output_dir / "evidence.jsonl"
+    if evidence_path.exists():
+        for r in _read_jsonl(evidence_path):
+            if r.get("id"):
+                evidence_ids.add(r["id"])
+            elif r.get("evidence_id"):
+                evidence_ids.add(r["evidence_id"])
+
+    valid_ids = claim_ids | evidence_ids
+
+    for fig_dict in figures_data:
+        if not isinstance(fig_dict, dict):
+            errors.append("figure_entry_invalid: figure entry is not a dictionary")
+            continue
+
+        fig_id = fig_dict.get("figure_id") or fig_dict.get("id")
+        title = fig_dict.get("title")
+        fig_type = fig_dict.get("figure_type") or fig_dict.get("type")
+        grounding_ids = fig_dict.get("grounding_ids")
+        spec_data = fig_dict.get("spec_data")
+
+        if not fig_id:
+            errors.append("figure_id_missing: figure is missing an ID")
+            continue
+
+        if not title:
+            errors.append(f"figure_title_missing: figure {fig_id} is missing a title")
+            continue
+
+        if fig_type not in {"architecture_diagram", "timeline"}:
+            errors.append(f"figure_type_invalid: figure {fig_id} has invalid or missing type {fig_type!r}")
+            continue
+
+        if not isinstance(grounding_ids, list):
+            errors.append(f"figure_grounding_invalid: figure {fig_id} grounding_ids must be a list of strings")
+            continue
+
+        if not grounding_ids:
+            errors.append(f"figure_grounding_empty: figure {fig_id} has no grounding claims or evidence")
+            continue
+
+        # Check all grounding_ids exist
+        for gid in grounding_ids:
+            if gid not in valid_ids:
+                errors.append(f"figure_grounding_unresolved: figure {fig_id} references unknown grounding ID {gid!r}")
+
+        if not isinstance(spec_data, dict):
+            errors.append(f"figure_spec_data_invalid: figure {fig_id} spec_data must be a dictionary")
+            continue
+
+        if fig_type == "architecture_diagram":
+            nodes = spec_data.get("nodes")
+            edges = spec_data.get("edges")
+            if not isinstance(nodes, list) or not nodes:
+                errors.append(f"figure_architecture_nodes_missing: figure {fig_id} spec_data is missing nodes")
+            else:
+                for node in nodes:
+                    if not isinstance(node, dict):
+                        errors.append(f"figure_component_invalid: node in figure {fig_id} is not a dictionary")
+                        continue
+                    node_gid = node.get("grounding_id")
+                    if node_gid:
+                        if node_gid not in grounding_ids:
+                            errors.append(f"figure_component_grounding_unlisted: node in figure {fig_id} has grounding_id {node_gid!r} not in top-level grounding_ids")
+                        if node_gid not in valid_ids:
+                            errors.append(f"figure_component_grounding_unresolved: node in figure {fig_id} has unknown grounding_id {node_gid!r}")
+
+            if not isinstance(edges, list) or not edges:
+                errors.append(f"figure_architecture_edges_missing: figure {fig_id} spec_data is missing edges")
+            else:
+                for edge in edges:
+                    if not isinstance(edge, dict):
+                        errors.append(f"figure_component_invalid: edge in figure {fig_id} is not a dictionary")
+                        continue
+                    edge_gid = edge.get("grounding_id")
+                    if edge_gid:
+                        if edge_gid not in grounding_ids:
+                            errors.append(f"figure_component_grounding_unlisted: edge in figure {fig_id} has grounding_id {edge_gid!r} not in top-level grounding_ids")
+                        if edge_gid not in valid_ids:
+                            errors.append(f"figure_component_grounding_unresolved: edge in figure {fig_id} has unknown grounding_id {edge_gid!r}")
+
+        elif fig_type == "timeline":
+            events = spec_data.get("events")
+            if not isinstance(events, list) or not events:
+                errors.append(f"figure_timeline_events_missing: figure {fig_id} spec_data is missing events")
+            else:
+                for event in events:
+                    if not isinstance(event, dict):
+                        errors.append(f"figure_component_invalid: event in figure {fig_id} is not a dictionary")
+                        continue
+                    event_gid = event.get("grounding_id")
+                    if event_gid:
+                        if event_gid not in grounding_ids:
+                            errors.append(f"figure_component_grounding_unlisted: event in figure {fig_id} has grounding_id {event_gid!r} not in top-level grounding_ids")
+                        if event_gid not in valid_ids:
+                            errors.append(f"figure_component_grounding_unresolved: event in figure {fig_id} has unknown grounding_id {event_gid!r}")
+
+    ok = len(errors) == 0
+    return ok, errors, warnings

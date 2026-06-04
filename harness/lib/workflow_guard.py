@@ -18,6 +18,16 @@ import os
 from pathlib import Path
 from typing import Any
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from prerequisite_resolver import iter_blocked
+try:
+    from task_graph_io import spec_valid as _tgio_spec_valid, triface_parent_ready as _tgio_parent_ready
+except Exception:  # pragma: no cover - fail-open if module not yet available
+    _tgio_spec_valid = None  # type: ignore
+    _tgio_parent_ready = None  # type: ignore
+del _sys, _os
+
 
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", Path.home() / ".solar" / "harness"))
 SPRINTS_DIR = Path(os.environ.get("SPRINTS_DIR", HARNESS_DIR / "sprints"))
@@ -35,6 +45,23 @@ def _nonempty(path: Path) -> bool:
         return path.is_file() and path.stat().st_size > 0
     except OSError:
         return False
+
+
+def _artifact_path(sid: str, suffix: str, *, node_level: bool = True) -> Path:
+    direct = SPRINTS_DIR / f"{sid}.{suffix}"
+    if _nonempty(direct):
+        return direct
+    if not node_level:
+        return direct
+    matches = sorted(
+        SPRINTS_DIR.glob(f"{sid}.*-{suffix}"),
+        key=lambda path: path.stat().st_mtime if path.exists() else 0,
+        reverse=True,
+    )
+    for candidate in matches:
+        if _nonempty(candidate):
+            return candidate
+    return direct
 
 
 def _graph_valid(path: Path) -> tuple[bool, str]:
@@ -57,8 +84,11 @@ def _graph_valid(path: Path) -> tuple[bool, str]:
         if node_id in seen:
             return False, f"duplicate_node:{node_id}"
         seen.add(node_id)
-        if "write_scope" not in node:
-            return False, f"node_{node_id}_missing_write_scope"
+        if not str(node.get("goal") or "").strip():
+            return False, f"node_{node_id}_missing_goal"
+        depends_on = node.get("depends_on", [])
+        if depends_on is None or not isinstance(depends_on, list):
+            return False, f"node_{node_id}_invalid_depends_on"
     return True, "ok"
 
 
@@ -92,17 +122,28 @@ def _graph_parent_ready(path: Path) -> bool:
     return required.issubset(passed_gates)
 
 
-def _parse_external_prerequisite(entry: Any) -> tuple[str, str, str]:
-    if isinstance(entry, dict):
-        sid = str(entry.get("sprint_id") or entry.get("sid") or entry.get("child_sprint_id") or "").strip()
-        required = str(entry.get("required_status") or entry.get("status") or entry.get("required") or "passed").strip().lower() or "passed"
-        requirement = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        return requirement, sid, required
-    entry = str(entry).strip()
-    if ":" not in entry:
-        return entry, entry, "passed"
-    sid, required = entry.rsplit(":", 1)
-    return entry, sid.strip(), (required.strip().lower() or "passed")
+def _triface_graph_valid(sid: str) -> tuple[bool, str]:
+    """Check spec validity first, fall back to legacy task_graph.json."""
+    if _tgio_spec_valid is not None:
+        ok, reason = _tgio_spec_valid(sid)
+        if ok:
+            return True, "spec_ok"
+        if reason != "missing":
+            return False, f"spec:{reason}"
+    # Spec not present — fall through to legacy path
+    return None, "spec_missing"  # type: ignore[return-value]
+
+
+def _triface_parent_ready(sid: str) -> bool:
+    """Check parent readiness via spec+state+closure, fall back to legacy."""
+    if _tgio_parent_ready is not None:
+        try:
+            result = _tgio_parent_ready(sid)
+            if result.get("source") in {"closure", "spec+state"}:
+                return bool(result.get("ready"))
+        except Exception:
+            pass
+    return False
 
 
 def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
@@ -112,52 +153,7 @@ def _blocked_external_prerequisites(path: Path) -> list[dict[str, Any]]:
         graph = json.loads(path.read_text())
     except Exception as exc:
         return [{"requirement": "task_graph", "reason": "parse_error", "error": str(exc)}]
-
-    entries: list[Any] = []
-    for raw in graph.get("prerequisites") or []:
-        if str(raw).strip():
-            entries.append(raw)
-    policy = graph.get("dependency_policy") or {}
-    if isinstance(policy, dict):
-        for raw in policy.get("blocks_until") or []:
-            if str(raw).strip():
-                entries.append(raw)
-
-    blocked: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for entry in entries:
-        requirement, upstream_sid, required = _parse_external_prerequisite(entry)
-        dedupe_key = f"{upstream_sid}:{required}"
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        detail: dict[str, Any] = {
-            "requirement": requirement,
-            "sprint_id": upstream_sid,
-            "required": required,
-        }
-        status_path = SPRINTS_DIR / f"{upstream_sid}.status.json"
-        if not upstream_sid:
-            detail["reason"] = "empty_sprint_id"
-            blocked.append(detail)
-            continue
-        if not status_path.exists():
-            detail["reason"] = "missing_status"
-            blocked.append(detail)
-            continue
-        status = _read_json(status_path)
-        current_status = str(status.get("status") or "").lower()
-        current_phase = str(status.get("phase") or "").lower()
-        detail["current_status"] = current_status
-        detail["current_phase"] = current_phase
-        if required == "passed":
-            ok = current_status == "passed"
-        else:
-            ok = current_status == required or current_phase == required
-        if not ok:
-            detail["reason"] = "status_not_satisfied"
-            blocked.append(detail)
-    return blocked
+    return iter_blocked(graph, SPRINTS_DIR)
 
 
 def _contract_text(sid: str) -> str:
@@ -199,18 +195,31 @@ def route(sid: str) -> dict[str, Any]:
     target_role = str(status.get("target_role") or "").strip()
     text = _contract_text(sid)
 
-    prd = SPRINTS_DIR / f"{sid}.prd.md"
-    product_brief = SPRINTS_DIR / f"{sid}.product-brief.md"
-    design = SPRINTS_DIR / f"{sid}.design.md"
-    plan = SPRINTS_DIR / f"{sid}.plan.md"
+    prd = _artifact_path(sid, "prd.md", node_level=False)
+    product_brief = _artifact_path(sid, "product-brief.md", node_level=False)
+    design = _artifact_path(sid, "design.md")
+    plan = _artifact_path(sid, "plan.md")
     graph = SPRINTS_DIR / f"{sid}.task_graph.json"
     prd_html = SPRINTS_DIR / f"{sid}.prd.html"
+    design_html = SPRINTS_DIR / f"{sid}.design.html"
     planning_html = SPRINTS_DIR / f"{sid}.planning.html"
-    handoff = SPRINTS_DIR / f"{sid}.handoff.md"
-    eval_md = SPRINTS_DIR / f"{sid}.eval.md"
+    handoff = _artifact_path(sid, "handoff.md")
+    eval_md = _artifact_path(sid, "eval.md")
+    eval_json = _artifact_path(sid, "eval.json")
 
-    graph_ok, graph_reason = _graph_valid(graph)
-    graph_parent_ready = _graph_parent_ready(graph)
+    # Try triface (spec/state/closure) first; fall back to legacy task_graph.json
+    _triface_ok, _triface_reason = _triface_graph_valid(sid)
+    if _triface_ok is True:
+        graph_ok, graph_reason = True, _triface_reason
+    else:
+        graph_ok, graph_reason = _graph_valid(graph)
+        if _triface_ok is None and _triface_reason == "spec_missing":
+            # spec just not created yet — use legacy result
+            pass
+
+    # Parent-ready: prefer triface (closure/state), fall back to legacy
+    triface_ready = _triface_parent_ready(sid)
+    graph_parent_ready = triface_ready or _graph_parent_ready(graph)
     blocked_prerequisites = _blocked_external_prerequisites(graph)
     artifacts = {
         "prd": _nonempty(prd),
@@ -218,11 +227,12 @@ def route(sid: str) -> dict[str, Any]:
         "design": _nonempty(design),
         "plan": _nonempty(plan),
         "prd_html": _nonempty(prd_html),
+        "design_html": _nonempty(design_html),
         "planning_html": _nonempty(planning_html),
         "task_graph": graph_ok,
         "task_graph_parent_ready": graph_parent_ready,
         "handoff": _nonempty(handoff),
-        "eval": _nonempty(eval_md),
+        "eval": _nonempty(eval_md) or _nonempty(eval_json),
     }
     planner_ready = artifacts["prd"] and artifacts["design"] and artifacts["plan"] and artifacts["task_graph"]
     requirements_ready = artifacts["prd"]

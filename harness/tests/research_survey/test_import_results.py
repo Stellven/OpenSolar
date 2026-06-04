@@ -341,3 +341,82 @@ Relevant Quotes:
     assert ast["target_chars"] == 100000
     assert len(ast["chapters"]) == 12
     assert len(ast["sections"]) == 60
+
+
+def test_import_survey_search_results_cli_continue_finalize_accepts_narrative_args(tmp_path, capsys):
+    md = tmp_path / "results.md"
+    source_types = ["paper", "repo", "official_doc", "benchmark"]
+    blocks = ["# External Search Results: latent reasoning"]
+    for idx in range(1, 33):
+        source_type = source_types[(idx - 1) % len(source_types)]
+        blocks.append(f"""
+## Source {idx}: Latent Reasoning Source {idx}
+URL: {_source_url(source_type, idx)}
+Publisher: Example
+Published: 2025-01-{idx:02d}
+Source Type: {source_type}
+Research Angles: {["literature_lineage", "method_taxonomy", "evaluation_protocol", "controversy", "engineering"][(idx - 1) % 5]}
+
+Summary:
+- Latent reasoning source {idx} covers architecture evaluation deployment.
+
+Key Claims:
+- Latent reasoning claim {idx}A requires evidence for architecture evaluation.
+- Latent reasoning claim {idx}B requires evidence for deployment constraints.
+
+Relevant Quotes:
+> Latent reasoning source {idx} preserves evidence boundaries.
+""")
+    md.write_text("\n".join(blocks), encoding="utf-8")
+    rc = main([
+        "survey-import-search-results",
+        "--output-dir", str(tmp_path),
+        "--input-md", str(md),
+        "--continue-finalize",
+        "--brief", "latent reasoning",
+        "--target-chars", "100000",
+        "--section-limit", "1",
+        "--min-finalized", "1",
+        "--min-chars", "100",
+        "--narrative-backend", "deterministic",
+        "--json",
+    ])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["finalize"]["ok"] is True
+
+
+def test_parse_survey_search_markdown_accepts_gemini_deep_search_report_format():
+    markdown = """# Gemini Deep Search
+
+## 文献与链接清单
+- [某条链接](https://example.com/ignore-me)
+
+## 参考结论
+类别 A：CAIS 2026 官方信号与复合 AI 系统（官方会议信号）
+ACM launches CAIS 2026, a new conference on AI and agentic systems
+来源/作者: ACM / EurekAlert! 官方新闻
+核心价值: 明确了 CAIS 2026 的系统组合、编排、端到端评估基调。
+URL: https://www.eurekalert.org/news-releases/1116428
+
+类别 B：重大技术挑战：长轨迹、工具使用与多 Agent 编排（扩展补充信号）
+AgentOrchestra: Orchestrating Multi-Agent Intelligence with the Tool-Environment-Agent(TEA) Protocol
+来源/作者: arXiv [2506.12508v6]
+核心价值: 提出了层次化多 Agent 树状路由框架。
+URL: https://arxiv.org/html/2506.12508v6
+
+类别 C：开源框架
+LangGraph Repository
+来源/作者: GitHub
+核心价值: 展示了 stateful graph orchestration 的工程实现。
+URL: https://github.com/langchain-ai/langgraph
+"""
+    records = parse_survey_search_markdown(markdown)
+    assert len(records) == 3
+    assert records[0]["source_type"] == "official_doc"
+    assert "literature_lineage" in records[0]["research_angles"]
+    assert records[1]["source_type"] == "paper"
+    assert "method_taxonomy" in records[1]["research_angles"]
+    assert records[2]["source_type"] == "code"
+    assert "engineering" in records[2]["research_angles"]

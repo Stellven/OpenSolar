@@ -71,6 +71,15 @@ MD
   cat > "$sd/${sid}.eval.json" <<JSON
 {"verdict":"PASS","sprint_id":"$sid","items":[],"score":10}
 JSON
+  cat > "$sd/${sid}.prd.html" <<HTML
+<!doctype html><html><head><style>.x{color:red}</style></head><body><h1>PRD Visual Summary</h1><script>ignored()</script><p>Human readable PRD card for ${sid}.</p></body></html>
+HTML
+  cat > "$sd/${sid}.design.html" <<HTML
+<!doctype html><html><body><h1>Design Visual Summary</h1><p>Architecture view, stack binding, and interfaces for ${sid}.</p></body></html>
+HTML
+  cat > "$sd/${sid}.planning.html" <<HTML
+<!doctype html><html><body><h1>Planning Visual Summary</h1><p>DAG, write scope, validation commands, and stop rules for ${sid}.</p></body></html>
+HTML
 }
 
 # ─── A1: pass-only ───────────────────────────────────────────────────────────
@@ -157,7 +166,7 @@ _test_artifact-schema() {
     return
   fi
 
-  local required_keys=("source: solar-harness" "artifact_type: accepted_sprint_knowledge" "sprint_id:" "status: passed" "redacted: true" "visibility: internal" "provenance: accepted-by-evaluator" "source_files:")
+  local required_keys=("source: solar-harness" "artifact_type: accepted_sprint_knowledge" "sprint_id:" "status: passed" "redacted: true" "visibility: internal" "provenance: accepted-by-evaluator" "source_files:" "prd_html: true" "design_html: true" "planning_html: true")
   local all_ok=1
   for key in "${required_keys[@]}"; do
     if grep -q "$key" "$outfile"; then
@@ -170,7 +179,7 @@ _test_artifact-schema() {
   [[ $all_ok -eq 1 ]] && _ok "artifact-schema: all required frontmatter keys present"
 
   # Check body sections
-  local required_sections=("## Executive Summary" "## Source Artifact Index")
+  local required_sections=("## Executive Summary" "## Human-readable HTML Artifacts" "## Source Artifact Index")
   for section in "${required_sections[@]}"; do
     if grep -q "$section" "$outfile"; then
       true
@@ -180,6 +189,12 @@ _test_artifact-schema() {
     fi
   done
   [[ $all_ok -eq 1 ]] && _ok "artifact-schema: required body sections present"
+
+  if grep -q "Design Visual Summary" "$outfile" && grep -q "Planning Visual Summary" "$outfile" && grep -q "Human readable PRD card" "$outfile"; then
+    _ok "artifact-schema: HTML artifacts extracted into accepted knowledge"
+  else
+    _fail "artifact-schema: HTML artifacts missing from accepted knowledge"
+  fi
 }
 
 # ─── A3: redaction ───────────────────────────────────────────────────────────

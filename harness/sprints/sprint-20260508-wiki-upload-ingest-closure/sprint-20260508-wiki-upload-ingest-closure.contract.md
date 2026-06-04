@@ -17,13 +17,13 @@ blocks:
 
 ## Intent
 
-Make uploaded documents actually reach searchable knowledge. A file being copied into `/Users/sihaoli/Knowledge/_raw/file-uploads/` is not enough; every upload must have a traceable path through extraction, dispatch completion, curated/indexed vault visibility, and Solar DB/FTS visibility.
+Make uploaded documents actually reach searchable knowledge. A file being copied into `/Users/lisihao/Knowledge/_raw/file-uploads/` is not enough; every upload must have a traceable path through extraction, dispatch completion, curated/indexed vault visibility, and Solar DB/FTS visibility.
 
 This sprint fixes the current 2026-05-08 upload incident and hardens the pipeline so future users do not see "uploaded" documents that are invisible to Solar retrieval.
 
 ## Current Evidence
 
-- 23 original upload files exist under `/Users/sihaoli/Knowledge/_raw/file-uploads/20260508T122047Z-*`.
+- 23 original upload files exist under `/Users/lisihao/Knowledge/_raw/file-uploads/20260508T122047Z-*`.
 - `qmd` title spot-check found only 15/23 documents; 8 documents were not found by title:
   - `03-流形假设下的思考.pages`
   - `04-对谈田渊栋-ai走向何方-我们需要怎样的深度学习理论.pages`
@@ -120,13 +120,13 @@ This sprint fixes the current 2026-05-08 upload incident and hardens the pipelin
 
 7. **Regression suite**
    - Add a test file, for example:
-     - `/Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh`
+     - `/Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh`
    - Tests must use temp vault/DB fixtures by default.
    - Include a guarded real-batch verification mode for this 2026-05-08 upload set.
 
 8. **Runbook**
    - Add:
-     - `/Users/sihaoli/.solar/harness/docs/wiki-upload-ingest-closure.md`
+     - `/Users/lisihao/.solar/harness/docs/wiki-upload-ingest-closure.md`
    - Include how to audit, repair, backfill, interpret `chained`, handle `.pages`, and roll back/quarantine bad rows.
 
 ## Mixture Done Checklist
@@ -137,8 +137,8 @@ This sprint fixes the current 2026-05-08 upload incident and hardens the pipelin
 - [ ] D4: Implement `solar-harness wiki audit-uploads --batch 20260508T122047Z --json` with raw/extracted/dispatch/qmd/Solar DB coverage fields.
 - [ ] D5: Implement `solar-harness wiki backfill-uploads --batch 20260508T122047Z --repair --json` with idempotent qmd/vault and Solar DB/FTS backfill.
 - [ ] D6: Backfill the real `20260508T122047Z` batch so qmd finds 23/23 uploaded documents and Solar DB/FTS finds 23/23.
-- [ ] D7: Add `/Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh` covering dispatch uniqueness, terminal states, `.pages`, audit, backfill, and idempotency.
-- [ ] D8: Add `/Users/sihaoli/.solar/harness/docs/wiki-upload-ingest-closure.md` with audit, repair, rollback, `.pages`, and dispatch-state runbook.
+- [ ] D7: Add `/Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh` covering dispatch uniqueness, terminal states, `.pages`, audit, backfill, and idempotency.
+- [ ] D8: Add `/Users/lisihao/.solar/harness/docs/wiki-upload-ingest-closure.md` with audit, repair, rollback, `.pages`, and dispatch-state runbook.
 
 ## Acceptance Criteria
 
@@ -151,7 +151,7 @@ Required:
 Verify:
 
 ```bash
-find /Users/sihaoli/Knowledge/_raw/file-uploads -maxdepth 1 \
+find /Users/lisihao/Knowledge/_raw/file-uploads -maxdepth 1 \
   -type f -name '20260508T122047Z-*' | wc -l | tr -d ' '
 ```
 
@@ -166,7 +166,7 @@ Required:
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case dispatch-unique
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case dispatch-unique
 ```
 
 ### A3 — Chained Dispatches Are Not Falsely Completed
@@ -178,7 +178,7 @@ Required:
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case terminal-state
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case terminal-state
 ```
 
 ### A4 — `.pages` Files Extract Or Fail Explicitly
@@ -244,7 +244,7 @@ PY
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh
 ```
 
 ## Implementation Notes
@@ -295,7 +295,7 @@ D1, D2, D3, D4, D5, D6, D8 are PASS in production:
 
 **D7 root cause**: 5 mixture builders all wrote to the same path `tests/test-wiki-upload-ingest-closure.sh`. Filesystem mtime kept only B3's content. B1's dispatch-unique cases and B2's `.pages` cases were overwritten silently. `--case` flag dispatcher never made it into the merged file. Builder 4's handoff falsely claims "PASS: 30, FAIL: 0" while actual count is 11.
 
-**Coordinator bug (out of scope for this sprint, log only)**: `parallel-integrate` step in `coordinator.sh` requires `/Users/sihaoli` to be a git repo and fails the sprint to `needs_human_review` when it is not. This is unrelated to deliverable quality and is captured for the coordinator-control-plane-v2 sprint.
+**Coordinator bug (out of scope for this sprint, log only)**: `parallel-integrate` step in `coordinator.sh` requires `/Users/lisihao` to be a git repo and fails the sprint to `needs_human_review` when it is not. This is unrelated to deliverable quality and is captured for the coordinator-control-plane-v2 sprint.
 
 ### Round 2 Scope (single builder, surgical)
 
@@ -344,23 +344,23 @@ Knowledge/_raw/file-uploads/                                       # production 
 
 ```
 # A2 (contract command must now produce sub-suite output)
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case dispatch-unique
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case dispatch-unique
 # expected: at least 4 dispatch-unique assertions, exit 0
 
 # A3 (contract command must now produce sub-suite output)
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case terminal-state
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case terminal-state
 # expected: at least 6 terminal-state assertions including chained-rejects-completed, exit 0
 
 # pages
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case pages
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case pages
 # expected: at least 3 .pages assertions including IWA-snappy, exit 0
 
 # bogus flag
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case foobar; echo "exit=$?"
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh --case foobar; echo "exit=$?"
 # expected: non-zero exit, usage hint on stderr
 
 # default full run
-bash /Users/sihaoli/.solar/harness/tests/test-wiki-upload-ingest-closure.sh
+bash /Users/lisihao/.solar/harness/tests/test-wiki-upload-ingest-closure.sh
 # expected: all four suites report counts, exit 0
 
 # functional non-regression spot-check (D1-D6 must still hold)

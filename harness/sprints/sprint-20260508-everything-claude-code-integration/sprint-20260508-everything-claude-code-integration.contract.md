@@ -32,8 +32,8 @@ Codex behavior.
 - No active Solar integration artifact was found for `everything-claude-code`,
   `EverythingCloudCode`, or `Everything Claude Code` outside archived Codex sessions.
 - Existing related local systems:
-  - Gstack rules are referenced in `/Users/sihaoli/Solar/CLAUDE.md`.
-  - Superpowers is enabled as a Codex plugin in `/Users/sihaoli/.codex/config.toml`.
+  - Gstack rules are referenced in `/Users/lisihao/Solar/CLAUDE.md`.
+  - Superpowers is enabled as a Codex plugin in `/Users/lisihao/.codex/config.toml`.
   - Solar already has its own skills, hooks, coordinator, events, status server, and knowledge
     ingestion paths.
 
@@ -54,34 +54,34 @@ marketplaces or manual copying into `~/.claude/agents`, `~/.claude/rules`,
 
 ## Deliverables
 
-1. `/Users/sihaoli/.solar/harness/vendor/everything-claude-code/`
+1. `/Users/lisihao/.solar/harness/vendor/everything-claude-code/`
    - Read-only upstream clone or snapshot.
    - Must record source URL, commit SHA, license, and fetched_at.
 
-2. `/Users/sihaoli/.solar/harness/reports/everything-claude-code-audit-20260508.md`
+2. `/Users/lisihao/.solar/harness/reports/everything-claude-code-audit-20260508.md`
    - Inventory of agents, skills, commands, hooks, rules, MCP configs, scripts, and tests.
    - Classify each item as `adopt`, `adapt`, `reject`, or `defer`.
    - Include collision analysis against Solar/Gstack/Superpowers/Codex.
 
-3. `/Users/sihaoli/.solar/harness/config/everything-claude-code.allowlist.json`
+3. `/Users/lisihao/.solar/harness/config/everything-claude-code.allowlist.json`
    - Explicit allowlist for components Solar may install or reference.
    - Empty or conservative by default.
 
-4. `/Users/sihaoli/.solar/harness/lib/everything_claude_code_adapter.py`
+4. `/Users/lisihao/.solar/harness/lib/everything_claude_code_adapter.py`
    - Implements `doctor`, `inventory`, `install-dry-run`, `sync-allowlisted`, and `rollback`.
    - Must be non-interactive and idempotent.
 
-5. `/Users/sihaoli/.solar/harness/solar-harness.sh`
+5. `/Users/lisihao/.solar/harness/solar-harness.sh`
    - Adds:
      - `solar-harness everything-claude-code doctor [--json]`
      - `solar-harness everything-claude-code inventory [--json]`
      - `solar-harness everything-claude-code install --dry-run`
      - `solar-harness everything-claude-code sync --allowlist <path>`
 
-6. `/Users/sihaoli/.solar/harness/lib/external-integrations-health.py`
+6. `/Users/lisihao/.solar/harness/lib/external-integrations-health.py`
    - Reports Everything Claude Code as a first-class integration candidate.
 
-7. `/Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh`
+7. `/Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh`
    - Regression tests for inventory, collision detection, dry-run install, rollback, and status.
 
 ## Acceptance Criteria
@@ -96,11 +96,11 @@ Required:
 Verify:
 
 ```bash
-test -d /Users/sihaoli/.solar/harness/vendor/everything-claude-code/.git
-git -C /Users/sihaoli/.solar/harness/vendor/everything-claude-code rev-parse HEAD
+test -d /Users/lisihao/.solar/harness/vendor/everything-claude-code/.git
+git -C /Users/lisihao/.solar/harness/vendor/everything-claude-code rev-parse HEAD
 ```
 
-<!-- verify: cmd="test -d /Users/sihaoli/.solar/harness/vendor/everything-claude-code/.git && git -C /Users/sihaoli/.solar/harness/vendor/everything-claude-code rev-parse HEAD" -->
+<!-- verify: cmd="test -d /Users/lisihao/.solar/harness/vendor/everything-claude-code/.git && git -C /Users/lisihao/.solar/harness/vendor/everything-claude-code rev-parse HEAD" -->
 
 ### A2 - Inventory Covers Every Upstream Surface
 
@@ -122,12 +122,12 @@ solar-harness everything-claude-code inventory --json \
 
 Required:
 - Detect name/path collisions against:
-  - `/Users/sihaoli/.claude/agents`
-  - `/Users/sihaoli/.claude/commands`
-  - `/Users/sihaoli/.claude/skills`
-  - `/Users/sihaoli/.agents/skills`
-  - `/Users/sihaoli/.codex/skills`
-  - `/Users/sihaoli/Solar/CLAUDE.md`
+  - `/Users/lisihao/.claude/agents`
+  - `/Users/lisihao/.claude/commands`
+  - `/Users/lisihao/.claude/skills`
+  - `/Users/lisihao/.agents/skills`
+  - `/Users/lisihao/.codex/skills`
+  - `/Users/lisihao/Solar/CLAUDE.md`
 - Gstack and Superpowers must be explicitly called out.
 
 Verify:
@@ -165,10 +165,10 @@ Required:
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback
 ```
 
-<!-- verify: cmd="bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback" -->
+<!-- verify: cmd="bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh --case sync-rollback" -->
 
 ### A6 - Status Server Shows Candidate State
 
@@ -195,10 +195,10 @@ Required:
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh
+bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh
 ```
 
-<!-- verify: cmd="bash /Users/sihaoli/.solar/harness/tests/test-everything-claude-code-integration.sh" -->
+<!-- verify: cmd="bash /Users/lisihao/.solar/harness/tests/test-everything-claude-code-integration.sh" -->
 
 ## Stop Rules
 

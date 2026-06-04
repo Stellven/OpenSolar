@@ -71,4 +71,3 @@ The source matrix can emit handoff Markdown chunks per chapter/section. User can
 This is not fallback; it is an explicit acquisition mode:
 
 `survey-plan -> handoff-search batches -> import-search -> evidence-pack`
-

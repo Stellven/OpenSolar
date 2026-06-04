@@ -122,7 +122,7 @@ conclusion: All 4 suites run, aggregate 26 = 4+7+4+11. EXIT=0. R2-D3 PASS
 
 ### smoke #7 — A1 raw count preserved
 ```
-cmd: find /Users/sihaoli/Knowledge/_raw/file-uploads -maxdepth 1 -type f -name '20260508T122047Z-*' | wc -l | tr -d ' '
+cmd: find /Users/lisihao/Knowledge/_raw/file-uploads -maxdepth 1 -type f -name '20260508T122047Z-*' | wc -l | tr -d ' '
 stdout: 23
 conclusion: 23 originals preserved (== contract D6 expected) → A1 PASS
 ```

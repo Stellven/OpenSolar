@@ -77,9 +77,9 @@ send_ready_token() {
   local bypass_accepted=0
   while (( attempt < max_attempts )); do
     local content
-    content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -8)
+    content=$(tmux capture-pane -t "$pane" -p 2>/dev/null | tail -30)
     if (( bypass_accepted == 0 )) && echo "$content" | grep -qiE 'Bypass Permissions mode|1\. No, exit|2\. Yes, I accept'; then
-      tmux send-keys -t "$pane" Down Enter
+      tmux send-keys -t "$pane" "2" Enter
       bypass_accepted=1
       sleep 1
       attempt=$((attempt + 1))
@@ -99,12 +99,18 @@ send_ready_token() {
       continue
     fi
     if echo "$content" | grep -qiE 'Files with errors are skipped|Continue without these settings|Exit and fix manually'; then
-      tmux send-keys -t "$pane" Down Enter
+      tmux send-keys -t "$pane" "2" Enter
       sleep 1
       attempt=$((attempt + 1))
       continue
     fi
-    if echo "$content" | grep -qE '(╭──|trust.*folder|Allow.*permission|bypass permissions)'; then
+    if echo "$content" | grep -qiE '(quick safety check|yes, i trust this folder|trust.*folder|enter to confirm)'; then
+      tmux send-keys -t "$pane" "1" Enter
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    if echo "$content" | grep -qiE '(╭──|allow.*permission|bypass permissions)'; then
       sleep 1
       if [[ -n "$token" ]]; then
         tmux send-keys -t "$pane" "$token" Enter
@@ -214,7 +220,10 @@ if src.exists():
 # Claude panes silently turns "Opus" into a gateway request and breaks routing.
 data.pop("env", None)
 
-hooks = data.setdefault("hooks", {})
+# Do not inherit host-level hook entries: malformed global UserPromptSubmit
+# hooks can abort pane startup before Solar can accept the TUI prompt.
+hooks = {}
+data["hooks"] = hooks
 
 def append_hook(event_name, phase):
     entries = hooks.setdefault(event_name, [])
@@ -261,7 +270,7 @@ record_pane_model_session() {
 CLAUDE_CMD="$CLAUDE_BIN"
 SOLAR_CLAUDE_BYPASS="${SOLAR_CLAUDE_BYPASS:-1}"
 if [[ "$SOLAR_CLAUDE_BYPASS" == "1" ]]; then
-  CLAUDE_CMD="$CLAUDE_BIN --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-bypassPermissions}"
+  CLAUDE_CMD="$CLAUDE_BIN --dangerously-skip-permissions --permission-mode ${SOLAR_CLAUDE_PERMISSION_MODE:-bypassPermissions}"
 fi
 [[ -n "$MODEL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $MODEL_FLAG"
 [[ -n "$TOOL_FLAG" ]] && CLAUDE_CMD="$CLAUDE_CMD $TOOL_FLAG"

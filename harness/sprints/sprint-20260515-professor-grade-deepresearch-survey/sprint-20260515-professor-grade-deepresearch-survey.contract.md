@@ -171,4 +171,3 @@ solar-harness research survey-eval --output-dir /tmp/solar-survey-smoke --strict
 - If new code mutates coordinator/autopilot/main scheduler directly, fail.
 - If a section can be finalized without evidence pack and claim links, fail.
 - If tests rely on paid online APIs, fail.
-

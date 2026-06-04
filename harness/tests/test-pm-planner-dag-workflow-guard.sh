@@ -132,6 +132,14 @@ route_field "$SID2" violations | grep -q "invalid_task_graph" \
   && ok "invalid task_graph violation reported" \
   || fail "invalid task_graph violation missing"
 
+SID3="sprint-test-node-level-planner-artifacts"
+write_status "$SID3" "drafting" "spec" "pm"
+cat > "$TMPDIR_TEST/sprints/${SID3}.prd.md" <<< "# PRD"
+cat > "$TMPDIR_TEST/sprints/${SID3}.S1-design.md" <<< "# S1 Design"
+cat > "$TMPDIR_TEST/sprints/${SID3}.S1-plan.md" <<< "# S1 Plan"
+write_graph "$SID3"
+assert_route "$SID3" "builder_main" "node-level planner artifacts count as planner-ready"
+
 bash -n solar-harness.sh && ok "solar-harness.sh syntax ok" || fail "solar-harness.sh syntax failed"
 bash -n coordinator.sh && ok "coordinator.sh syntax ok" || fail "coordinator.sh syntax failed"
 python3 -m py_compile lib/workflow_guard.py && ok "workflow_guard.py compiles" || fail "workflow_guard.py compile failed"

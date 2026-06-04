@@ -155,7 +155,7 @@ verify_remote() {
     grep -q 'graph-scheduler' /tmp/solar-harness-help.verify
     grep -q 'verify-integrations' /tmp/solar-harness-help.verify
     grep -q 'context inject' /tmp/solar-harness-help.verify
-    if grep -R --exclude-dir='__pycache__' --exclude='*.pyc' --exclude='sync-code-to-mac-mini.sh' --exclude='model-config.sh' '/Users/sihaoli' '$REMOTE_PATH/.solar/harness/lib' '$REMOTE_PATH/.solar/harness/tools' '$REMOTE_PATH/.solar/harness/tests' '$REMOTE_PATH/.solar/harness/'*.sh >/tmp/solar-path-leaks.verify 2>/dev/null; then
+    if grep -R --exclude-dir='__pycache__' --exclude='*.pyc' --exclude='sync-code-to-mac-mini.sh' --exclude='model-config.sh' '/Users/sihaoli' '$REMOTE_PATH/.solar/harness/lib' '$REMOTE_PATH/.solar/harness/tools' '$REMOTE_PATH/.solar/harness/'*.sh '$REMOTE_PATH/.solar/bin' '$REMOTE_PATH/.solar/codex-bridge' >/tmp/solar-path-leaks.verify 2>/dev/null; then
       echo 'path_leaks_found'
       head -20 /tmp/solar-path-leaks.verify
       exit 42
@@ -216,7 +216,11 @@ from pathlib import Path
 
 remote_home = os.environ['REMOTE_HOME']
 local_home = os.environ['LOCAL_HOME']
-root = Path(remote_home) / '.solar' / 'harness'
+roots = [
+    Path(remote_home) / '.solar' / 'harness',
+    Path(remote_home) / '.solar' / 'bin',
+    Path(remote_home) / '.solar' / 'codex-bridge',
+]
 exts = {
     '.sh', '.py', '.md', '.json', '.jsonl', '.yml', '.yaml', '.toml',
     '.ts', '.js', '.html', '.css', '.plist', '.txt', '.env', '.example',
@@ -224,23 +228,27 @@ exts = {
 }
 skip_parts = {'node_modules', '.venv', 'venv', 'venvs', '.arena-venv', '.git', '__pycache__'}
 changed = 0
-for path in root.rglob('*'):
-    if not path.is_file():
+for root in roots:
+    if not root.exists():
         continue
-    if any(part in skip_parts for part in path.parts):
-        continue
-    if path.name in {'model-config.sh', 'solar-user-config.json'}:
-        continue
-    if path.suffix not in exts and not path.name.startswith('.'):
-        continue
-    try:
-        data = path.read_text(encoding='utf-8')
-    except Exception:
-        continue
-    new = data.replace(local_home, remote_home)
-    if new != data:
-        path.write_text(new, encoding='utf-8')
-        changed += 1
+    candidates = root.rglob('*') if root.is_dir() else [root]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        if any(part in skip_parts for part in path.parts):
+            continue
+        if path.name in {'model-config.sh', 'solar-user-config.json'}:
+            continue
+        if path.suffix not in exts and not path.name.startswith('.'):
+            continue
+        try:
+            data = path.read_text(encoding='utf-8')
+        except Exception:
+            continue
+        new = data.replace(local_home, remote_home)
+        if new != data:
+            path.write_text(new, encoding='utf-8')
+            changed += 1
 print(f'path_rewrite_changed={changed}')
 PY
     chmod +x '$REMOTE_PATH/.solar/harness/solar-harness.sh' '$REMOTE_PATH/.solar/harness/coordinator.sh' '$REMOTE_PATH/.solar/harness/pane-launcher.sh' '$REMOTE_PATH/.solar/harness/chain-watcher.sh' 2>/dev/null || true

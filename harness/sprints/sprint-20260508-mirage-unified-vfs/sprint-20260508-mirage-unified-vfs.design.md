@@ -51,7 +51,7 @@ Blocked-By: sprint-20260508-solar-kb-obsidian-autouse (P0)
 │  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────────────────┐  │
 │  │ subcmd       │  │ workspace state  │  │ mount resolver               │  │
 │  │ install/     │→ │ ~/.solar/state/  │  │ logical /knowledge -> phys   │  │
-│  │ doctor/      │  │ mirage/          │  │ /Users/sihaoli/Knowledge     │  │
+│  │ doctor/      │  │ mirage/          │  │ /Users/lisihao/Knowledge     │  │
 │  │ workspace/   │  │ <id>.json        │  │ readonly + write_allow flags │  │
 │  │ exec/search/ │  └──────────────────┘  └──────────────────────────────┘  │
 │  │ mounts/      │                                                           │
@@ -93,11 +93,11 @@ Blocked-By: sprint-20260508-solar-kb-obsidian-autouse (P0)
 
 | Logical | Physical | Default Mode | Write 例外 | Redaction |
 |---------|----------|--------------|------------|-----------|
-| `/knowledge` | `/Users/sihaoli/Knowledge` | read-only | — | none (vault 已是 redacted 输出) |
-| `/raw` | `/Users/sihaoli/Knowledge/_raw` | **read+write** (staging only) | 仅此 mount | 写入前 secret 扫描 |
-| `/sprints` | `/Users/sihaoli/.solar/harness/sprints` | read-only | — | redact `*.events.jsonl` 中 token/key |
-| `/solar` | `/Users/sihaoli/.solar` (排除 `secrets/`、`.env*`) | read-only | — | secret patterns + 文件名黑名单 |
-| `/cortex` | `/Users/sihaoli/.claude/core/cortex` | read-only | — | none |
+| `/knowledge` | `/Users/lisihao/Knowledge` | read-only | — | none (vault 已是 redacted 输出) |
+| `/raw` | `/Users/lisihao/Knowledge/_raw` | **read+write** (staging only) | 仅此 mount | 写入前 secret 扫描 |
+| `/sprints` | `/Users/lisihao/.solar/harness/sprints` | read-only | — | redact `*.events.jsonl` 中 token/key |
+| `/solar` | `/Users/lisihao/.solar` (排除 `secrets/`、`.env*`) | read-only | — | secret patterns + 文件名黑名单 |
+| `/cortex` | `/Users/lisihao/.claude/core/cortex` | read-only | — | none |
 | `/projects` | yaml allowlist (空默认) | read-only | 显式 `--allow-write-projects` | none |
 | `/drive` | Mirage Drive resource | read-only / `disabled` | 显式 `--allow-write-drive` | OAuth tokens never logged |
 | `/qmd` | virtual (调 `qmd search/read`) | read-only | — | qmd 自身管 |
@@ -127,33 +127,33 @@ Blocked-By: sprint-20260508-solar-kb-obsidian-autouse (P0)
 ## 6. Workspace YAML Schema
 
 ```yaml
-# /Users/sihaoli/.solar/harness/config/mirage.solar.yaml
+# /Users/lisihao/.solar/harness/config/mirage.solar.yaml
 version: 1
 workspace_id: solar-default
 created_at: 2026-05-08T...
 
 mounts:
   - path: /knowledge
-    source: { type: disk, root: "/Users/sihaoli/Knowledge" }
+    source: { type: disk, root: "/Users/lisihao/Knowledge" }
     mode: ro
 
   - path: /raw
-    source: { type: disk, root: "/Users/sihaoli/Knowledge/_raw" }
+    source: { type: disk, root: "/Users/lisihao/Knowledge/_raw" }
     mode: rw
     redact_on_write: true
 
   - path: /sprints
-    source: { type: disk, root: "/Users/sihaoli/.solar/harness/sprints" }
+    source: { type: disk, root: "/Users/lisihao/.solar/harness/sprints" }
     mode: ro
     redact_on_read: ["*.events.jsonl"]
 
   - path: /solar
-    source: { type: disk, root: "/Users/sihaoli/.solar" }
+    source: { type: disk, root: "/Users/lisihao/.solar" }
     mode: ro
     deny_subpaths: ["secrets/", ".env*", "**/*.token", "**/credentials*"]
 
   - path: /cortex
-    source: { type: disk, root: "/Users/sihaoli/.claude/core/cortex" }
+    source: { type: disk, root: "/Users/lisihao/.claude/core/cortex" }
     mode: ro
 
   - path: /projects
@@ -208,7 +208,7 @@ solar-harness mirage provision --dry-run -- <cmd...>
   "enabled": true,
   "version": "0.x.y" | null,
   "sdk": { "kind": "python|ts|none", "path": "...", "version": "..." },
-  "config": "/Users/sihaoli/.solar/harness/config/mirage.solar.yaml",
+  "config": "/Users/lisihao/.solar/harness/config/mirage.solar.yaml",
   "fuse": { "available": false, "reason": "macos-no-kext" },
   "mounts": [ { "path":"/knowledge", "ready":true, "mode":"ro", ... }, ... ],
   "drive": { "status": "ok|warn|degraded|disabled", "reason": "..." },

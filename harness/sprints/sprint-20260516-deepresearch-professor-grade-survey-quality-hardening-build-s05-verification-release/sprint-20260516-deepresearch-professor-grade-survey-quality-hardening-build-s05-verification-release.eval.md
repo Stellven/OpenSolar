@@ -14,4 +14,3 @@ Verdict: `passed`
 ## Boundary
 
 This verifies S05 functional evidence and traceability readiness. Parent closure and production release policy remain outside this node.
-

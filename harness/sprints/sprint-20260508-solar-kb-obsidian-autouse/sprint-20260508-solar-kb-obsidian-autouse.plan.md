@@ -36,7 +36,7 @@ Phase: planning_complete
 |-----|------|------|------|
 | D1 | S2.1 创建 `obsidian-vault-indexer.py` (frontmatter 解析 + manifest + sha1) | `~/.solar/harness/lib/obsidian-vault-indexer.py` (≤350 行) | `python3 file --vault /tmp/test --once` 写表 |
 | D1 | S2.2 加表 `obsidian_vault_index` (CREATE IF NOT EXISTS) + 注册 fts_unified_search | 同上 + idempotent migration | `sqlite3 ... ".schema obsidian_vault_index"` |
-| D1 | S2.3 改 `knowledge-sync.ts`: 加 `/Users/sihaoli/Knowledge` 为 first-class，调用 indexer.py | `~/.claude/core/cortex/knowledge-sync.ts` (diff ≤80 行) | A2 verify |
+| D1 | S2.3 改 `knowledge-sync.ts`: 加 `/Users/lisihao/Knowledge` 为 first-class，调用 indexer.py | `~/.claude/core/cortex/knowledge-sync.ts` (diff ≤80 行) | A2 verify |
 | D1 | S2.4 强化 `obsidian-wiki-bridge.sh`: 文档化 `--no-dispatch` `--since`，加 `.export-manifest.json` cursor，加 secret redaction (sk-/Bearer/api_key=) | `~/.solar/harness/integrations/obsidian-wiki-bridge.sh` (diff ≤120 行) | A3 verify |
 | D1 | S2.5 提供 `solar-harness wiki sync-vault` 子命令 (一次性手动同步) | wiki cli 增量补丁 | `solar-harness wiki sync-vault --once` 输出 indexed_count |
 
@@ -69,7 +69,7 @@ Phase: planning_complete
 - S3 等 S1+S2 都返回 PASS 后启动（依赖 S1 的 lib 和 S2 的表才能完整测试）。
 - DB 写入：所有 INSERT/UPDATE 走 `PRAGMA busy_timeout=200` + 单写者，避免 BUSY。
 - FTS 表注册：S2 indexer 是唯一写 `obsidian_vault_index` 的进程；S1 router 只读。
-- 测试 (S3) 用 `mktemp -d` 临时 DB/vault，**绝不**碰 `~/.solar/solar.db` 或 `/Users/sihaoli/Knowledge`。
+- 测试 (S3) 用 `mktemp -d` 临时 DB/vault，**绝不**碰 `~/.solar/solar.db` 或 `/Users/lisihao/Knowledge`。
 
 ## 4. 验证命令 (合约 A1-A7 对应)
 
@@ -86,7 +86,7 @@ python3 ~/.solar/harness/lib/solar-knowledge-context.py \
 
 # A3 — DB → Obsidian Incremental
 solar-harness wiki import-solar-db --scope solar --per-table-limit 3 --no-dispatch
-test -d /Users/sihaoli/Knowledge/_raw/solar-db-export
+test -d /Users/lisihao/Knowledge/_raw/solar-db-export
 
 # A4 — memory-influence.sh fix
 bash -n ~/.claude/hooks/memory-influence.sh
@@ -131,7 +131,7 @@ echo "Solar 记忆系统怎么工作的？" | bash ~/.claude/hooks/solar-knowled
 | 资源 | 测试期替代 | 保护机制 |
 |------|------------|----------|
 | `~/.solar/solar.db` | `mktemp -d`/test.db (CREATE TABLE + 注入 fixture) | env `SOLAR_DB=$TMPDB` 重定向；router 读此 env |
-| `/Users/sihaoli/Knowledge` | `mktemp -d`/vault | env `OBSIDIAN_VAULT_PATH=$TMP` 重定向 |
+| `/Users/lisihao/Knowledge` | `mktemp -d`/vault | env `OBSIDIAN_VAULT_PATH=$TMP` 重定向 |
 | tmux pane (solar-harness:0.x) | `SESSION_NAME=mock-kb-${RANDOM}` mock session | dispatch 调用必须 `DISPATCH_MOCK=1` |
 | port 8765 (status server) | port 8800-8899 范围 (临时端口) | env `WIKI_CAPTURE_PORT=$port` 重定向；测试结束 kill |
 | `~/.solar/state/knowledge-manifest.json` | `$TMPDIR/manifest.json` | env `SOLAR_KB_MANIFEST=$path` 重定向 |
@@ -143,7 +143,7 @@ trap 'rm -rf "$TMPDIR" 2>/dev/null; pkill -f "$TEST_SCHED_PID" 2>/dev/null' EXIT
 test -z "$SOLAR_DB" && export SOLAR_DB="$TMPDIR/solar.db"
 test -z "$OBSIDIAN_VAULT_PATH" && export OBSIDIAN_VAULT_PATH="$TMPDIR/vault"
 [[ "$SOLAR_DB" == "$HOME/.solar/solar.db" ]] && { echo "REFUSE: pointing at real DB"; exit 1; }
-[[ "$OBSIDIAN_VAULT_PATH" == "/Users/sihaoli/Knowledge" ]] && { echo "REFUSE: pointing at real vault"; exit 1; }
+[[ "$OBSIDIAN_VAULT_PATH" == "/Users/lisihao/Knowledge" ]] && { echo "REFUSE: pointing at real vault"; exit 1; }
 ```
 
 ## 6. Rollback / Stop Rules

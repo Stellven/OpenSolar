@@ -35,8 +35,8 @@ Planner must verify whether dispatched pane text triggers `UserPromptSubmit`. If
 
 ## Write Scope
 
-- `/Users/sihaoli/.solar/harness/lib/solar-knowledge-context.py`
-- `/Users/sihaoli/.claude/hooks/solar-knowledge-context.sh` only if hook behavior must be adjusted
-- `/Users/sihaoli/.solar/harness/tests/test-solar-kb-qmd-fallback.sh`
-- `/Users/sihaoli/.solar/harness/runbooks/kb-default-context.md`
-- Optional dispatch-context note under `/Users/sihaoli/.solar/harness/docs/`
+- `/Users/lisihao/.solar/harness/lib/solar-knowledge-context.py`
+- `/Users/lisihao/.claude/hooks/solar-knowledge-context.sh` only if hook behavior must be adjusted
+- `/Users/lisihao/.solar/harness/tests/test-solar-kb-qmd-fallback.sh`
+- `/Users/lisihao/.solar/harness/runbooks/kb-default-context.md`
+- Optional dispatch-context note under `/Users/lisihao/.solar/harness/docs/`

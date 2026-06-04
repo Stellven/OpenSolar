@@ -124,7 +124,7 @@ Layer 5 (Gate G_S05_RELEASE, 依赖 N1..N10 全 passed):
 - `final.md` / `human_final.md` / `research_eval.json` / `report_ast.json` 含 4 footer 字段（N6 / N7 / N8 任一路径产出至少 1 套）
 - secret-scan 报告无泄漏，或泄漏已写入 handoff 风险段
 - status.json artifacts 含 `design`, `plan`, `task_graph`, `planning_html`, `prd_html`, `handoff`
-- **不修改** `/Users/sihaoli/Solar/harness/lib/research/` 主路径运行时代码 (允许仅在 `tests/` 加测试 + `static/livework_panel.js` 重应用 N6 + `reports/` + `README.md`)
+- **不修改** `/Users/lisihao/Solar/harness/lib/research/` 主路径运行时代码 (允许仅在 `tests/` 加测试 + `static/livework_panel.js` 重应用 N6 + `reports/` + `README.md`)
 
 ## 9. 给下游（无）
 

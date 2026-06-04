@@ -69,10 +69,10 @@ stdout:
     "notes_access_detail": null,
     "target_folder": "Solar Inbox",
     "target_folder_status": "missing",
-    "raw_dir": "/Users/sihaoli/Knowledge/_raw/apple-notes",
+    "raw_dir": "/Users/lisihao/Knowledge/_raw/apple-notes",
     "raw_dir_writable": true,
     "scheduler_loaded": false,
-    "plist_path": "/Users/sihaoli/Library/LaunchAgents/com.solar.apple-notes-ingest.plist",
+    "plist_path": "/Users/lisihao/Library/LaunchAgents/com.solar.apple-notes-ingest.plist",
     "plist_exists": false,
     "last_scan_at": null,
     "notes_in_manifest": 0,
@@ -80,7 +80,7 @@ stdout:
         "notes_folder": "Solar Inbox",
         "tags": ["#solar-ingest", "#知识库", "#solar"],
         "interval_seconds": 7200,
-        "raw_dir": "/Users/sihaoli/Knowledge/_raw/apple-notes",
+        "raw_dir": "/Users/lisihao/Knowledge/_raw/apple-notes",
         "all_notes": false
     }
 }
@@ -104,7 +104,7 @@ stdout:
     "ok": true,
     "dry_run": true,
     "interval_seconds": 7200,
-    "plist_path": "/Users/sihaoli/Library/LaunchAgents/com.solar.apple-notes-ingest.plist",
+    "plist_path": "/Users/lisihao/Library/LaunchAgents/com.solar.apple-notes-ingest.plist",
     "plist_content": "<?xml version=\"1.0\"...<integer>7200</integer>..."
 }
 conclusion: interval_seconds=7200 + plist_content 是合法 XML + 文件未实际写入 → A6 PASS
@@ -132,7 +132,7 @@ conclusion: 11 字段全齐 → A7 PASS
 
 ### Smoke 5: A9 测试套件全跑
 ```
-cmd: bash /Users/sihaoli/.solar/harness/tests/test-apple-notes-ingest.sh
+cmd: bash /Users/lisihao/.solar/harness/tests/test-apple-notes-ingest.sh
 stdout: ... PASS=27 FAIL=0 ... EXIT=0
 conclusion: 27/27 mock 覆盖通过 → A9 PASS
 ```

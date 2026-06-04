@@ -29,35 +29,35 @@ This sprint adds a source connector. It does not replace the existing Obsidian w
 
 ## Deliverables
 
-1. `/Users/sihaoli/.solar/harness/lib/apple_notes_ingest.py`
+1. `/Users/lisihao/.solar/harness/lib/apple_notes_ingest.py`
    - Notes reader/exporter.
    - Supports AppleScript mode and optional SQLite read-only fallback.
    - Commands: doctor, scan, status, install-scheduler, uninstall-scheduler.
 
-2. `/Users/sihaoli/.solar/harness/solar-harness.sh`
+2. `/Users/lisihao/.solar/harness/solar-harness.sh`
    - Adds `solar-harness notes ...` command family.
 
-3. `/Users/sihaoli/.solar/harness/config/apple-notes-ingest.json`
+3. `/Users/lisihao/.solar/harness/config/apple-notes-ingest.json`
    - Config:
      - notes_folder: `Solar Inbox`
      - tags: `["#solar-ingest", "#知识库", "#solar"]`
      - interval_seconds: 7200
-     - raw_dir: `/Users/sihaoli/Knowledge/_raw/apple-notes`
+     - raw_dir: `/Users/lisihao/Knowledge/_raw/apple-notes`
      - all_notes: false
 
-4. `/Users/sihaoli/.solar/harness/state/apple-notes-ingest/manifest.json`
+4. `/Users/lisihao/.solar/harness/state/apple-notes-ingest/manifest.json`
    - Delta tracking by note id/hash/updated time.
 
-5. `/Users/sihaoli/Library/LaunchAgents/com.solar.apple-notes-ingest.plist`
+5. `/Users/lisihao/Library/LaunchAgents/com.solar.apple-notes-ingest.plist`
    - Optional scheduler installed by command, not created silently.
 
-6. `/Users/sihaoli/.solar/harness/lib/symphony/status-server.py`
+6. `/Users/lisihao/.solar/harness/lib/symphony/status-server.py`
    - Adds `apple_notes_ingest` status section.
 
-7. `/Users/sihaoli/.solar/harness/tests/test-apple-notes-ingest.sh`
+7. `/Users/lisihao/.solar/harness/tests/test-apple-notes-ingest.sh`
    - Tests with fixtures/mock notes; does not require reading real Notes.
 
-8. `/Users/sihaoli/.solar/harness/docs/apple-notes-wechat-ingest.md`
+8. `/Users/lisihao/.solar/harness/docs/apple-notes-wechat-ingest.md`
    - User workflow, permission setup, schedule options, troubleshooting.
 
 ## Acceptance Criteria
@@ -98,7 +98,7 @@ solar-harness notes scan --once --dry-run --json \
 ### A3 — Export To Raw Staging
 
 Required behavior:
-- Scanning exports new/changed notes to `/Users/sihaoli/Knowledge/_raw/apple-notes/YYYYMMDD/`.
+- Scanning exports new/changed notes to `/Users/lisihao/Knowledge/_raw/apple-notes/YYYYMMDD/`.
 - File name is deterministic and safe.
 - Frontmatter contains note metadata and source.
 
@@ -107,10 +107,10 @@ Verify:
 ```bash
 solar-harness notes scan --once --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "exported" in d'
-find /Users/sihaoli/Knowledge/_raw/apple-notes -name "*.md" -maxdepth 3 | head -1
+find /Users/lisihao/Knowledge/_raw/apple-notes -name "*.md" -maxdepth 3 | head -1
 ```
 
-<!-- verify: cmd="solar-harness notes scan --once --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"exported\" in d' && find /Users/sihaoli/Knowledge/_raw/apple-notes -maxdepth 3 -name '*.md' | head -1" -->
+<!-- verify: cmd="solar-harness notes scan --once --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert \"exported\" in d' && find /Users/lisihao/Knowledge/_raw/apple-notes -maxdepth 3 -name '*.md' | head -1" -->
 
 ### A4 — Delta Manifest Prevents Duplicates
 
@@ -124,10 +124,10 @@ Verify:
 solar-harness notes scan --once --json >/tmp/notes-scan-1.json
 solar-harness notes scan --once --json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("exported_count", 0) == 0'
-test -s /Users/sihaoli/.solar/harness/state/apple-notes-ingest/manifest.json
+test -s /Users/lisihao/.solar/harness/state/apple-notes-ingest/manifest.json
 ```
 
-<!-- verify: cmd="solar-harness notes scan --once --json >/tmp/notes-scan-1.json && solar-harness notes scan --once --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(\"exported_count\", 0) == 0' && test -s /Users/sihaoli/.solar/harness/state/apple-notes-ingest/manifest.json" -->
+<!-- verify: cmd="solar-harness notes scan --once --json >/tmp/notes-scan-1.json && solar-harness notes scan --once --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(\"exported_count\", 0) == 0' && test -s /Users/lisihao/.solar/harness/state/apple-notes-ingest/manifest.json" -->
 
 ### A5 — Wiki Ingest Dispatch Created
 
@@ -203,10 +203,10 @@ Required behavior:
 Verify:
 
 ```bash
-bash /Users/sihaoli/.solar/harness/tests/test-apple-notes-ingest.sh
+bash /Users/lisihao/.solar/harness/tests/test-apple-notes-ingest.sh
 ```
 
-<!-- verify: cmd="bash /Users/sihaoli/.solar/harness/tests/test-apple-notes-ingest.sh" -->
+<!-- verify: cmd="bash /Users/lisihao/.solar/harness/tests/test-apple-notes-ingest.sh" -->
 
 ## Stop Rules
 
@@ -220,9 +220,9 @@ bash /Users/sihaoli/.solar/harness/tests/test-apple-notes-ingest.sh
 ## Planner Instructions
 
 1. Produce:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.design.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.design.md`
 2. Produce:
-   `/Users/sihaoli/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.plan.md`
+   `/Users/lisihao/.solar/harness/sprints/sprint-20260508-apple-notes-wechat-ingest.plan.md`
 3. Split into slices:
    - S1: Notes reader/exporter + config/manifest.
    - S2: wiki ingest dispatch + scheduler.

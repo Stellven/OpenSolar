@@ -8,6 +8,7 @@
 #   solar-harness.sh status              查看状态
 #   solar-harness.sh kill                关闭
 #   solar-harness.sh sprint "需求"       创建 Sprint
+#   solar-harness.sh intent-gateway capture --text "需求"  捕获 RawIntent/重写/IR
 #
 # @module solar-farm/harness
 # ================================================================
@@ -1139,10 +1140,50 @@ new_epic_from_request() {
   local req="$1"
   ensure_dirs
   local title tmp out rc
-  title=$(printf "%s" "$req" | head -1 | cut -c1-60)
-  [[ -z "$title" ]] && title="Untitled Epic"
   tmp=$(mktemp "${TMPDIR:-/tmp}/solar-epic-request.XXXXXX")
   printf "%s\n" "$req" > "$tmp"
+  title=$(python3 - "$tmp" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+lines = text.splitlines()
+title = ""
+
+if lines and lines[0].strip() == "---":
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        match = re.match(r"\s*title\s*:\s*(.+?)\s*$", line)
+        if match:
+            title = match.group(1).strip().strip('"').strip("'")
+            break
+
+if not title:
+    in_frontmatter = bool(lines and lines[0].strip() == "---")
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if in_frontmatter:
+            if index > 0 and stripped == "---":
+                in_frontmatter = False
+            continue
+        if stripped.startswith("#"):
+            title = stripped.lstrip("#").strip()
+            break
+        if stripped:
+            title = stripped
+            break
+
+title = title[:60].strip()
+if not title:
+    title = "Untitled Epic"
+if title.startswith("-"):
+    title = "Request " + title.lstrip("- ").strip()
+print(title or "Untitled Epic")
+PY
+)
   set +e
   out=$(python3 "$HARNESS_DIR/lib/epic_decomposer.py" create \
     --title "$title" \
@@ -1255,11 +1296,66 @@ intake_request() {
   [[ -n "$req" ]] || { err "intake 需要需求文本"; return 1; }
 
   ensure_dirs
-  local out rc raw_file autopilot_out autopilot_rc
-  set +e
-  out=$(new_sprint "$req" 2>&1)
-  rc=$?
-  set -e
+  local out rc raw_file autopilot_out autopilot_rc intent_out intent_rc intent_id sid_from_out consumer_out consumer_rc consumer_status planner_handoff_status
+  intent_out=""
+  intent_rc=0
+  intent_id=""
+  consumer_out=""
+  consumer_rc=0
+  consumer_status=""
+  planner_handoff_status=""
+  if [[ -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
+    set +e
+    intent_out=$(SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" capture \
+      --source-channel "${SOLAR_INTENT_SOURCE_CHANNEL:-cli_intake}" \
+      --actor "${SOLAR_INTENT_ACTOR:-user}" \
+      --device "${SOLAR_INTENT_DEVICE:-}" \
+      --repo "$(pwd)" \
+      --text "$req" \
+      --json 2>&1)
+    intent_rc=$?
+    set -e
+    if [[ "$intent_rc" == "0" ]]; then
+      intent_id=$(python3 -c 'import json,sys; print((json.loads(sys.stdin.read()).get("intent_id") or ""))' <<<"$intent_out" 2>/dev/null || true)
+    fi
+  fi
+  if [[ "$intent_rc" == "0" && -n "$intent_id" && -f "$HARNESS_DIR/lib/intent_consumer.py" ]] && ! should_epic_decompose_request "$req"; then
+    set +e
+    consumer_out=$(SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_consumer.py" consume \
+      --intent-id "$intent_id" \
+      --json 2>&1)
+    consumer_rc=$?
+    set -e
+    if [[ "$consumer_rc" == "0" ]]; then
+      sid_from_out=$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); results=payload.get("results") or [{}]; print((results[0] or {}).get("sprint_id") or "")' <<<"$consumer_out" 2>/dev/null || true)
+      consumer_status=$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); results=payload.get("results") or [{}]; print((results[0] or {}).get("status") or "")' <<<"$consumer_out" 2>/dev/null || true)
+      planner_handoff_status=$(python3 -c 'import json,sys; payload=json.loads(sys.stdin.read()); results=payload.get("results") or [{}]; handoff=((results[0] or {}).get("planner_handoff") or {}); print(handoff.get("status") or handoff.get("reason") or "")' <<<"$consumer_out" 2>/dev/null || true)
+      out=$(python3 - "$sid_from_out" "$intent_id" "$consumer_status" "$planner_handoff_status" <<'PY'
+import sys
+sid, intent_id, consumer_status, planner = sys.argv[1:5]
+planner = planner or "N/A"
+print(f"Sprint created: {sid}")
+print(f"RawIntent consumed: {intent_id} ({consumer_status or 'N/A'})")
+print(f"Planner handoff: {planner}")
+PY
+)
+      rc=0
+    else
+      out="$consumer_out"
+      rc="$consumer_rc"
+    fi
+  else
+    set +e
+    out=$(new_sprint "$req" 2>&1)
+    rc=$?
+    set -e
+    sid_from_out=$(python3 -c 'import re,sys; text=re.sub(r"\x1b\[[0-9;]*m","",sys.stdin.read());
+patterns=(r"Sprint created:\s*(\S+)", r"Epic:\s*(\S+)", r"\"epic_id\":\s*\"([^\"]+)\"");
+print(next((m.group(1) for p in patterns for m in [re.search(p,text)] if m), ""))' <<<"$out" 2>/dev/null || true)
+    if [[ "$rc" == "0" && -n "$intent_id" && -n "$sid_from_out" && -f "$HARNESS_DIR/lib/intent_gateway.py" ]]; then
+      SOLAR_HARNESS_SPRINTS_DIR="$SPRINTS_DIR" python3 "$HARNESS_DIR/lib/intent_gateway.py" bind --intent-id "$intent_id" --sprint-id "$sid_from_out" --json >/dev/null 2>&1 || true
+    fi
+  fi
   raw_file="$(write_intake_raw_record "$req" "$out" 2>/dev/null || true)"
   if [[ "$rc" != "0" ]]; then
     echo "$out"
@@ -1276,17 +1372,27 @@ intake_request() {
   fi
 
   if [[ "$json" == "1" ]]; then
-    python3 - "$rc" "$raw_file" "$dispatch" "$autopilot_rc" <<'PY'
+    python3 - "$rc" "$raw_file" "$dispatch" "$autopilot_rc" "$intent_rc" "$intent_id" <<'PY'
 import json, sys
 print(json.dumps({
     "ok": int(sys.argv[1]) == 0,
     "raw_record": sys.argv[2],
     "dispatch_requested": sys.argv[3] == "1",
     "autopilot_returncode": int(sys.argv[4]),
+    "intent_gateway": {
+        "ok": int(sys.argv[5]) == 0,
+        "intent_id": sys.argv[6],
+    },
 }, ensure_ascii=False, indent=2))
 PY
   else
     echo "$out"
+    if [[ -n "$intent_id" ]]; then
+      log "RawIntent: $intent_id"
+    elif [[ "$intent_rc" != "0" ]]; then
+      warn "Intent gateway failed rc=${intent_rc}"
+      echo "$intent_out" | tail -20
+    fi
     [[ -n "$raw_file" ]] && log "Raw intake: $raw_file"
     if [[ "$dispatch" == "1" ]]; then
       if [[ "$autopilot_rc" == "0" ]]; then
@@ -1573,7 +1679,7 @@ else:
     pm_actual=$(pane_process_persona_simple "$LIVE_PM" 2>/dev/null || true)
     [[ "$pm_actual" == "pm" ]] || LIVE_PM="$LIVE_PLANNER"
   fi
-  local target_pane="" target_task=""
+  local target_pane="" target_task="" dispatch_role="" dispatch_task_type=""
   local workflow_role workflow_stage workflow_reason workflow_violations
   workflow_role=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field route_role 2>/dev/null || echo pm)
   workflow_stage=$(python3 "$HARNESS_DIR/lib/workflow_guard.py" route "$sid" --field stage 2>/dev/null || echo intake)
@@ -1596,16 +1702,22 @@ else:
         python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "drafting" "wake_workflow_guard_to_planner" "wake" '{"status_fields":{"phase":"prd_ready","handoff_to":"planner","target_role":"planner","auto_held":false},"note":"Workflow guard: planner must produce design.md, plan.md, and task_graph.json before builder dispatch."}' >/dev/null 2>&1 || true
         st="drafting"
         target_pane="$LIVE_PLANNER"
+        dispatch_role="planner"
+        dispatch_task_type="planning"
         target_task="Sprint ${sid} 恢复：Workflow Guard 判定 PRD 已就绪，请 Planner 读取 PRD/contract，产出 design.md、plan.md、task_graph.json；完成后再进入 builder DAG 派发。原因: ${workflow_reason}; violations=${workflow_violations}"
         ;;
       builder|builder_main)
         python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "active" "wake_workflow_guard_to_builder" "wake" '{"status_fields":{"phase":"planning_complete","handoff_to":"builder_main","target_role":"builder_main","auto_held":false},"note":"Workflow guard: PM PRD + planner design/plan/task_graph are ready; builder DAG dispatch is allowed."}' >/dev/null 2>&1 || true
         st="active"
         target_pane="$LIVE_BUILDER"
+        dispatch_role="builder"
+        dispatch_task_type="implementation"
         target_task="Sprint ${sid} 恢复：Workflow Guard 判定 PM+Planner 产物齐全，请读取 task_graph.json 并按 DAG/并行 builder 流程执行，不要绕开 graph scheduler。"
         ;;
       evaluator)
         target_pane="$LIVE_EVALUATOR"
+        dispatch_role="evaluator"
+        dispatch_task_type="review"
         target_task="Sprint ${sid} 恢复：Workflow Guard 判定已有 handoff，需要 Evaluator 评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
         ;;
       *)
@@ -1638,24 +1750,34 @@ else:
       ;;
     planning)
       target_pane="$LIVE_EVALUATOR"
+      dispatch_role="evaluator"
+      dispatch_task_type="review"
       target_task="Sprint ${sid} 恢复：建设者已提交计划，请审批。cat ~/.solar/harness/sprints/${sid}.plan.md"
       ;;
     approved)
       target_pane="$LIVE_BUILDER"
+      dispatch_role="builder"
+      dispatch_task_type="implementation"
       target_task="Sprint ${sid} 恢复：计划已批准，请继续实现。cat ~/.solar/harness/sprints/${sid}.plan.md"
       ;;
     reviewing|ready_for_review)
       target_pane="$LIVE_EVALUATOR"
+      dispatch_role="evaluator"
+      dispatch_task_type="review"
       target_task="Sprint ${sid} 恢复：建设者已提交，请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     failed_review)
       target_pane="$LIVE_BUILDER"
+      dispatch_role="builder"
+      dispatch_task_type="implementation"
       target_task="Sprint ${sid} 恢复：评审未通过，请修复。cat ~/.solar/harness/sprints/${sid}.eval.md"
       ;;
     interrupted)
       # 被 kill_harness 打断，改回 reviewing 让 coordinator 重新派发
       python3 "$HARNESS_DIR/lib/runtime_status.py" "$sf" "reviewing" "wake_resumed_interrupted" "wake" '{}' >/dev/null 2>&1 || true
       target_pane="$LIVE_EVALUATOR"
+      dispatch_role="evaluator"
+      dispatch_task_type="review"
       target_task="Sprint ${sid} 恢复 (从 interrupted)：请评审。cat ~/.solar/harness/sprints/${sid}.handoff.md"
       ;;
     *)
@@ -1674,7 +1796,7 @@ else:
 
 在任何 Write/Edit/handoff/eval/status 更新之前，必须先用 Claude/Codex 的 **Read 工具**读取：
 
-\`/Users/sihaoli/.solar/STATE.md\`
+\`~/.solar/STATE.md\`
 
 不要用 \`cat\` 替代这一步；本地 \`state-read-enforcer.sh\` hook 只认 Read 工具标记。
 
@@ -1686,8 +1808,76 @@ ${target_task}
 DISPATCH_EOF
 
   if [[ "${SOLAR_NO_DISPATCH:-0}" == "1" || -f "$HARNESS_DIR/run/no-dispatch.flag" ]]; then
-    warn "no-dispatch flag active; wake wrote dispatch file but did not send to pane: ${target_pane}"
+    warn "no-dispatch flag active; wake wrote dispatch file but did not send: ${dispatch_role:+operator-pool:${dispatch_role}}${dispatch_role:+ / }${target_pane}"
     return 4
+  fi
+
+  dispatch_via_operator_pool() {
+    local role="$1"
+    local task_type="$2"
+    local fallback_pane="$3"
+    local objective="执行 Sprint 恢复任务。先完整读取并执行指令文件 ${SPRINTS_DIR}/${sid}.dispatch.md 中的全部步骤。"
+    local context
+    context=$(cat <<CTX
+wake_sprint recovery
+sprint_id=${sid}
+original_status=${original_st}
+current_status=${st}
+workflow_role=${workflow_role}
+workflow_stage=${workflow_stage}
+workflow_reason=${workflow_reason}
+fallback_pane=${fallback_pane}
+dispatch_md=${SPRINTS_DIR}/${sid}.dispatch.md
+CTX
+)
+    local submit_output="" attempt
+    for attempt in 1 2; do
+      if submit_output=$(SOLAR_PM_DISPATCH_ALLOW_DIRECT=1 python3 "$HARNESS_DIR/tools/pm_dispatch.py" submit \
+        --role "$role" \
+        --task-type "$task_type" \
+        --sprint "$sid" \
+        --node "wake-${role}" \
+        --objective "$objective" \
+        --context "$context" 2>&1); then
+        bash "$HARNESS_DIR/session.sh" append "$sid" "{\"event\":\"waked\",\"by\":\"wake\",\"data\":{\"from_status\":\"${original_st}\",\"target_pane\":\"operator-pool:${role}\",\"fallback_pane\":\"${fallback_pane}\",\"attempt\":${attempt}}}" 2>/dev/null || true
+        ok "Sprint ${sid} 已恢复 → operator-pool:${role} (从 ${original_st})"
+        [[ -n "$submit_output" ]] && printf '%s\n' "$submit_output"
+        return 0
+      fi
+      if [[ "$submit_output" != *"not dispatchable"* && "$submit_output" != *"state=leased"* && "$submit_output" != *"state=running"* ]]; then
+        break
+      fi
+      warn "operator pool 第 ${attempt} 次派发命中瞬时占用，重试选算子..."
+      sleep 0.2
+    done
+    warn "operator pool 派发失败，回退固定 pane ${fallback_pane}"
+    [[ -n "$submit_output" ]] && printf '%s\n' "$submit_output" >&2
+    return 1
+  }
+
+  if [[ -n "$dispatch_role" ]]; then
+    if dispatch_via_operator_pool "$dispatch_role" "$dispatch_task_type" "$target_pane"; then
+      _ensure_bash4 2>/dev/null || true
+      local coord_bash="${BASH4:-bash}"
+      if [[ -f "$HARNESS_DIR/.coordinator.pid" ]]; then
+        local pid
+        pid=$(cat "$HARNESS_DIR/.coordinator.pid")
+        if ! kill -0 "$pid" 2>/dev/null; then
+          warn "Coordinator PID ${pid} 已死，重启..."
+          rm -f "$HARNESS_DIR/.coordinator.pid"
+          nohup "$coord_bash" "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
+          disown 2>/dev/null || true
+          ok "Coordinator 重启中..."
+        else
+          ok "Coordinator 运行中 (PID: ${pid})"
+        fi
+      else
+        warn "无 coordinator PID 文件，启动新的..."
+        nohup "$coord_bash" "$HARNESS_DIR/coordinator.sh" >> "$HARNESS_DIR/.coordinator.log" 2>&1 &
+        ok "Coordinator 启动中..."
+      fi
+      return 0
+    fi
   fi
 
   local short_cmd="读取并执行指令文件 $SPRINTS_DIR/${sid}.dispatch.md 中的所有步骤"
@@ -1831,6 +2021,27 @@ do_eval_verdict() {
     extra_json=$(python3 -c "import json; print(json.dumps({'verdict':'$verdict_upper','reason':'$reason'}))")
   else
     extra_json="{\"verdict\":\"$verdict_upper\"}"
+  fi
+
+  if [[ "$new_status" == "passed" ]]; then
+    local gate_json
+    gate_json=$(HARNESS_DIR="$HARNESS_DIR" python3 - "$sid" <<'PY'
+import json
+import os
+import sys
+
+sid = sys.argv[1]
+lib_dir = os.path.join(os.environ.get("HARNESS_DIR", os.path.expanduser("~/.solar/harness")), "lib")
+if lib_dir not in sys.path:
+    sys.path.insert(0, lib_dir)
+from coordinator_hooks import gate_status_transition  # noqa: E402
+
+decision = gate_status_transition(sid, "reviewing", "passed")
+print(json.dumps(decision.to_dict(), ensure_ascii=False))
+if decision.action == "abort":
+    sys.exit(2)
+PY
+    ) || { err "eval-verdict evidence gate blocked: ${gate_json:-N/A}"; exit 1; }
   fi
 
   if [[ "$new_status" == "failed_review" ]]; then
@@ -2203,9 +2414,101 @@ print(f"未找到 sid={sid} 的 telemetry 记录")
 PY
 }
 
+# sprint-20260520-203709 N5: refresh CLI bridge.
+# Bash wrapper that exec's the orchestrator python module; passthrough exit
+# code so callers (and tests) see the real refresh.run.v1 exit_code.
+#
+# Help-only fast path: `refresh -h | --help | help` returns a static usage
+# block that names the deeper alternatives (reload / wiki rebuild / wiki
+# qmd-embed) so users picking the wrong tool can self-correct.
+do_refresh() {
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<'REFRESH_HELP'
+solar-harness refresh — read-only multi-source status view
+
+Usage:
+  solar-harness refresh [--scope CSV] [--json] [--deep] [--timeout N]
+
+Flags:
+  --scope CSV    status,sprints,dashboards,autopilot,kb,all   (default: all)
+  --json         emit refresh.run.v1 JSON; suppresses table render
+  --deep         opt-in heavier probes; budget extends to 30s
+  --timeout N    override budget seconds (0..30; meaningful with --deep)
+  -h, --help     this help text
+
+Exit codes:
+  0  all sources ok
+  1  >=1 source error
+  2  >=1 source degraded (no error)
+  3  all sources skipped
+
+See also (heavier ops — NOT what refresh does):
+  solar-harness reload          coordinator hot-reload (re-source config)
+  solar-harness wiki rebuild    full knowledge-base rebuild
+  solar-harness wiki qmd-embed  process embedding backlog
+REFRESH_HELP
+      return 0
+      ;;
+  esac
+  human_prefix "refresh" "$@"
+  ( cd "${HARNESS_DIR%/harness}" && exec python3 -m harness.lib.refresh.orchestrator "$@" )
+}
+
+pane_hygiene_field() {
+  local pane="$1" field="$2" registry="${HARNESS_DIR}/run/pane-hygiene.json"
+  [[ -f "$registry" ]] || return 1
+  python3 - "$registry" "$pane" "$field" <<'PY' 2>/dev/null || return 1
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+entry = data.get(sys.argv[2]) if isinstance(data, dict) else None
+if not isinstance(entry, dict):
+    raise SystemExit(1)
+value = entry.get(sys.argv[3], "")
+print("" if value is None else value)
+PY
+}
+
+display_role_label() {
+  case "${1:-}" in
+    pm) printf '%s' "PM" ;;
+    planner) printf '%s' "Planner" ;;
+    builder) printf '%s' "Builder" ;;
+    evaluator) printf '%s' "Evaluator" ;;
+    architect) printf '%s' "Architect" ;;
+    observer) printf '%s' "Observer" ;;
+    *) printf '%s' "${1:-N/A}" ;;
+  esac
+}
+
+pane_host_role() {
+  local pane="$1" title="${2:-}" role
+  role="$(pane_hygiene_field "$pane" "pane_role" 2>/dev/null || true)"
+  if [[ -n "$role" ]]; then
+    printf '%s' "$role"
+    return 0
+  fi
+  local base lowered
+  base="${title%%|*}"
+  lowered="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$pane" == "$SESSION_NAME:0.0" && ( "$lowered" == *"pm"* || "$base" == *"产品经理"* ) ]]; then
+    printf '%s' "pm"
+  elif [[ "$lowered" == *"planner"* || "$base" == *"规划者"* ]]; then
+    printf '%s' "planner"
+  elif [[ "$lowered" == *"evaluator"* || "$base" == *"审判官"* ]]; then
+    printf '%s' "evaluator"
+  elif [[ "$lowered" == *"architect"* || "$base" == *"架构师"* ]]; then
+    printf '%s' "architect"
+  elif [[ "$lowered" == *"observer"* || "$base" == *"观察"* ]]; then
+    printf '%s' "observer"
+  else
+    printf '%s' "builder"
+  fi
+}
+
 do_main_status() {
   printf '%s\n' "Solar Harness Main Status"
-  printf '%s\n' "runtime != assignment != artifact: pane output alone is not proof of progress."
+  printf '%s\n' "host role / hygiene / runtime / assignment / artifact are separate signals."
   local physical_panes
   physical_panes="$(product_delivery_pane_count 2>/dev/null || printf '0')"
   if [[ "$physical_panes" == "$EXPECTED_PRODUCT_DELIVERY_PANES" ]]; then
@@ -2221,11 +2524,16 @@ do_main_status() {
   [[ "$route_rc" -eq 2 ]] && route_status="warn"
   printf '%s\n' "route: ${route_status} $(printf '%s' "$route_out" | tail -1)"
   printf '%s\n' ""
-  printf '┌────────────┬────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
-  printf '│ Pane       │ Role       │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
-  printf '├────────────┼────────────┼──────────────┼────────────────────────────┼─────────────────────┼────────────────────────────┤\n'
+  # AP-3: benchmark banner (one line before status table)
+  local _bench_banner
+  _bench_banner="$(python3 -c 'from harness.lib.benchmark.orchestration.status_banner import render_banner; print(render_banner())' 2>/dev/null)" || _bench_banner="Benchmark: no recent benchmark run"
+  printf '%s\n' "$_bench_banner"
+  printf '%s\n' ""
+  printf '┌────────────┬────────────┬──────────────┬──────────────┬────────────────────────────┬─────────────────────┬────────────────────────────┐\n'
+  printf '│ Pane       │ Host Role  │ Hygiene      │ Runtime      │ Assignment                 │ Artifact            │ Title                      │\n'
+  printf '├────────────┼────────────┼──────────────┼──────────────┼────────────────────────────┼─────────────────────┼────────────────────────────┤\n'
 
-  local i pane role title tail runtime assignment sid artifact file
+  local i pane role title tail runtime assignment sid artifact file host_role hygiene_state artifact_role
   for i in 0 1 2 3; do
     pane="$SESSION_NAME:0.$i"
     case "$i" in
@@ -2234,7 +2542,7 @@ do_main_status() {
       2) role="Builder" ;;
       3) role="Evaluator" ;;
     esac
-    title="N/A"; runtime="missing"; assignment="N/A"; artifact="N/A"
+    title="N/A"; runtime="missing"; assignment="N/A"; artifact="N/A"; hygiene_state="missing"
 
     if tmux display-message -p -t "$pane" '#{pane_id}' >/dev/null 2>&1; then
       title=$(tmux display-message -p -t "$pane" '#{pane_title}' 2>/dev/null || echo "N/A")
@@ -2251,6 +2559,8 @@ do_main_status() {
         runtime="idle"
       fi
     fi
+    host_role="$(pane_host_role "$pane" "$title")"
+    hygiene_state="$(pane_hygiene_field "$pane" "state" 2>/dev/null || printf '%s' "$hygiene_state")"
 
     if [[ -f "$HARNESS_DIR/.pane-assignments" ]]; then
       assignment=$(awk -F'[=:]' -v p="$pane" '$1":"$2 == p {print $3}' "$HARNESS_DIR/.pane-assignments" 2>/dev/null | tail -1)
@@ -2259,7 +2569,8 @@ do_main_status() {
 
     sid="$assignment"
     if [[ "$sid" != "N/A" ]]; then
-      case "$role" in
+      artifact_role="$(display_role_label "$host_role")"
+      case "$artifact_role" in
         PM)
           file="$SPRINTS_DIR/${sid}.prd.md"
           [[ -f "$file" ]] || file="$SPRINTS_DIR/${sid}.product-brief.md"
@@ -2275,11 +2586,11 @@ do_main_status() {
       fi
     fi
 
-    printf '│ %-10s │ %-10s │ %-12s │ %-26s │ %-19s │ %-26s │\n' \
-      "pane$i" "$role" "$runtime" "$(printf '%.26s' "$assignment")" "$(printf '%.19s' "$artifact")" "$(printf '%.26s' "$title")"
+    printf '│ %-10s │ %-10s │ %-12s │ %-12s │ %-26s │ %-19s │ %-26s │\n' \
+      "pane$i" "$(display_role_label "$host_role")" "$hygiene_state" "$runtime" "$(printf '%.26s' "$assignment")" "$(printf '%.19s' "$artifact")" "$(printf '%.26s' "$title")"
   done
 
-  printf '└────────────┴────────────┴──────────────┴────────────────────────────┴─────────────────────┴────────────────────────────┘\n'
+  printf '└────────────┴────────────┴──────────────┴──────────────┴────────────────────────────┴─────────────────────┴────────────────────────────┘\n'
 }
 
 do_lab_status() {
@@ -2540,6 +2851,7 @@ case "${1:-start}" in
   status)    show_status ;;
   main-status) do_main_status ;;
   lab-status) do_lab_status "${2:-}" ;;
+  refresh)   shift || true; do_refresh "$@" ;;
   doctor)    bash "$HARNESS_DIR/doctor.sh" "${2:-}" ;;
   session)
     shift || true
@@ -2605,9 +2917,47 @@ print(json.dumps({
     shift || true
     python3 "$HARNESS_DIR/lib/research/cli.py" "$@"
     ;;
+  browser)
+    shift || true
+    _browser_scope="${1:-}"
+    if [[ "$_browser_scope" == "profile" ]]; then
+      shift || true
+      _browser_action="${1:-doctor}"
+      shift || true
+      case "$_browser_action" in
+        doctor)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" doctor "$@"
+          ;;
+        init)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" profile-init "$@"
+          ;;
+        verify)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" profile-verify "$@"
+          ;;
+        recover)
+          python3 "$HARNESS_DIR/tools/browser_profile_control.py" profile-recover "$@"
+          ;;
+        *)
+          err "unknown browser profile subcommand: $_browser_action"
+          exit 1
+          ;;
+      esac
+    else
+      err "unknown browser command: ${_browser_scope:-N/A}"
+      exit 1
+    fi
+    ;;
   intake|request)
     shift || true
     intake_request "$@"
+    ;;
+  intent-gateway|intent)
+    shift || true
+    python3 "$HARNESS_DIR/lib/intent_gateway.py" "$@"
+    ;;
+  intent-consumer|intent-consume)
+    shift || true
+    python3 "$HARNESS_DIR/lib/intent_consumer.py" "$@"
     ;;
   bg)
     shift || true
@@ -2661,14 +3011,20 @@ print(json.dumps({
     fi
     ;;
   monitor)
-    if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-      err "Harness 未运行，先启动: $0"
-      exit 1
+    shift || true
+    if [[ "${1:-}" == "tui" ]]; then
+      shift || true
+      if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        err "Harness 未运行，先启动: $0"
+        exit 1
+      fi
+      tmux new-window -t "$SESSION_NAME" -n "monitor" -c "$HOME"
+      tmux send-keys -t "$SESSION_NAME:monitor" "bash $HARNESS_DIR/monitor.sh" Enter
+      ok "monitor tui 已在独立窗口打开"
+      log "Ctrl-b n 切到下一个窗口, Ctrl-b p 切回上一个"
+    else
+      python3 "$HARNESS_DIR/lib/remote_multi_task_monitor.py" "$@"
     fi
-    tmux new-window -t "$SESSION_NAME" -n "monitor" -c "$HOME"
-    tmux send-keys -t "$SESSION_NAME:monitor" "bash $HARNESS_DIR/monitor.sh" Enter
-    ok "monitor 已在独立窗口打开"
-    log "Ctrl-b n 切到下一个窗口, Ctrl-b p 切回上一个"
     ;;
   wake)
     wake_sprint "$@"
@@ -2712,14 +3068,43 @@ print(json.dumps({
     _SS_PORT_FILE="$HARNESS_DIR/run/status-server.port"
     _SS_TMUX_SESSION="solar-harness-status-server"
     mkdir -p "$HARNESS_DIR/run"
+    _status_server_live_pids() {
+      ps ax -o pid= -o args= | awk -v script="$HARNESS_DIR/lib/symphony/status-server.py" '
+        index($0, script) && $0 !~ /awk -v script/ { print $1 }
+      '
+    }
+    _status_server_live_ports() {
+      local _p
+      for _p in $(seq 8765 8775); do
+        if curl -fsS "http://127.0.0.1:${_p}/healthz" >/dev/null 2>&1; then
+          printf '%s\n' "$_p"
+        fi
+      done
+    }
+    _status_server_terminate_pids() {
+      local _pids="$1" _pid
+      [[ -n "$_pids" ]] || return 0
+      kill $_pids 2>/dev/null || true
+      sleep 0.3
+      for _pid in $_pids; do
+        if kill -0 "$_pid" 2>/dev/null; then
+          kill -9 "$_pid" 2>/dev/null || true
+        fi
+      done
+    }
     case "${2:-start}" in
       start)
+        _live_pids="$(_status_server_live_pids || true)"
+        _live_ports="$(_status_server_live_ports || true)"
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           ok "Status server 已在运行 (tmux: $_SS_TMUX_SESSION, port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
         elif [[ -f "$_SS_PID" ]] && kill -0 "$(cat "$_SS_PID")" 2>/dev/null; then
           ok "Status server 已在运行 (PID: $(cat "$_SS_PID"), port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo '?'))"
-        elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
-          ok "Status server 已在运行 (port: $(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765), pidfile stale)"
+        elif [[ -n "$_live_pids" || -n "$_live_ports" ]]; then
+          _port="$(printf '%s\n' "$_live_ports" | head -1)"
+          [[ -n "$_live_pids" ]] && printf '%s\n' "$(printf '%s\n' "$_live_pids" | head -1)" > "$_SS_PID"
+          [[ -n "$_port" ]] && printf '%s\n' "$_port" > "$_SS_PORT_FILE"
+          ok "Status server 已在运行 (healed from live runtime; pid: $(printf '%s\n' "$_live_pids" | head -1), port: ${_port:-?})"
         else
           rm -f "$_SS_PID" "$_SS_PORT_FILE"
           if command -v tmux >/dev/null 2>&1; then
@@ -2739,26 +3124,37 @@ print(json.dumps({
         ;;
       stop)
         _stopped=0
+        _recorded_port="$(cat "$_SS_PORT_FILE" 2>/dev/null || true)"
+        _live_pids="$(_status_server_live_pids || true)"
+        _live_ports="$(_status_server_live_ports || true)"
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           tmux kill-session -t "$_SS_TMUX_SESSION" 2>/dev/null || true
-          rm -f "$_SS_PID" "$_SS_PORT_FILE"
-          ok "Status server 已停止"
           _stopped=1
         elif [[ -f "$_SS_PID" ]]; then
           _pid_val=$(cat "$_SS_PID" 2>/dev/null || true)
           if [[ "$_pid_val" =~ ^[0-9]+$ ]]; then
             kill "$_pid_val" 2>/dev/null || true
           fi
-          rm -f "$_SS_PID" "$_SS_PORT_FILE"
-          ok "Status server 已停止"
           _stopped=1
         fi
-        _listen_pids=$(lsof -tiTCP:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765) -sTCP:LISTEN 2>/dev/null || true)
-        if [[ -n "$_listen_pids" ]]; then
-          kill $_listen_pids 2>/dev/null || true
-          rm -f "$_SS_PID" "$_SS_PORT_FILE"
-          ok "Status server 端口残留进程已停止 (PID: ${_listen_pids//$'\n'/,})"
+        if [[ -n "$_live_pids" ]]; then
+          _status_server_terminate_pids "$_live_pids"
           _stopped=1
+        fi
+        if [[ -n "$_recorded_port" ]]; then
+          _live_ports="$(printf '%s\n%s\n' "$_recorded_port" "$_live_ports" | awk 'NF && !seen[$0]++')"
+        fi
+        if [[ -n "$_live_ports" ]]; then
+          while IFS= read -r _port; do
+            [[ -n "$_port" ]] || continue
+            _listen_pids=$(lsof -tiTCP:"$_port" -sTCP:LISTEN 2>/dev/null || true)
+            [[ -n "$_listen_pids" ]] && kill $_listen_pids 2>/dev/null || true
+          done <<< "$_live_ports"
+          _stopped=1
+        fi
+        rm -f "$_SS_PID" "$_SS_PORT_FILE"
+        if [[ "$_stopped" == "1" ]]; then
+          ok "Status server 已停止"
         fi
         if [[ "$_stopped" == "0" ]]; then
           warn "Status server 未运行"
@@ -2770,6 +3166,8 @@ print(json.dumps({
         "$0" status-server start
         ;;
       status)
+        _live_pids="$(_status_server_live_pids || true)"
+        _live_ports="$(_status_server_live_ports || true)"
         if tmux has-session -t "$_SS_TMUX_SESSION" 2>/dev/null; then
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
           ok "运行中 (tmux: $_SS_TMUX_SESSION, port: $_port)"
@@ -2778,9 +3176,11 @@ print(json.dumps({
           _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
           ok "运行中 (PID: $(cat "$_SS_PID"), port: $_port)"
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
-        elif curl -fsS "http://127.0.0.1:$(cat "$_SS_PORT_FILE" 2>/dev/null || echo 8765)/healthz" >/dev/null 2>&1; then
-          _port=$(cat "$_SS_PORT_FILE" 2>/dev/null || echo "8765")
-          ok "运行中 (port: $_port, pidfile stale)"
+        elif [[ -n "$_live_pids" || -n "$_live_ports" ]]; then
+          _port=$(printf '%s\n' "$_live_ports" | head -1)
+          [[ -n "$_live_pids" ]] && printf '%s\n' "$(printf '%s\n' "$_live_pids" | head -1)" > "$_SS_PID"
+          [[ -n "$_port" ]] && printf '%s\n' "$_port" > "$_SS_PORT_FILE"
+          ok "运行中 (healed from live runtime, pid: $(printf '%s\n' "$_live_pids" | head -1), port: ${_port:-?})"
           curl -s "http://127.0.0.1:$_port/healthz" 2>/dev/null && echo || true
         else
           warn "Status server 未运行"
@@ -2811,6 +3211,12 @@ print(json.dumps({
     if [[ "$_MMD_OPEN" == "1" ]]; then
       open "$_MMD_URL" >/dev/null 2>&1 || true
     fi
+    ;;
+  benchmark|bench)
+    shift || true
+    _benchmark_runner="$HARNESS_DIR/lib/benchmark/runner.py"
+    [[ -f "$_benchmark_runner" ]] || { err "benchmark runner not found: $_benchmark_runner"; exit 1; }
+    python3 -m harness.lib.benchmark.runner "$@"
     ;;
   integrations)
     _integrations_probe="$HARNESS_DIR/lib/external-integrations-health.py"
@@ -3593,6 +3999,7 @@ PY
     echo "  $0 2 [工作目录]        启动2化身"
     echo "  $0 status              查看状态"
     echo "  $0 main-status         查看主屏 runtime + assignment + artifact 状态"
+    echo "  $0 actorhost-status [--json] [--host-type TYPE]  查看 actor/host/lease taxonomy"
     echo "  $0 lab-status          查看 lab pane runtime + handoff artifact 状态"
     echo "  $0 doctor              环境自检"
     echo "  $0 kill                关闭"
@@ -3601,6 +4008,8 @@ PY
     echo "  $0 bg \"任务\"           在 tmux 后台窗口执行任务；支持 status/logs/attach/cancel"
     echo "  $0 tvs render < payload.json  使用 TVS 确定性渲染结构化输出"
     echo "  $0 multi-task [screen|start|status|profiles|doctor|logs|attach|foreground|cancel]  tmux 后台 DAG worker 池"
+    echo "  $0 monitor [--host HOST] [--apply|--dry-run] [--json|--loop]  远端 Mac mini multi-task 巡检/安全推进"
+    echo "  $0 monitor tui          打开旧版 tmux monitor 窗口"
     echo "  $0 sprint \"需求\"       创建 Sprint/Epic（不主动 dispatch，兼容旧命令）"
     echo "  $0 wake [sprint-id]  列出未完成 Sprint 或恢复指定 Sprint"
     echo "  $0 wake --help       显示 wake 帮助"
@@ -3632,7 +4041,7 @@ PY
     echo "  $0 workflow-guard route <sid> [--json]  PM→Planner→DAG Builder 门禁判定"
     echo "  $0 graph-dispatch [dispatch-ready|drain-queue]  DAG 节点级 pane 派发"
     echo "  $0 mirage [search|doctor|workspace|mounts|exec|provision]  Mirage 统一虚拟文件系统"
-    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|help]  Obsidian Wiki 集成"
+    echo "  $0 wiki [install|status|export-sprint|update|query|ingest|chatgpt-import|vault-status|lint|rebuild|export-graph|colorize|history|run-dispatch|dispatch-watch|dispatch-maintenance|import-solar-db|capture-server|audit-uploads|backfill-uploads|quality-gate|reingest-quarantine|reingest-scheduler|qmd-status|qmd-repair|qmd-search|qmd-update|qmd-mcp|qmd-embed|ai-influence-digest|tech-hotspot-radar|help]  Obsidian Wiki 集成"
     ;;
   mirage)
     # Mirage unified virtual filesystem — sprint-20260508-mirage-unified-vfs
@@ -3716,6 +4125,14 @@ PY
           err "Wiki bridge not found: $_wiki_bridge"
           exit 1
         fi
+        ;;
+      knowledge-ingest)
+        _knowledge_ingest="${HARNESS_DIR}/lib/knowledge_ingest_dispatcher.py"
+        if [[ ! -f "$_knowledge_ingest" ]]; then
+          err "knowledge ingest dispatcher not found: $_knowledge_ingest"
+          exit 1
+        fi
+        python3 "$_knowledge_ingest" "$@"
         ;;
       chatgpt-import|import-chatgpt)
         _chatgpt_importer="${HARNESS_DIR}/lib/chatgpt-conversation-ingest.py"
@@ -4216,6 +4633,7 @@ EOF
         echo "  $0 wiki update [--project <path>] [--mode append|full]"
         echo "  $0 wiki query \"<question>\" [--quick]"
         echo "  $0 wiki ingest [--source <path>] [--mode append|full|raw] [--project <name>]"
+        echo "  $0 wiki knowledge-ingest <status|migrate|submit-event|discover-raw|discover-sources|discover-vault|process-queue|run-pipeline|reconcile|import-legacy-extracted|dashboard|coverage-report|drain-retry|drain-skip|discover-youtube|discover-github|discover-pdf|discover-accepted|discover-solar> [args]"
         echo "  $0 wiki chatgpt-import [--browser-all [auto|chrome|arc|edge|brave|safari]|--browser [auto|chrome|arc|edge|brave|safari]|--source <conversations.json|transcript.md|dir|->|--clipboard] [--no-dispatch] [--limit N]"
         echo "  $0 wiki vault-status [--insights]"
         echo "  $0 wiki lint [--fix]"
@@ -4240,6 +4658,8 @@ EOF
         echo "  $0 wiki qmd-update"
         echo "  $0 wiki qmd-mcp [status|start|stop-proxy]"
         echo "  $0 wiki qmd-embed [start|status|stop|run-once|run-idle|run-gentle|run-now]"
+        echo "  $0 wiki ai-influence-digest [run|status|doctor|send-test|schedule|help]"
+        echo "  $0 wiki tech-hotspot-radar [status|plan-ai-influence-reports|run-ai-influence-planned-reports|validate-ai-influence-planned-reports|process-transcripts|help]"
         echo ""
         echo "Examples:"
         echo "  $0 wiki install --vault ~/Documents/SolarWiki"
@@ -4264,6 +4684,149 @@ EOF
         echo "  $0 wiki quality-gate --apply --json"
         echo "  $0 wiki reingest-quarantine --limit 8 --json"
         echo "  $0 wiki reingest-scheduler start 60"
+        echo "  $0 wiki tech-hotspot-radar validate-ai-influence-planned-reports --date 2026-05-25 --require-project-archive"
+        ;;
+      tech-hotspot-radar)
+        _thr_script="$HARNESS_DIR/scripts/tech_hotspot_radar.py"
+        if [[ ! -f "$_thr_script" ]]; then
+          err "Tech Hotspot Radar script not found: $_thr_script"
+          exit 1
+        fi
+        case "${1:-help}" in
+          help|--help|-h|"")
+            python3 "$_thr_script" --help
+            ;;
+          *)
+            python3 "$_thr_script" "$@"
+            ;;
+        esac
+        ;;
+      ai-influence-digest)
+        # sprint-20260522-ai-influence-digest-scan N5: AI Influence Digest CLI
+        _ai_digest_script="$HARNESS_DIR/scripts/ai_influence_daily.py"
+        _ai_digest_accounts="${HARNESS_DIR}/ai-influence-digest/references/accounts_extended.txt"
+        _ai_digest_state_dir="$HARNESS_DIR/state/ai-influence-digest"
+        _ai_digest_raw_dir="$HOME/Knowledge/_raw/ai-influence-daily-digest"
+        _ai_digest_plist="$HOME/Library/LaunchAgents/com.solar.ai-influence-digest.plist"
+        _ai_digest_label="com.solar.ai-influence-digest"
+        _ai_digest_marker="$HARNESS_DIR/state/ai-influence-digest/schedule.loaded"
+        _ai_digest_action="${1:-help}"; shift || true
+        case "$_ai_digest_action" in
+          run)
+            mkdir -p "$_ai_digest_state_dir" "$_ai_digest_raw_dir"
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_digest_state_dir" \
+              --raw-dir "$_ai_digest_raw_dir" \
+              "$@" \
+              run
+            ;;
+          status)
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_digest_state_dir" \
+              status
+            ;;
+          doctor)
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_digest_state_dir" \
+              doctor
+            ;;
+          send-test)
+            _ai_test_root="$(mktemp -d)"
+            _ai_test_raw="$_ai_test_root/raw"
+            _ai_test_state="$_ai_test_root/state"
+            mkdir -p "$_ai_test_raw" "$_ai_test_state"
+            echo "send-test isolated raw: $_ai_test_raw" >&2
+            python3 "$_ai_digest_script" \
+              --accounts "$_ai_digest_accounts" \
+              --state-dir "$_ai_test_state" \
+              --raw-dir "$_ai_test_raw" \
+              --dry-run "$@" \
+              run
+            ;;
+          schedule)
+            _sched_act="${1:-status}"; shift || true
+            case "$_sched_act" in
+              start)
+                mkdir -p "$(dirname "$_ai_digest_plist")" "$(dirname "$_ai_digest_marker")" "$HARNESS_DIR/run"
+                cat > "$_ai_digest_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${_ai_digest_label}</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/bash</string>
+    <string>${HARNESS_DIR}/solar-harness.sh</string>
+    <string>wiki</string>
+    <string>ai-influence-digest</string>
+    <string>run</string>
+  </array>
+  <key>StartCalendarInterval</key><dict>
+    <key>Hour</key><integer>7</integer>
+    <key>Minute</key><integer>17</integer>
+  </dict>
+  <key>StandardOutPath</key><string>${HARNESS_DIR}/run/ai-influence-digest.log</string>
+  <key>StandardErrorPath</key><string>${HARNESS_DIR}/run/ai-influence-digest.log</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
+PLIST
+                launchctl bootout "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1 || true
+                if launchctl bootstrap "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1; then
+                  echo "launchctl" > "$_ai_digest_marker"
+                else
+                  echo "marker" > "$_ai_digest_marker"
+                  warn "AI Influence Digest scheduler plist created; launchctl unavailable from this shell, marker recorded"
+                fi
+                ok "AI Influence Digest scheduler loaded ($_ai_digest_label, daily 07:17)"
+                ;;
+              stop)
+                launchctl bootout "gui/$(id -u)" "$_ai_digest_plist" >/dev/null 2>&1 || true
+                rm -f "$_ai_digest_marker"
+                ok "AI Influence Digest scheduler stopped ($_ai_digest_label)"
+                ;;
+              status)
+                if launchctl print "gui/$(id -u)/$_ai_digest_label" >/dev/null 2>&1 || [[ -f "$_ai_digest_marker" ]]; then
+                  ok "AI Influence Digest schedule loaded ($_ai_digest_label, daily 07:17)"
+                else
+                  warn "AI Influence Digest schedule not loaded ($_ai_digest_label)"
+                fi
+                if [[ -f "$_ai_digest_plist" ]]; then
+                  echo "  plist: $_ai_digest_plist"
+                else
+                  echo "  plist: not created yet (run 'schedule start')"
+                fi
+                ;;
+              *)
+                err "Usage: $0 wiki ai-influence-digest schedule [start|stop|status]"
+                exit 1
+                ;;
+            esac
+            ;;
+          help|--help|-h|"")
+            echo "Solar Harness Wiki — AI Influence Daily Digest"
+            echo ""
+            echo "Usage:"
+            echo "  $0 wiki ai-influence-digest run [--date YYYY-MM-DD] [--dry-run]"
+            echo "  $0 wiki ai-influence-digest status"
+            echo "  $0 wiki ai-influence-digest doctor"
+            echo "  $0 wiki ai-influence-digest send-test [--date YYYY-MM-DD]"
+            echo "  $0 wiki ai-influence-digest schedule [start|stop|status]"
+            echo ""
+            echo "Schedule: daily at 07:17 local time. Disabled by default; use 'schedule start' to enable."
+            echo "send-test writes to mktemp isolated raw/state dirs and never production raw."
+            ;;
+          *)
+            err "Unknown ai-influence-digest action: $_ai_digest_action"
+            echo "Run '$0 wiki ai-influence-digest help' for usage." >&2
+            exit 1
+            ;;
+        esac
         ;;
       *)
         err "Unknown wiki subcommand: $_wiki_subcmd"
@@ -4443,6 +5006,7 @@ EOF
     # Epic Decomposer — large requirement -> child PRDs/contracts + parent DAG
     shift
     _epic_py="$HARNESS_DIR/lib/epic_decomposer.py"
+    _epic_show_py="$HARNESS_DIR/lib/cli/epic_show_cmd.py"
     if [[ ! -f "$_epic_py" ]]; then
       err "epic_decomposer.py not found: $_epic_py"; exit 1
     fi
@@ -4450,6 +5014,12 @@ EOF
     case "$_epic_subcmd" in
       create|validate|activate-ready|status)
         python3 "$_epic_py" "$_epic_subcmd" "$@"
+        ;;
+      show)
+        if [[ ! -f "$_epic_show_py" ]]; then
+          err "epic_show_cmd.py not found: $_epic_show_py"; exit 1
+        fi
+        python3 "$_epic_show_py" "$@"
         ;;
       help|--help|-h|"")
         echo "Solar Epic Decomposer — split large asks into linked PRDs/contracts/task graph"
@@ -4460,6 +5030,7 @@ EOF
         echo "  $0 epic activate-ready EPIC_ID [--max N] [--json]"
         echo "  $0 epic validate EPIC_ID [--json]"
         echo "  $0 epic status [--latest] [--json]"
+        echo "  $0 epic show EPIC_ID [--json]"
         ;;
       *)
         err "Unknown epic subcommand: $_epic_subcmd"; exit 1
@@ -4490,6 +5061,155 @@ EOF
         ;;
       *)
         err "Unknown graph-dispatch subcommand: $_graph_dispatch_subcmd"; exit 1
+        ;;
+    esac
+    ;;
+
+  actorhost-status)
+    shift
+    _actorhost_json="0"
+    _actorhost_filter=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --json)
+          _actorhost_json="1"; shift ;;
+        --host-type)
+          [[ -n "${2:-}" ]] || { err "--host-type requires value"; exit 1; }
+          _actorhost_filter="$2"; shift 2 ;;
+        --help|-h)
+          echo "Usage: $0 actorhost-status [--json] [--host-type TYPE]"
+          exit 0 ;;
+        *)
+          err "Unknown actorhost-status option: $1"; exit 1 ;;
+      esac
+    done
+    python3 - "$HARNESS_DIR" "$_actorhost_json" "$_actorhost_filter" "$0" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+harness_dir = Path(sys.argv[1])
+as_json = sys.argv[2] == "1"
+host_type_filter = sys.argv[3]
+script_harness_dir = Path(sys.argv[4]).resolve().parent
+for path in (harness_dir / "lib", script_harness_dir / "tools", script_harness_dir / "lib"):
+    value = str(path)
+    if value in sys.path:
+        sys.path.remove(value)
+    sys.path.insert(0, value)
+from monitor_bridge import build_snapshot  # noqa: E402
+from multi_task_status import CANONICAL_HOST_TYPES  # noqa: E402
+
+snapshot = build_snapshot()
+actors = snapshot.get("actor_fleet") if isinstance(snapshot.get("actor_fleet"), dict) else {}
+if host_type_filter:
+    actors = {
+        aid: entry for aid, entry in actors.items()
+        if str(entry.get("host_type") or "") == host_type_filter
+    }
+payload = {
+    "schema": "solar.actorhost_status.v1",
+    "observed_at": snapshot.get("observed_at"),
+    "canonical_host_types": list(CANONICAL_HOST_TYPES),
+    "actor_count": len(actors),
+    "actor_lease_counts": snapshot.get("actor_lease_counts", {}),
+    "actors": actors,
+}
+if as_json:
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+    raise SystemExit(0)
+
+print("Solar ActorHost Status")
+print(f"canonical_host_types={','.join(payload['canonical_host_types'])}")
+print("┌────────────────────────────────────┬────────────────────┬──────────────────────────┬─────────────┬────────────┐")
+print("│ Actor                              │ Host               │ Host Type                │ Lease       │ Role       │")
+print("├────────────────────────────────────┼────────────────────┼──────────────────────────┼─────────────┼────────────┤")
+for aid, entry in sorted(actors.items()):
+    print(
+        "│ %-34s │ %-18s │ %-24s │ %-11s │ %-10s │" % (
+            aid[:34],
+            str(entry.get("host_id") or "N/A")[:18],
+            str(entry.get("host_type") or "N/A")[:24],
+            str(entry.get("lease_state") or "N/A")[:11],
+            str(entry.get("role") or "N/A")[:10],
+        )
+    )
+print("└────────────────────────────────────┴────────────────────┴──────────────────────────┴─────────────┴────────────┘")
+PY
+    ;;
+
+  pm-fleet|builder-pool|concurrency)
+    # PM dispatch / builder pool / unified concurrency knob
+    _pm_entrypoint="$1"
+    shift
+    _pm_dispatch_py="$HARNESS_DIR/tools/pm_dispatch.py"
+    if [[ ! -f "$_pm_dispatch_py" ]]; then
+      err "pm_dispatch.py not found: $_pm_dispatch_py"; exit 1
+    fi
+    _pm_subcmd="${1:-status}"; shift || true
+    case "$_pm_subcmd" in
+      status|fleet-status)
+        if [[ "$_pm_entrypoint" == "concurrency" ]]; then
+          python3 "$_pm_dispatch_py" concurrency-status "$@"
+        else
+          python3 "$_pm_dispatch_py" fleet-status "$@"
+        fi
+        ;;
+      builder-pool-status|pool|pool-status)
+        python3 "$_pm_dispatch_py" builder-pool-status "$@"
+        ;;
+      concurrency-status|status-concurrency)
+        python3 "$_pm_dispatch_py" concurrency-status "$@"
+        ;;
+      concurrency-set|set)
+        python3 "$_pm_dispatch_py" concurrency-set "$@"
+        ;;
+      prune-rate-limits|prune|cleanup)
+        python3 "$_pm_dispatch_py" prune-rate-limits "$@"
+        ;;
+      quota-refresh|refresh-quota|quota-status)
+        python3 "$_pm_dispatch_py" quota-refresh "$@"
+        ;;
+      install-quota-refresh|install-quota-launchd)
+        bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" install "$@"
+        ;;
+      uninstall-quota-refresh|uninstall-quota-launchd)
+        bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" uninstall
+        ;;
+      quota-refresh-status|quota-launchd-status)
+        bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" status
+        ;;
+      install-rate-limit-pruner|install-prune-launchd)
+        bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" install "$@"
+        ;;
+      uninstall-rate-limit-pruner|uninstall-prune-launchd)
+        bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" uninstall "$@"
+        ;;
+      rate-limit-pruner-status|prune-launchd-status)
+        bash "$HARNESS_DIR/scripts/operator-rate-limit-pruner.sh" status "$@"
+        ;;
+      inbox|result|complete|submit|compile-request|drain-builder-ready)
+        python3 "$_pm_dispatch_py" "$_pm_subcmd" "$@"
+        ;;
+      help|--help|-h)
+        echo "Solar PM Fleet / Builder Pool"
+        echo ""
+        echo "Usage:"
+        echo "  $0 pm-fleet status"
+        echo "  $0 pm-fleet builder-pool-status [--json]"
+        echo "  $0 pm-fleet drain-builder-ready [--dry-run] [--max-items N]"
+        echo "  $0 pm-fleet prune-rate-limits [--json]"
+        echo "  $0 pm-fleet quota-refresh [--json] [--apply]"
+        echo "  $0 pm-fleet install-quota-refresh [--interval SECONDS]"
+        echo "  $0 pm-fleet quota-refresh-status"
+        echo "  $0 pm-fleet install-rate-limit-pruner [--interval SECONDS]"
+        echo "  $0 pm-fleet rate-limit-pruner-status"
+        echo "  $0 pm-fleet uninstall-rate-limit-pruner"
+        echo "  $0 concurrency concurrency-status [--json]"
+        echo "  $0 concurrency set --level low|normal|high|burst"
+        ;;
+      *)
+        err "Unknown pm-fleet subcommand: $_pm_subcmd"; exit 1
         ;;
     esac
     ;;

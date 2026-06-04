@@ -65,9 +65,9 @@ Unified Data Storage Layer
 ## Verify Commands
 
 ```bash
-test -d /Users/sihaoli/Knowledge/_sources/papers
-test -d /Users/sihaoli/Knowledge/_meta
-test -s /Users/sihaoli/Knowledge/_meta/source-manifest.jsonl
+test -d /Users/lisihao/Knowledge/_sources/papers
+test -d /Users/lisihao/Knowledge/_meta
+test -s /Users/lisihao/Knowledge/_meta/source-manifest.jsonl
 solar-harness mirage doctor --json
 solar-harness wiki qmd-search "KV cache" --json
 solar-harness mineru doctor --json

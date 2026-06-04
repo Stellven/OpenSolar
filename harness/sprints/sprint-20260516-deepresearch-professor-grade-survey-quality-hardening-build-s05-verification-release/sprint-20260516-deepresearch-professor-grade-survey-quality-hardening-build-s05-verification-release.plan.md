@@ -53,4 +53,3 @@ N4 release-evidence    ─┴── N5 join-traceability-handoff
 - Worker queue may still contain stale pane prompt residue; dispatch artifacts are the source of truth.
 - Some evaluator panes may be unavailable; if so, local equivalent eval artifacts must include exact test evidence.
 - Raw knowledge archive may be blocked by path permissions; if blocked, release evidence must say so rather than claim success.
-
