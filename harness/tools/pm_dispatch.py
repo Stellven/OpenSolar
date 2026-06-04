@@ -1343,12 +1343,20 @@ def _pm_expected_artifacts(record: dict[str, Any]) -> list[Path]:
     """Artifacts that prove a PM role task actually satisfied its contract."""
     role = normalize_role(str(record.get("requested_role") or ""))
     sprint_id = str(record.get("sprint_id") or "").strip()
+    node_id = str(record.get("node_id") or "").strip()
     if not sprint_id:
         return []
     if role == "planner":
         return [
             SPRINTS_DIR / f"{sprint_id}.plan.md",
             SPRINTS_DIR / f"{sprint_id}.task_graph.json",
+        ]
+    if role == "builder" and node_id:
+        return [SPRINTS_DIR / f"{sprint_id}.{node_id}-handoff.md"]
+    if role == "evaluator" and node_id:
+        return [
+            SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.md",
+            SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.json",
         ]
     return []
 
@@ -2390,8 +2398,21 @@ def cmd_complete(args: argparse.Namespace) -> int:
         return 1
     record = read_pm_task_record(task_id) or {}
     record["task_id"] = task_id
+    closeout = _pm_closeout_status(record)
+    if not closeout.get("ok"):
+        record["status"] = "failed_contract_closeout"
+        record["failed_at"] = _now()
+        record["failure_reason"] = "completed_without_required_artifacts"
+        record["closeout_status"] = closeout
+        record.setdefault("reconcile_history", []).append(
+            {"ts": record["failed_at"], "action": "fail_contract_closeout", "reason": record["failure_reason"], **closeout}
+        )
+        write_pm_task_record(task_id, record)
+        print(json.dumps({"ok": False, "task_id": task_id, "reason": record["failure_reason"], **closeout}, ensure_ascii=False))
+        return 2
     record["status"] = "completed"
     record["completed_at"] = _now()
+    record["closeout_status"] = closeout
     write_pm_task_record(task_id, record)
     print(f"✅ 任务 {task_id} 已标记为 completed")
     return 0

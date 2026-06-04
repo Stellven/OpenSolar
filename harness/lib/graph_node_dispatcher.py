@@ -1425,6 +1425,40 @@ def _latest_operator_result_for(sid: str, node_id: str, operator_id: str = "") -
     return newest[1] if newest else None
 
 
+def _latest_pm_task_record_for(sid: str, node_id: str, operator_id: str = "") -> dict[str, Any] | None:
+    """Return the newest terminal PM task record for a graph node."""
+    root = HARNESS_DIR / "run" / "pm-inbox"
+    if not root.exists():
+        return None
+    newest: tuple[str, dict[str, Any]] | None = None
+    for record_json in root.glob("pm-*.json"):
+        data = _read_json_file_safe(record_json)
+        if str(data.get("sprint_id") or "") != sid:
+            continue
+        if str(data.get("node_id") or "") != node_id:
+            continue
+        if operator_id and str(data.get("operator_id") or "") != operator_id:
+            continue
+        role = str(data.get("requested_role") or "").strip().lower()
+        if role and role not in {"builder", "implementation", "implementer", "coder", "dev"}:
+            continue
+        status = str(data.get("status") or "").strip().lower()
+        if status not in {"completed", "failed", "failed_contract_closeout", "cancelled", "error"}:
+            continue
+        finished = str(
+            data.get("completed_at")
+            or data.get("failed_at")
+            or data.get("updated_at")
+            or data.get("submitted_at")
+            or ""
+        )
+        item = dict(data)
+        item["_pm_task_json"] = str(record_json)
+        if newest is None or finished > newest[0]:
+            newest = (finished, item)
+    return newest[1] if newest else None
+
+
 def _operator_terminal_result_closeout(
     sid: str,
     node_id: str,
@@ -1443,6 +1477,8 @@ def _operator_terminal_result_closeout(
         return None
     result = _latest_operator_result_for(sid, node_id, operator_id=operator_id)
     if not result:
+        result = _latest_pm_task_record_for(sid, node_id, operator_id=operator_id)
+    if not result:
         return None
     status = str(result.get("status") or "").strip().lower()
     if status == "completed" and _existing_node_handoff(sid, node, graph):
@@ -1452,15 +1488,27 @@ def _operator_terminal_result_closeout(
             "reason": "failed_contract_closeout",
             "operator_status": status,
             "result_json": str(result.get("_result_json") or ""),
+            "pm_task_json": str(result.get("_pm_task_json") or ""),
             "operator_id": operator_id,
             "detail": "operator completed but node handoff/eval artifacts are missing",
+        }
+    if status == "failed_contract_closeout":
+        return {
+            "reason": "failed_contract_closeout",
+            "operator_status": status,
+            "result_json": str(result.get("_result_json") or ""),
+            "pm_task_json": str(result.get("_pm_task_json") or ""),
+            "operator_id": operator_id,
+            "detail": str(result.get("failure_reason") or "pm task failed contract closeout")[:500],
         }
     return {
         "reason": f"operator_result_{status or 'failed'}",
         "operator_status": status or "failed",
         "result_json": str(result.get("_result_json") or ""),
+        "pm_task_json": str(result.get("_pm_task_json") or ""),
         "operator_id": operator_id,
         "exit_code": result.get("exit_code"),
+        "detail": str(result.get("failure_reason") or "")[:500],
     }
 
 

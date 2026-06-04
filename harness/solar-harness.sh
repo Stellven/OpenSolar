@@ -2023,6 +2023,27 @@ do_eval_verdict() {
     extra_json="{\"verdict\":\"$verdict_upper\"}"
   fi
 
+  if [[ "$new_status" == "passed" ]]; then
+    local gate_json
+    gate_json=$(HARNESS_DIR="$HARNESS_DIR" python3 - "$sid" <<'PY'
+import json
+import os
+import sys
+
+sid = sys.argv[1]
+lib_dir = os.path.join(os.environ.get("HARNESS_DIR", os.path.expanduser("~/.solar/harness")), "lib")
+if lib_dir not in sys.path:
+    sys.path.insert(0, lib_dir)
+from coordinator_hooks import gate_status_transition  # noqa: E402
+
+decision = gate_status_transition(sid, "reviewing", "passed")
+print(json.dumps(decision.to_dict(), ensure_ascii=False))
+if decision.action == "abort":
+    sys.exit(2)
+PY
+    ) || { err "eval-verdict evidence gate blocked: ${gate_json:-N/A}"; exit 1; }
+  fi
+
   if [[ "$new_status" == "failed_review" ]]; then
     rs_transition_with_round_bump "$sid" "$new_status" "eval_completed" "evaluator" "$extra_json" \
       || { err "eval-verdict 写入失败"; exit 1; }

@@ -549,7 +549,7 @@ def sync_status_cache_from_graph(
         event=event,
     )
     if created_status is not None:
-        result.update({"created": True, "status": created_status})
+        result.update({"created": True, "updated": True, "status": created_status})
     if not status_path.exists():
         result["reason"] = "status_missing"
         return result
@@ -633,7 +633,7 @@ def sync_status_cache_from_graph(
             )
             result.update({"updated": True, "status": current, "reason": "parent_projection_refreshed"})
             return result
-        result["reason"] = "parent_not_ready"
+        result["reason"] = "parent_projection_refreshed" if result.get("created") else "parent_not_ready"
         return result
 
     already_passed = str(current.get("status") or "").lower() == "passed"
