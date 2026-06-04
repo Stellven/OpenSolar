@@ -5169,6 +5169,135 @@ def collect_social_posts_for_account(handle: str, account_id: str, backend: str,
     raise ValueError(f"unknown social backend: {backend}")
 
 
+def social_rss_failure_policy(config: dict[str, Any]) -> dict[str, Any]:
+    social_cfg = config.get("social") or {}
+    policy = social_cfg.get("rss_failure_policy") or {}
+    handles = {
+        str(handle).lstrip("@").lower()
+        for handle in (policy.get("browser_fallback_handles") or [])
+        if str(handle).strip()
+    }
+    return {
+        "browser_fallback_handles": handles,
+        "browser_fallback_after_failures": int(policy.get("browser_fallback_after_failures") or 0),
+        "browser_fallback_retry_hours": float(policy.get("browser_fallback_retry_hours") or 6),
+    }
+
+
+def social_should_enqueue_browser_fallback(account: sqlite3.Row, config: dict[str, Any], next_failure_count: int) -> bool:
+    policy = social_rss_failure_policy(config)
+    handle = str(account["handle"] or "").lstrip("@").lower()
+    handles: set[str] = policy["browser_fallback_handles"]
+    if handle in handles or "*" in handles:
+        return True
+    threshold = int(policy["browser_fallback_after_failures"] or 0)
+    if threshold <= 0 or next_failure_count < threshold:
+        return False
+    tier = str(account["tier"] or "").lower()
+    return tier in {"tier1", "1", "p0", "high"}
+
+
+def social_enqueue_browser_fallback(
+    conn: sqlite3.Connection,
+    *,
+    handle: str,
+    error: str,
+    config: dict[str, Any],
+    now: str,
+) -> bool:
+    policy = social_rss_failure_policy(config)
+    retry_hours = float(policy["browser_fallback_retry_hours"] or 6)
+    next_retry = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=retry_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    existing = conn.execute(
+        "SELECT retry_id FROM retry_queue WHERE source='social' AND source_id=? "
+        "AND operation='browser_capture' AND status IN ('pending','in_progress') "
+        "ORDER BY retry_id DESC LIMIT 1",
+        (handle,),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE retry_queue SET last_error=?, next_retry_at=? WHERE retry_id=?",
+            (error[:500], next_retry, existing[0]),
+        )
+        return False
+    conn.execute(
+        "INSERT INTO retry_queue(source, source_id, operation, attempt, max_attempts, last_error, next_retry_at, created_at, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("social", handle, "browser_capture", 0, 3, error[:500], next_retry, now, "pending"),
+    )
+    return True
+
+
+def social_browser_fallback_pending(conn: sqlite3.Connection, handle: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM retry_queue WHERE source='social' AND source_id=? "
+        "AND operation='browser_capture' AND status IN ('pending','in_progress') "
+        "LIMIT 1",
+        (handle,),
+    ).fetchone()
+    return row is not None
+
+
+def social_reconcile_browser_fallback_result(
+    conn: sqlite3.Connection,
+    *,
+    handles: list[str],
+    exit_code: int,
+    config: dict[str, Any],
+    errors_by_handle: dict[str, str] | None = None,
+) -> None:
+    if not handles:
+        return
+    now = iso_z()
+    policy = social_rss_failure_policy(config)
+    retry_hours = float(policy["browser_fallback_retry_hours"] or 6)
+    next_retry = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=retry_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for handle in handles:
+        row = conn.execute(
+            "SELECT retry_id, attempt, max_attempts FROM retry_queue "
+            "WHERE source='social' AND source_id=? AND operation='browser_capture' "
+            "AND status IN ('pending','in_progress') ORDER BY retry_id DESC LIMIT 1",
+            (handle,),
+        ).fetchone()
+        if not row:
+            continue
+        retry_id = int(row["retry_id"] if isinstance(row, sqlite3.Row) else row[0])
+        attempt = int(row["attempt"] if isinstance(row, sqlite3.Row) else row[1])
+        max_attempts = int(row["max_attempts"] if isinstance(row, sqlite3.Row) else row[2])
+        if exit_code == 0:
+            conn.execute(
+                "UPDATE retry_queue SET status='done', last_error=? WHERE retry_id=?",
+                ("browser_fallback_completed", retry_id),
+            )
+            conn.execute(
+                "UPDATE social_accounts SET collection_backend=?, last_success_at=?, last_error='', failure_count=0 "
+                "WHERE handle=?",
+                ("browser", now, handle),
+            )
+            continue
+        next_attempt = attempt + 1
+        raw_error = str((errors_by_handle or {}).get(handle) or "").strip()
+        account_backend = "browser_fallback_pending"
+        if "x_login_required_or_profile_session_missing" in raw_error:
+            status = "abandoned"
+            error = "browser_fallback_failed:x_login_required_or_profile_session_missing"
+            account_backend = "browser_login_required"
+        else:
+            status = "abandoned" if next_attempt >= max_attempts else "pending"
+            error = f"browser_fallback_failed_exit_code={exit_code}; {raw_error or 'real browser lease/content capture unavailable'}"
+            if status == "abandoned":
+                account_backend = "browser_fallback_abandoned"
+        conn.execute(
+            "UPDATE retry_queue SET attempt=?, status=?, last_error=?, next_retry_at=? WHERE retry_id=?",
+            (next_attempt, status, error, next_retry, retry_id),
+        )
+        conn.execute(
+            "UPDATE social_accounts SET collection_backend=?, last_error=? WHERE handle=?",
+            (account_backend, error[:500], handle),
+        )
+    conn.commit()
+
+
 def _load_social_browser_backend_x_accounts(
     conn: sqlite3.Connection,
     limit_accounts: int,
@@ -5180,8 +5309,17 @@ def _load_social_browser_backend_x_accounts(
     accounts: list[AccountConfig] = []
     try:
         rows = conn.execute(
-            "SELECT handle, tier, enabled FROM social_accounts "
-            "WHERE enabled=1 ORDER BY tier, weight DESC, handle"
+            "SELECT a.handle, a.tier, a.enabled FROM social_accounts a "
+            "LEFT JOIN retry_queue rq ON rq.source='social' "
+            "AND rq.source_id=a.handle "
+            "AND rq.operation='browser_capture' "
+            "AND rq.status IN ('pending','in_progress') "
+            "WHERE a.enabled=1 "
+            "AND a.collection_backend NOT IN ('browser_login_required','browser_fallback_abandoned') "
+            "ORDER BY "
+            "CASE WHEN rq.retry_id IS NOT NULL THEN 0 "
+            "WHEN a.collection_backend='browser_fallback_pending' THEN 1 ELSE 2 END, "
+            "a.tier, a.weight DESC, a.handle"
         ).fetchall()
     except sqlite3.Error:
         rows = []
@@ -5229,8 +5367,10 @@ def _cmd_collect_social_browser_backend_x(
     config: dict[str, Any],
 ) -> int:
     from social_browser_backend_x import cli as social_cli
+    from social_browser_backend_x.cli import CliRunResult
     from social_browser_backend_x.hard_blocker_guard import CallableResolver, HardBlockerGuard
     from social_browser_backend_x.pipeline import Pipeline
+    from social_browser_backend_x.status_surface import StatusInput
 
     limit_accounts = int(getattr(args, "limit_accounts", 0) or 0)
     backend = str(getattr(args, "backend", "auto") or "auto")
@@ -5263,8 +5403,36 @@ def _cmd_collect_social_browser_backend_x(
         artifact_root=social_browser_backend_x_artifact_root(config),
     )
 
+    pipeline_result_holder: dict[str, Any] = {}
+
     def _run(cli_args):
-        return pipeline.run_as_cli_callback(cli_args, accounts=accounts)
+        result = pipeline.run(
+            accounts=accounts,
+            requested_backend=cli_args.backend,
+            limit_accounts=cli_args.limit_accounts,
+        )
+        pipeline_result_holder["result"] = result
+        by_backend: dict[str, int] = {}
+        for scan in result.scans:
+            if scan.post_pk is not None:
+                by_backend[scan.backend] = by_backend.get(scan.backend, 0) + 1
+        has_errors = any(scan.error is not None for scan in result.scans)
+        status = StatusInput(
+            total_accounts=len(accounts),
+            enabled_accounts=len([acct for acct in accounts if acct.enabled]),
+            scanned_today=result.posts_stored + result.posts_deduped,
+            browser_ready=result.selection.selected == "browser_agent",
+            scan_state="failed" if has_errors else ("running" if result.scans else "idle"),
+            parse_fail_count=result.parse_failures,
+            by_backend_count=by_backend,
+        )
+        msg = (
+            f"Pipeline finished: {result.posts_stored} stored, "
+            f"{result.posts_deduped} deduped, "
+            f"{result.parse_failures} parse failures, "
+            f"exit_code={result.exit_code}"
+        )
+        return CliRunResult(exit_code=result.exit_code, status=status, message=msg)
 
     argv = ["--backend", "x_api" if backend == "x-api" else backend, "--json-only"]
     if limit_accounts > 0:
@@ -5273,7 +5441,19 @@ def _cmd_collect_social_browser_backend_x(
     if dry_run:
         os.environ["BROWSER_AGENT_MOCK_MODE"] = "1"
     try:
-        return social_cli.main(argv, run_callback=_run, stdout=sys.stdout, stderr=sys.stderr)
+        exit_code = social_cli.main(argv, run_callback=_run, stdout=sys.stdout, stderr=sys.stderr)
+        if not dry_run and backend in {"browser", "manual"}:
+            social_reconcile_browser_fallback_result(
+                run_conn,
+                handles=[acct.handle for acct in accounts],
+                exit_code=exit_code,
+                config=config,
+                errors_by_handle={
+                    str(scan.handle): str(scan.error or "")
+                    for scan in getattr(pipeline_result_holder.get("result"), "scans", [])
+                },
+            )
+        return exit_code
     finally:
         if dry_run:
             if old_mock_flag is None:
@@ -5327,8 +5507,20 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
     fetched = 0
     new_items = 0
     failures: list[str] = []
+    browser_fallbacks: list[str] = []
     for idx, account in enumerate(accounts, 1):
         handle = account["handle"]
+        if backend in {"rss", "auto"} and str(account["collection_backend"] or "") == "browser_fallback_pending":
+            if social_browser_fallback_pending(conn, handle):
+                conn.execute(
+                    "UPDATE social_accounts SET last_scanned_at=?, last_error=? WHERE handle=?",
+                    (fetched_at, "browser_fallback_pending: waiting for browser_capture retry_queue", handle),
+                )
+                conn.commit()
+                browser_fallbacks.append(f"{handle}: pending_existing")
+                if idx < len(accounts):
+                    sleep_between_requests(config)
+                continue
         try:
             used_backend, resolved_account_id, posts = collect_social_posts_for_account(
                 handle, account["account_id"] if "account_id" in account.keys() else "", backend, config, fetched_at, per_account_limit
@@ -5383,12 +5575,42 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
             )
             conn.commit()
         except Exception as exc:
+            error_text = f"{type(exc).__name__}: {exc}"
+            next_failure_count = int(account["failure_count"] or 0) + 1
+            if (
+                backend in {"rss", "auto"}
+                and "rss backends exhausted" in str(exc)
+                and social_should_enqueue_browser_fallback(account, config, next_failure_count)
+            ):
+                queued = social_enqueue_browser_fallback(
+                    conn,
+                    handle=handle,
+                    error=error_text,
+                    config=config,
+                    now=fetched_at,
+                )
+                conn.execute(
+                    "UPDATE social_accounts SET last_scanned_at=?, last_error=?, failure_count=?, "
+                    "collection_backend=? WHERE handle=?",
+                    (
+                        fetched_at,
+                        f"rss_failed_browser_fallback_pending: {error_text}"[:500],
+                        next_failure_count,
+                        "browser_fallback_pending",
+                        handle,
+                    ),
+                )
+                conn.commit()
+                browser_fallbacks.append(f"{handle}: {'queued' if queued else 'pending'}: {error_text}")
+                if idx < len(accounts):
+                    sleep_between_requests(config)
+                continue
             conn.execute(
                 "UPDATE social_accounts SET last_scanned_at=?, last_error=?, failure_count=failure_count+1 WHERE handle=?",
-                (fetched_at, f"{type(exc).__name__}: {exc}"[:500], handle),
+                (fetched_at, error_text[:500], handle),
             )
             conn.commit()
-            failures.append(f"{handle}: {type(exc).__name__}: {exc}")
+            failures.append(f"{handle}: {error_text}")
         if idx < len(accounts):
             sleep_between_requests(config)
     social_cluster_posts(conn)
@@ -5397,10 +5619,12 @@ def cmd_collect_social(args: argparse.Namespace) -> int:
         materialize_stats = social_materialize_after_collect(conn, limit=int(getattr(args, "materialize_limit", 0) or 0))
     conn.commit()
     finish_run(conn, run_id, "partial" if failures and fetched else ("failed" if failures else "ok"),
-               fetched, new_items, json.dumps({"failures": failures[:5], "materialize": materialize_stats}, ensure_ascii=False)[:900])
-    print(f"[collect-social] accounts={len(accounts)} fetched={fetched} new={new_items} failures={len(failures)}")
+               fetched, new_items, json.dumps({"failures": failures[:5], "browser_fallbacks": browser_fallbacks[:5], "materialize": materialize_stats}, ensure_ascii=False)[:900])
+    print(f"[collect-social] accounts={len(accounts)} fetched={fetched} new={new_items} failures={len(failures)} browser_fallbacks={len(browser_fallbacks)}")
     if materialize_stats:
         print(f"[collect-social] materialize={json.dumps(materialize_stats, ensure_ascii=False, sort_keys=True)}")
+    for fallback in browser_fallbacks[:10]:
+        print(f"  INFO browser_fallback {fallback}")
     for failure in failures[:10]:
         print(f"  WARN {failure}")
     conn.close()
@@ -9083,8 +9307,14 @@ def hf_load_report_candidates(
         else:
             rows = []
         if not rows:
+            date_filter_sql = ""
+            query_params: list[Any] = []
+            if report_context["cadence"] != "weekly":
+                date_filter_sql = "AND substr(p.built_at, 1, 10) = ?"
+                query_params.append(resolved_date)
+            query_params.append(limit)
             rows = conn.execute(
-                """
+                f"""
                 SELECT p.*
                 FROM paper_evidence_packets p
                 JOIN (
@@ -9093,6 +9323,7 @@ def hf_load_report_candidates(
                     GROUP BY paper_id
                 ) latest ON latest.paper_id=p.paper_id AND latest.built_at=p.built_at
                 WHERE json_extract(p.packet_gate_json, '$.passed') = 1
+                  {date_filter_sql}
                 ORDER BY
                   CAST(json_extract(p.score_summary_json, '$.insight_report') AS REAL) DESC,
                   CAST(json_extract(p.score_summary_json, '$.experiment') AS REAL) DESC,
@@ -9100,7 +9331,7 @@ def hf_load_report_candidates(
                   p.built_at DESC
                 LIMIT ?
                 """,
-                (limit,),
+                query_params,
             ).fetchall()
         matcher = ResonanceMatcher()
         engine = HighReasoningEngine()
@@ -9288,6 +9519,65 @@ def hf_internal_report_tokens(text: str) -> list[str]:
             hits.append(label)
     return hits
 
+HF_PUBLIC_REPORT_LEAK_PATTERNS: list[tuple[str, str]] = [
+    ("evidence_basis", r"依据[:：]"),
+    ("evidence_parenthetical", r"[（(]\s*证据[:：]"),
+    ("packet_id", r"\bpkt-[a-z0-9]+\b"),
+    ("evidence_ids_field", r"\bevidence_ids?\b"),
+    ("paper_id_field", r"\bpaper_id\b"),
+    ("packet_id_field", r"\bpacket_id\b"),
+    ("premium_variant", r"\bpremium_insight_report\b"),
+    ("fallback_variant", r"\bfallback_report\b"),
+]
+
+
+def hf_public_report_leak_tokens(*texts: str) -> list[str]:
+    hits: list[str] = []
+    for label, pattern in HF_PUBLIC_REPORT_LEAK_PATTERNS:
+        for text in texts:
+            if re.search(pattern, str(text or ""), flags=re.IGNORECASE):
+                hits.append(label)
+                break
+    return hits
+
+
+def hf_sanitize_public_report_text(text: str) -> str:
+    """Remove report-construction evidence markers from reader-facing HF reports."""
+    clean = str(text or "")
+    clean = re.sub(r"\bpremium_insight_report\b", "高级洞察报告", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\bfallback_report\b", "候选快报", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"[（(]\s*证据[:：][^）)]{0,240}[）)]", "", clean)
+    clean = re.sub(r"依据[:：]\s*[^。！？\n<]*(?:[。！？]|$)", "", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"[（(]?\s*(?:paper_id|packet_id|evidence_ids?)\s*[:：][^）)\n<]*[）)]?", "", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\bevidence_ids?\b", "来源线索", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\b(?:paper_id|packet_id)\b", "论文线索", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\bpkt-[a-z0-9]+\b", "", clean, flags=re.IGNORECASE)
+    return clean
+
+
+AI_INFLUENCE_PUBLIC_REPORT_LEAK_PATTERNS: list[tuple[str, str]] = [
+    ("packet_id", r"\bpkt-[a-z0-9]+\b"),
+    ("evidence_ids", r"\bevidence_ids?\b"),
+    ("paper_id_field", r"\bpaper_id\b"),
+    ("packet_id_field", r"\bpacket_id\b"),
+    ("request_dir", r"\brequest_dir\b"),
+    ("operator_kind", r"\boperator_kind\b"),
+    ("chapter_writer", r"\bchatgpt_report_chapter_writer\b|\bchapter_writer\b"),
+    ("deepresearch_operator", r"\bDeepResearchChatGPT\b"),
+    ("backend_note", r"\bbackend\s*:\s*"),
+    ("operator_note", r"\boperator\s*:\s*"),
+    ("reasoning_note", r"\breasoning(?:_effort)?\s*:\s*"),
+]
+
+
+def ai_influence_public_report_leak_tokens(*texts: str) -> list[str]:
+    hits: list[str] = []
+    for label, pattern in AI_INFLUENCE_PUBLIC_REPORT_LEAK_PATTERNS:
+        for text in texts:
+            if re.search(pattern, str(text or ""), flags=re.IGNORECASE):
+                hits.append(label)
+                break
+    return hits
 
 def _hf_public_record_evidence(record: dict[str, Any]) -> list[str]:
     evidence = _hf_list(record.get("evidence_ids"))
@@ -9897,6 +10187,11 @@ def _hf_render_public_report_markdown(
         evidence_gap = _hf_list(record.get("evidence_gap"))
         title = _hf_text(record.get("title") or record.get("paper_id"))
         github_label = _hf_text(github.get("full_name") or github.get("url"))
+        paper_url = _hf_public_paper_url(record)
+        source_label = _hf_markdown_link("论文页面", paper_url) if paper_url else "N/A"
+        if github_label != "N/A":
+            github_url = str((record.get("github") or {}).get("url") or "").strip()
+            source_label = f"{source_label} / {_hf_markdown_link(github_label, github_url)}" if github_url else f"{source_label} / {github_label}"
         lines.extend([
             f"### {idx:02d}. {title}",
             "",
@@ -9909,6 +10204,7 @@ def _hf_render_public_report_markdown(
             f"| 评分 | insight={_hf_score_text(scores.get('insight_report'))} / experiment={_hf_score_text(scores.get('experiment'))} / open_project={_hf_score_text(scores.get('open_project'))} / deep_research={_hf_score_text(scores.get('deep_research_seed'))} |",
             f"| 资产线索 | models={len(assets.get('linked_models') or [])} / datasets={len(assets.get('linked_datasets') or [])} / spaces={len(assets.get('linked_spaces') or [])} / total={_hf_text(assets.get('total_assets'))} |",
             f"| GitHub | {github_label} |",
+            f"| 来源 | {source_label} |",
             "",
             "#### 为什么重要",
             "",
@@ -10017,6 +10313,12 @@ def _hf_render_public_report_html(
         experiment_plan = _hf_list(record.get("experiment_plan"))
         strategic_questions = _hf_list(record.get("strategic_questions"))
         title_html = html.escape(_hf_text(record.get("title") or record.get("paper_id")))
+        paper_url = _hf_public_paper_url(record)
+        paper_html = (
+            f'<a href="{html.escape(paper_url)}" target="_blank" rel="noreferrer noopener">论文页面</a>'
+            if paper_url
+            else "N/A"
+        )
         github_url = str(github.get("url") or "").strip()
         github_html = (
             f'<a href="{html.escape(github_url)}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_text(github.get("full_name") or github_url))}</a>'
@@ -10056,7 +10358,11 @@ def _hf_render_public_report_html(
               </section>
               <section>
                 <h3>战略问题</h3>
-                <ul>{"".join(f"<li>{html.escape(hf_clean_public_text(item))}</li>" for item in strategic_questions) or "<li>待补</li>"}</ul>
+                <ul>{strategic_html}</ul>
+              </section>
+              <section>
+                <h3>来源</h3>
+                <p>{paper_html}{' / ' + github_html if github_html != 'N/A' else ''}</p>
               </section>
             </article>
             """
@@ -14246,6 +14552,13 @@ def normalize_ai_influence_markdown_report(markdown: str, *, model_name: str, in
     normalized: list[str] = []
     for idx, line in enumerate(lines):
         stripped = line.strip()
+        heading_match = re.match(r"^(#{1,4})\s+(.+?)\s*$", stripped)
+        if heading_match:
+            heading_level = heading_match.group(1)
+            heading_text = heading_match.group(2).strip()
+            if "原意摘要与观点归纳" in heading_text:
+                normalized.append(f"{heading_level} 访谈原意摘要与观点归纳")
+                continue
         if idx == 0 and stripped and not stripped.startswith("#"):
             normalized.append(f"# {stripped}")
             continue
@@ -14263,18 +14576,112 @@ def normalize_ai_influence_markdown_report(markdown: str, *, model_name: str, in
             continue
         normalized.append(line)
     text = "\n".join(normalized).strip()
-    if "## Provenance" not in text:
-        text += "\n\n## Provenance\n"
-    additions: list[str] = []
-    if "final_reasoner:" not in text:
-        additions.append(f"- final_reasoner: {model_name}")
-    if "local_preprocess:" not in text:
-        additions.append("- local_preprocess: ThunderOMLX/Qwen3.6 semantic packets")
-    if "input_videos:" not in text:
-        additions.append(f"- input_videos: {input_videos}")
-    if additions:
-        text += "\n" + "\n".join(additions)
+    text = re.sub(r"(?im)^##\s*Executive Summary\s*\n(?:.*?\n)*?(?=^##\s+|\Z)", "", text)
+    text = re.sub(r"(?im)^##\s*Provenance\s*\n(?:.*?\n)*?(?=^##\s+|\Z)", "", text)
+    text = re.sub(r"(?im)^[-*]\s*(final_reasoner|local_preprocess|input_videos|backend|model)\s*:.*$", "", text)
+    if "## 一页结论" not in text and "## 摘要" not in text:
+        text = re.sub(r"(?m)^(# .+?)\n+", r"\1\n\n## 摘要\n\n", text, count=1)
+    text = re.sub(
+        r"(?m)^本报告按\s*\d+\s*个章节逐章生成并合成。每章只使用对应证据包，证据不足的部分保留为观察项。\s*$",
+        "",
+        text,
+    )
+    analysis_markers = [
+        "## 核心趋势",
+        "## 趋势分析",
+        "## 影响与落点",
+        "## 产品 / 研究 / 工程启示",
+        "## TAP 工作流",
+        "## Sustainability 工作流",
+        "## 后续观察",
+    ]
+    if not any(marker in text for marker in analysis_markers):
+        protected = "一页结论|摘要|关键视频证据|素材地图|访谈原意摘要与观点归纳|观点原意摘要与观点归纳|Open Questions"
+        text = re.sub(
+            rf"(?m)^##\s+(?!{protected}\s*$)(.+?)\s*$",
+            r"## 趋势分析：\1",
+            text,
+            count=1,
+        )
     return text.strip()
+
+
+def sanitize_ai_influence_raw_video_ids(markdown: str, evidence_pack: dict[str, Any]) -> str:
+    """Replace raw/internal video identifiers with reader-facing channel/title links."""
+    text = str(markdown or "")
+    videos = [v for v in (evidence_pack or {}).get("videos") or [] if isinstance(v, dict)]
+    for video in videos:
+        channel = str(video.get("channel") or "YouTube").strip() or "YouTube"
+        title = _compact_text(str(video.get("title") or "公开视频").strip() or "公开视频", max_len=50)
+        public_label = f"{channel} / {title}"
+        video_url = str(video.get("url") or video.get("video_url") or "").strip()
+        public_link = f"[{public_label}]({video_url})" if video_url else public_label
+
+        video_ref = str(video.get("video_ref") or "").strip()
+        if video_ref:
+            text = re.sub(
+                rf"本节素材：{re.escape(video_ref)}，.*?(，(?:发布于|发布时间)\s*[^。\n]+。)",
+                f"本节素材：{public_link}" + r"\1",
+                text,
+            )
+            text = re.sub(
+                rf"本节素材：{re.escape(video_ref)}，[^。\n]*。",
+                f"本节素材：{public_link}。",
+                text,
+            )
+            text = re.sub(rf"\b{re.escape(video_ref)}\b", public_link, text)
+
+        raw_video_id = str(video.get("video_id") or "").strip()
+        if not raw_video_id:
+            continue
+        text = text.replace(raw_video_id, public_link)
+    return text
+
+
+def ensure_ai_influence_public_evidence_section(markdown: str, evidence_pack: dict[str, Any]) -> str:
+    """Deterministically add a reader-facing evidence section when synthesis omits it."""
+    text = str(markdown or "").strip()
+    if not text:
+        return text
+    evidence_markers = [
+        "## 关键视频证据",
+        "## 素材地图",
+        "## 观点原意摘要与观点归纳",
+        "## 访谈原意摘要与观点归纳",
+        "## TAP 工作流",
+        "## Sustainability 工作流",
+    ]
+    if any(marker in text for marker in evidence_markers):
+        return text
+    videos = [v for v in (evidence_pack or {}).get("videos") or [] if isinstance(v, dict)]
+    if not videos:
+        return text
+    lines = ["## 关键视频证据", ""]
+    for video in videos:
+        channel = str(video.get("channel") or "YouTube").strip() or "YouTube"
+        title = _compact_text(str(video.get("title") or "公开视频").strip() or "公开视频", max_len=64)
+        url = str(video.get("url") or video.get("video_url") or "").strip()
+        published = str(video.get("published_at") or "").split("T", 1)[0]
+        quality = video.get("transcript_quality") if isinstance(video.get("transcript_quality"), dict) else {}
+        tier = str(video.get("transcript_quality_tier") or quality.get("tier") or "").strip()
+        label = f"{channel} / {title}"
+        if url:
+            label = f"[{label}]({url})"
+        suffix = f"，发布于 {published}" if published else ""
+        tier_text = f"，转写质量 {tier}" if tier else ""
+        lines.append(f"- {label}{suffix}{tier_text}。")
+    lines.append("")
+    section = "\n".join(lines)
+    match = re.search(r"(?m)^##\s+摘要\s*$", text)
+    if match:
+        next_heading = re.search(r"(?m)^##\s+", text[match.end():])
+        if next_heading:
+            insert_at = match.end() + next_heading.start()
+            return (text[:insert_at].rstrip() + "\n\n" + section + "\n" + text[insert_at:].lstrip()).strip()
+    first_h2 = re.search(r"(?m)^##\s+", text)
+    if first_h2:
+        return (text[:first_h2.start()].rstrip() + "\n\n" + section + "\n" + text[first_h2.start():].lstrip()).strip()
+    return text + "\n\n" + section
 
 
 def validate_ai_influence_markdown_report(markdown: str) -> None:
@@ -14282,21 +14689,20 @@ def validate_ai_influence_markdown_report(markdown: str) -> None:
     text = str(markdown or "").strip()
     required = [
         "# ",
-        "## 一页结论",
-        "## 核心趋势",
         "## 关键视频证据",
-        "## 产品 / 研究 / 工程启示",
         "## Open Questions",
-        "## Provenance",
-        "final_reasoner:",
-        "local_preprocess:",
-        "input_videos:",
     ]
     missing = [item for item in required if item not in text]
+    if "## 一页结论" not in text and "## 摘要" not in text:
+        missing.append("## 一页结论|## 摘要")
+    if "## 核心趋势" not in text and "## 趋势分析" not in text:
+        missing.append("## 核心趋势|## 趋势分析")
+    if "## 产品 / 研究 / 工程启示" not in text and "## 影响与落点" not in text:
+        missing.append("## 产品 / 研究 / 工程启示|## 影响与落点")
     if missing:
         raise ValueError(f"incomplete_ai_influence_report_missing={missing}")
     tail = text[-120:].strip()
-    if "input_videos:" not in tail and re.search(r"[\u4e00-\u9fffA-Za-z0-9，,：:；;、（(]$", tail):
+    if re.search(r"[\u4e00-\u9fffA-Za-z0-9，,：:；;、（(]$", tail) and not re.search(r"[。！？.!?）)]$", tail):
         raise ValueError(f"incomplete_ai_influence_report_suspicious_tail={tail[-60:]!r}")
 
 
@@ -14361,8 +14767,10 @@ def validate_ai_influence_planned_report_dir(
             errors.append(f"evidence_pack_json:{type(exc).__name__}:{exc}")
 
     videos = [v for v in (evidence_pack.get("videos") or []) if isinstance(v, dict)]
-    if videos and not re.search(r"\bV\d{3}\b", markdown):
-        errors.append("missing_reader_facing_video_refs:Vxxx")
+    # Public reports should cite reader-facing channel/title links, not internal
+    # V001-style material identifiers. Raw YouTube video ids are checked below.
+    markdown_visible_text = re.sub(r"\[[^\]]+\]\([^)]*\)", lambda m: m.group(0).split("](", 1)[0].lstrip("["), markdown)
+    markdown_visible_text = re.sub(r"https?://\S+", "", markdown_visible_text)
     by_ref = {str(video.get("video_ref") or ""): video for video in videos}
     planned_refs = set(_plan_material_refs(evidence_pack.get("report_spec") or {}))
     missing_refs = sorted(ref for ref in planned_refs if ref and ref not in by_ref)
@@ -14370,7 +14778,7 @@ def validate_ai_influence_planned_report_dir(
         errors.append(f"evidence_pack_missing_planned_material_refs:{','.join(missing_refs[:20])}")
     for video in videos:
         raw_video_id = str(video.get("video_id") or "").strip()
-        if raw_video_id and raw_video_id in markdown:
+        if raw_video_id and raw_video_id in markdown_visible_text:
             errors.append(f"raw_video_id_leaked:{raw_video_id}")
         transcript = str(video.get("transcript_clean") or "").strip()
         if transcript:
@@ -16462,9 +16870,11 @@ def cmd_run_ai_influence_planned_reports(args: argparse.Namespace) -> int:
                 model_name=model_name,
                 input_videos=len(evidence_pack.get("videos") or []),
             )
+            markdown = ensure_ai_influence_public_evidence_section(markdown, evidence_pack)
+            markdown = sanitize_ai_influence_raw_video_ids(markdown, evidence_pack)
             report = {
                 "headline": spec.get("title") or report_id,
-                "subheadline": "Report IR 逐章写作链路合成",
+                "subheadline": "基于本期公开视频材料的日度观察",
                 "_markdown_report": markdown,
                 "_backend": "browser_agent_chatgpt",
                 "_model": model_name,

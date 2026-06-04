@@ -63,18 +63,18 @@ def decide_ladder_path(
             metadata={"track_count": len(standard_tracks)},
         )
 
-    # L1: YouTube ASR caption available?
-    asr_tracks = [t for t in available_tracks if t.track_kind == "asr"]
-    if asr_tracks:
-        best = _pick_best_track(asr_tracks)
+    # L1: YouTube automatic caption available?
+    auto_tracks = [t for t in available_tracks if t.track_kind in {"auto", "asr"}]
+    if auto_tracks:
+        best = _pick_best_track(auto_tracks)
         return LadderDecision(
             video_id=video_id,
             resolved_level=LadderLevel.L1.value,
             caption_available=True,
             asr_route_needed=False,
-            ladder_state="L1_asr_caption",
+            ladder_state="L1_auto_caption",
             subtitle_track=best,
-            metadata={"track_count": len(asr_tracks)},
+            metadata={"track_count": len(auto_tracks)},
         )
 
     # No caption available — route to Browser Agent capture, never local ASR.

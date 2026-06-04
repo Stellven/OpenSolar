@@ -36,7 +36,7 @@ def test_multi_task_panes_info_distinguishes_reusable_and_historical_active(tmp_
     }), encoding="utf-8")
 
     monkeypatch.setattr(status_server, "HARNESS_DIR", harness)
-    def fake_tmux(cmd):
+    def fake_tmux(cmd, **_kwargs):
         target = cmd[3]
         if target == "solar-harness-lab":
             return ""
@@ -75,7 +75,7 @@ def test_multi_task_panes_info_includes_builder_lab_pool(tmp_path, monkeypatch):
         "updated_at": "2026-05-23T23:01:00Z",
     }), encoding="utf-8")
 
-    def fake_tmux(cmd):
+    def fake_tmux(cmd, **_kwargs):
         target = cmd[3]
         if target == "solar-harness-lab":
             return "\n".join([

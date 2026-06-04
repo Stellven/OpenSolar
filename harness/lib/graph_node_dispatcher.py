@@ -1432,9 +1432,15 @@ def _operator_terminal_result_closeout(
     graph: dict[str, Any],
 ) -> dict[str, Any] | None:
     pane = str(node.get("assigned_to") or "").strip()
-    if not pane.startswith("operator:"):
+    operator_id = ""
+    if pane.startswith("operator:"):
+        operator_id = pane.split(":", 1)[1].strip()
+    elif pane:
+        operator_id = pane
+    if not operator_id:
+        operator_id = str(node.get("operator_id") or "").strip()
+    if not operator_id:
         return None
-    operator_id = pane.split(":", 1)[1].strip()
     result = _latest_operator_result_for(sid, node_id, operator_id=operator_id)
     if not result:
         return None
@@ -2432,6 +2438,63 @@ def _mark_graph_node_compat(
             status,
             clear_assignment=clear_assignment,
         )
+
+def _save_graph_preserving_runtime_progress(graph_path: str, graph: dict[str, Any]) -> None:
+    """Avoid stale dispatcher saves downgrading nodes updated by another loop."""
+    try:
+        current = load_graph(graph_path)
+        current_nodes = {
+            str(node.get("id") or ""): node
+            for node in current.get("nodes", [])
+            if str(node.get("id") or "")
+        }
+        stale_nodes = {
+            str(node.get("id") or ""): node
+            for node in graph.get("nodes", [])
+            if str(node.get("id") or "")
+        }
+        protected_statuses = {
+            "dispatched",
+            "in_progress",
+            "running",
+            "reviewing",
+            "passed",
+            "failed",
+            "skipped",
+            "cancelled",
+            "skipped_parent_passed",
+        }
+        overwriteable_statuses = {"", "pending", "queued", "blocked", "worker_blocked", "assigned"}
+        current_results = current.get("node_results") if isinstance(current.get("node_results"), dict) else {}
+        for node_id, current_node in current_nodes.items():
+            stale_node = stale_nodes.get(node_id)
+            if not stale_node:
+                continue
+            current_status = str(node_status(current, node_id) or "").strip().lower()
+            stale_status = str(node_status(graph, node_id) or "").strip().lower()
+            closeout_retry = str(stale_node.get("dispatch_retry_reason") or "").strip().lower()
+            closeout_failure = stale_node.get("last_operator_closeout_failure")
+            closeout_is_authoritative = (
+                stale_status == "pending"
+                and current_status in protected_statuses
+                and closeout_retry in {"failed_contract_closeout", "operator_result_failed", "operator_result_error"}
+                and isinstance(closeout_failure, dict)
+            )
+            if closeout_is_authoritative:
+                continue
+            if current_status not in protected_statuses or stale_status not in overwriteable_statuses:
+                continue
+            current_result = current_results.get(node_id) if isinstance(current_results.get(node_id), dict) else {}
+            set_node_status(
+                graph,
+                node_id,
+                current_status,
+                pane=str(current_node.get("assigned_to") or current_result.get("assigned_to") or "") or None,
+                dispatch_id=str(current_node.get("dispatch_id") or current_result.get("dispatch_id") or "") or None,
+            )
+    except Exception:
+        pass
+    save_graph(graph_path, graph)
 
 
 def _ensure_execution_plan_payload(
@@ -4642,6 +4705,18 @@ def _submit_builder_to_operator_pool(
         pane=operator_pane,
         dispatch_id=dispatch_id,
     )
+    try:
+        graph = load_graph(graph_path)
+        graph_node = _node_by_id(graph, node_id)
+        if graph_node is not None:
+            graph_node["operator_id"] = operator_id
+            graph_node["pm_task_id"] = parsed.get("pm_task_id", "")
+            graph_node["dispatched_via"] = "pm_dispatch"
+            graph_node["updated_at"] = _utc_now()
+            save_graph(graph_path, graph)
+            graph_updated = True
+    except Exception:
+        pass
     _append_dispatch_ledger(
         "operator_pool_dispatched",
         sid,
@@ -5347,6 +5422,11 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
             return False
     if node.get("eval_dispatched_at") and not force:
         assignments = _node_eval_assignments(node)
+        dispatched_at = _parse_utc(str(node.get("eval_dispatched_at") or ""))
+        if assignments and dispatched_at:
+            age = datetime.datetime.now(datetime.timezone.utc) - dispatched_at
+            if age.total_seconds() < 900:
+                return False
         lease_matches = False
         for assignment in assignments:
             pane = str(assignment.get("pane") or "")
