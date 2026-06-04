@@ -538,6 +538,13 @@ def _parse_ai_influence_date(value: str) -> datetime.date | None:
         return None
 
 
+def _ai_influence_month_bucket(value: str) -> str:
+    parsed = _parse_ai_influence_date(value)
+    if not parsed:
+        return "unknown"
+    return f"{parsed.year:04d}-{parsed.month:02d}"
+
+
 def _ai_influence_period_cutoff(period: str) -> tuple[str, datetime.date | None]:
     normalized = str(period or "30d").strip().lower()
     today = datetime.datetime.now(datetime.timezone.utc).date()
@@ -1471,7 +1478,16 @@ def _sanitize_ai_influence_payload(payload: dict) -> dict:
     }
 
 
-def _ai_influence_filter_match(item: dict, *, theme: str = "", technology: str = "", channel: str = "", module: str = "", unsent: bool = False) -> bool:
+def _ai_influence_filter_match(
+    item: dict,
+    *,
+    theme: str = "",
+    technology: str = "",
+    channel: str = "",
+    module: str = "",
+    month: str = "",
+    unsent: bool = False,
+) -> bool:
     filters = item.get("filters") if isinstance(item.get("filters"), dict) else {}
     themes = [str(value) for value in (filters.get("themes") or [])]
     technologies = [str(value) for value in (filters.get("technologies") or [])]
@@ -1485,6 +1501,8 @@ def _ai_influence_filter_match(item: dict, *, theme: str = "", technology: str =
     if channel and channel not in channels:
         return False
     if module and module != module_label:
+        return False
+    if month and str(item.get("month") or "") != month:
         return False
     if unsent and mail_status in {"sent", "warn"}:
         return False
@@ -1509,6 +1527,7 @@ def _ai_influence_payload_internal(
     technology: str = "",
     channel: str = "",
     module: str = "",
+    month: str = "",
     unsent: bool = False,
     sort_mode: str = "date_desc",
 ) -> dict:
@@ -1559,15 +1578,24 @@ def _ai_influence_payload_internal(
     if deleted_ids:
         items = [item for item in items if str(item.get("id") or "") not in deleted_ids]
     normalized_period, cutoff = _ai_influence_period_cutoff(period)
-    if cutoff is not None:
-        items = [
-            item for item in items
-            if (_parse_ai_influence_date(str(item.get("date") or "")) or datetime.date.min) >= cutoff
-        ]
+    normalized_items: list[dict] = []
+    for item in items:
+        date_value = str(item.get("date") or "")
+        parsed_date = _parse_ai_influence_date(date_value)
+        if cutoff is not None and (parsed_date or datetime.date.min) < cutoff:
+            continue
+        copied = dict(item)
+        copied["month"] = _ai_influence_month_bucket(date_value)
+        normalized_items.append(copied)
+    items = normalized_items
     filter_themes = _unique_preserve([value for item in items for value in ((item.get("filters") or {}).get("themes") or [])])
     filter_technologies = _unique_preserve([value for item in items for value in ((item.get("filters") or {}).get("technologies") or [])])
     filter_channels = _unique_preserve([value for item in items for value in ((item.get("filters") or {}).get("channels") or [])])
     filter_modules = _unique_preserve([str(item.get("module_label") or "") for item in items if str(item.get("module_label") or "")])
+    filter_months = sorted(
+        {str(item.get("month") or "") for item in items if str(item.get("month") or "") and str(item.get("month") or "").lower() != "unknown"},
+        reverse=True,
+    )
     filtered = [
         item for item in items
         if _ai_influence_filter_match(
@@ -1576,6 +1604,7 @@ def _ai_influence_payload_internal(
             technology=technology,
             channel=channel,
             module=module,
+            month=month,
             unsent=unsent,
         )
     ]
@@ -1598,6 +1627,7 @@ def _ai_influence_payload_internal(
             "technology": technology,
             "channel": channel,
             "module": module,
+            "month": month,
             "unsent": unsent,
             "sort": sort_mode,
         },
@@ -1612,6 +1642,7 @@ def _ai_influence_payload_internal(
             "technologies": filter_technologies,
             "channels": filter_channels,
             "modules": filter_modules,
+            "months": filter_months,
         },
         "mail_config": _ai_influence_mail_config_payload(),
     }
@@ -1625,6 +1656,7 @@ def _ai_influence_payload(
     technology: str = "",
     channel: str = "",
     module: str = "",
+    month: str = "",
     unsent: bool = False,
     sort_mode: str = "date_desc",
 ) -> dict:
@@ -1635,6 +1667,7 @@ def _ai_influence_payload(
         technology=technology,
         channel=channel,
         module=module,
+        month=month,
         unsent=unsent,
         sort_mode=sort_mode,
     ))
@@ -2914,6 +2947,7 @@ def _ai_influence_html(
     technology: str = "",
     channel: str = "",
     module: str = "",
+    month: str = "",
     unsent: bool = False,
     group_channel: bool = False,
     sort_mode: str = "date_desc",
@@ -2925,6 +2959,7 @@ def _ai_influence_html(
         technology=technology,
         channel=channel,
         module=module,
+        month=month,
         unsent=unsent,
         sort_mode=sort_mode,
     )
@@ -2946,6 +2981,7 @@ def _ai_influence_html(
             primary = item.get("primary") if isinstance(item.get("primary"), dict) else {}
             open_url = primary.get("view_url") or ""
             module_label = str(item.get("module_label") or "N/A")
+            month_label = str(item.get("month") or "N/A")
             mail_status = str(((item.get("mail") or {}).get("status")) or "unsent").strip().lower()
             mail_payload_attr = html.escape(json.dumps({
                 "id": str(item.get("id") or ""),
@@ -2985,6 +3021,7 @@ def _ai_influence_html(
                    data-channels="{html.escape(channel_tokens)}"
                    data-primary-channel="{html.escape(primary_channel)}"
                    data-mail-status="{html.escape(mail_status)}"
+                   data-month="{html.escape(month_label)}"
                    data-title="{html.escape(card_title)}"
                    data-mail-payload="{mail_payload_attr}">
                 <div class="date">{html.escape(str(item.get("date") or "N/A"))}</div>
@@ -3064,12 +3101,13 @@ def _ai_influence_html(
     theme_options = "".join(_option(str(value), theme) for value in (filter_options.get("themes") or []))
     technology_options = "".join(_option(str(value), technology) for value in (filter_options.get("technologies") or []))
     channel_options = "".join(_option(str(value), channel) for value in (filter_options.get("channels") or []))
+    month_options = "".join(_option(str(value), month) for value in (filter_options.get("months") or []))
     module_labels = [str(value) for value in (filter_options.get("modules") or [])]
     if module and module not in module_labels:
         module_labels.append(module)
     module_options = "".join(_option(value, module) for value in module_labels)
     quick_module_buttons = "".join(
-        f"<button class='quick-btn' data-module='{html.escape(str(group.get('label') or ''))}' onclick=\"setQuickModule('{html.escape(str(group.get('label') or ''))}', this)\">{html.escape(str(group.get('label') or ''))}</button>"
+        f"<button class='quick-btn module-tab-btn' data-module='{html.escape(str(group.get('label') or ''))}' onclick=\"setQuickModule('{html.escape(str(group.get('label') or ''))}', this)\">{html.escape(str(group.get('label') or ''))}</button>"
         for group in (payload.get("groups") or [])
     )
     preset_buttons = "".join([
@@ -3117,7 +3155,7 @@ def _ai_influence_html(
     .mail-field input {{ width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:14px; padding:12px 14px; font-size:14px; background:#fff; }}
     .hint,.status-line {{ color:var(--muted); font-size:12px; }}
     .status-line {{ min-height:20px; margin-top:8px; }}
-    .report-filters {{ display:grid; grid-template-columns:repeat(6,minmax(150px,1fr)); gap:10px; padding:16px; border:1px solid var(--line); background:#fffdf8; border-radius:22px; margin:6px 0 14px; }}
+    .report-filters {{ display:grid; grid-template-columns:repeat(8,minmax(150px,1fr)); gap:10px; padding:16px; border:1px solid var(--line); background:#fffdf8; border-radius:22px; margin:6px 0 14px; }}
     .filter-field label {{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }}
     .filter-field select {{ width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:14px; padding:11px 12px; font-size:14px; background:#fff; }}
     .filter-check {{ display:flex; align-items:center; gap:8px; min-height:48px; border:1px solid var(--line); border-radius:14px; padding:0 12px; background:#fff; color:var(--ink); }}
@@ -3125,6 +3163,8 @@ def _ai_influence_html(
     .quick-filters {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }}
     .quick-btn {{ border:1px solid var(--line); background:#fff; color:var(--green); border-radius:999px; padding:8px 13px; font-size:12px; font-weight:700; cursor:pointer; }}
     .quick-btn.active {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .quick-btn.module-tab-btn {{ font-size:13px; }}
+    .module-tabs {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px; }}
     .preset-link {{ text-decoration:none; display:inline-flex; align-items:center; }}
     .active-chips {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }}
     .chip {{ display:inline-flex; align-items:center; gap:8px; border:1px solid #e5d8c4; background:#fff8ef; color:var(--ink); border-radius:999px; padding:8px 12px; font-size:12px; }}
@@ -3169,6 +3209,12 @@ def _ai_influence_html(
     .metrics span {{ border:1px solid #eadfcd; border-radius:16px; background:#fbf7ef; padding:10px; text-align:center; color:var(--muted); min-width:0; overflow-wrap:anywhere; word-break:break-word; }}
     .metrics b {{ display:block; color:var(--green); font-size:15px; line-height:1.18; overflow-wrap:anywhere; word-break:break-word; }}
     .metrics small {{ display:block; font-size:11px; margin-top:2px; overflow-wrap:anywhere; word-break:break-word; }}
+    .month-group {{ border:1px solid var(--line); border-radius:22px; background:#fffaf3; padding:12px 14px 6px; }}
+    .month-group + .month-group {{ margin-top:12px; }}
+    .month-summary {{ display:flex; justify-content:space-between; align-items:center; gap:10px; color:var(--green); font-weight:800; }}
+    .month-summary::-webkit-details-marker {{ display:none; }}
+    .month-summary-count {{ color:var(--muted); font-size:12px; font-weight:600; }}
+    .month-group-header {{ display:inline-flex; align-items:center; gap:10px; }}
     .actions {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }}
     .empty {{ margin-top:18px; padding:22px; border:1px dashed var(--line); border-radius:20px; background:#fffdf8; color:var(--muted); }}
     @media(max-width:1180px) {{ .report-filters {{ grid-template-columns:repeat(3,minmax(0,1fr)); }} }}
@@ -3244,20 +3290,29 @@ def _ai_influence_html(
           </select>
         </div>
         <div class="filter-field">
+          <label for="filter-month">月份</label>
+          <select id="filter-month" onchange="applyReportFilters()">
+            <option value="">全部月份</option>
+            {month_options}
+          </select>
+        </div>
+        <div class="filter-field">
           <label for="sort-reports">排序方式</label>
           <select id="sort-reports" onchange="applyReportFilters()">
-	            {_sort_option("date_desc", "时间：最新优先")}
-	            {_sort_option("date_asc", "时间：最早优先")}
-	            {_sort_option("title_asc", "标题：A-Z")}
-	            {_sort_option("module_asc", "模块：A-Z")}
-	          </select>
-	        </div>
-	        <label class="filter-check"><input id="filter-unsent" type="checkbox" onchange="applyReportFilters()"{' checked' if unsent else ''}>只看未发送</label>
-	        <label class="filter-check"><input id="group-channel" type="checkbox" onchange="applyReportFilters()"{' checked' if group_channel else ''}>按频道折叠</label>
+            {_sort_option("date_desc", "时间：最新优先")}
+            {_sort_option("date_asc", "时间：最早优先")}
+            {_sort_option("title_asc", "标题：A-Z")}
+            {_sort_option("module_asc", "模块：A-Z")}
+          </select>
+        </div>
+        <label class="filter-check"><input id="filter-unsent" type="checkbox" onchange="applyReportFilters()"{' checked' if unsent else ''}>只看未发送</label>
+        <label class="filter-check"><input id="group-channel" type="checkbox" onchange="applyReportFilters()"{' checked' if group_channel else ''}>按频道折叠</label>
       </div>
       <div class="quick-filters">
-        <button class="quick-btn active" data-module="" onclick="setQuickModule('', this)">全部报告</button>
-        {quick_module_buttons}
+        <div class="module-tabs">
+          <button class="quick-btn module-tab-btn active" data-module="" onclick="setQuickModule('', this)">全部报告</button>
+          {quick_module_buttons}
+        </div>
         {preset_buttons}
       </div>
       <div id="active-chips" class="active-chips">
@@ -3265,7 +3320,7 @@ def _ai_influence_html(
       </div>
       <div class="results-meta">
 	      <div id="report-results-count">当前可见：{int(payload.get("count", 0) or 0)} 份报告</div>
-        <div>支持时间、主题、技术、频道、模块、邮件状态和频道折叠。</div>
+        <div>支持时间、主题、技术、频道、模块、月份、邮件状态和频道折叠。</div>
       </div>
       <div id="report-source" class="report-source">{''.join(report_cards)}</div>
       <div id="report-results" class="report-results">{'<div class="empty">还没有 AI Influence 报告。先跑一次相关流水线。</div>' if not report_cards else ''}</div>
@@ -3308,6 +3363,7 @@ def _ai_influence_html(
         ['technology', document.getElementById('filter-technology').value],
         ['channel', document.getElementById('filter-channel').value],
         ['module', document.getElementById('filter-module').value],
+        ['month', document.getElementById('filter-month').value],
         ['sort', document.getElementById('sort-reports').value],
       ];
       values.forEach(([key, value]) => {{
@@ -3327,6 +3383,7 @@ def _ai_influence_html(
       document.getElementById('filter-technology').value = '';
       document.getElementById('filter-channel').value = '';
       document.getElementById('filter-module').value = '';
+      document.getElementById('filter-month').value = '';
       document.getElementById('sort-reports').value = 'date_desc';
       document.getElementById('filter-unsent').checked = false;
       document.getElementById('group-channel').checked = false;
@@ -3352,6 +3409,7 @@ def _ai_influence_html(
         ['技术', document.getElementById('filter-technology').value],
         ['频道', document.getElementById('filter-channel').value],
         ['模块', document.getElementById('filter-module').value],
+        ['月份', document.getElementById('filter-month').value],
       ];
       values.forEach(([label, value]) => {{
         if (!value) return;
@@ -3365,18 +3423,20 @@ def _ai_influence_html(
         btn.addEventListener('click', () => {{
           const label = btn.dataset.clear;
           if (label === '主题') document.getElementById('filter-theme').value = '';
-          if (label === '技术') document.getElementById('filter-technology').value = '';
-          if (label === '频道') document.getElementById('filter-channel').value = '';
-          if (label === '模块') document.getElementById('filter-module').value = '';
-          applyReportFilters();
-        }});
+        if (label === '技术') document.getElementById('filter-technology').value = '';
+        if (label === '频道') document.getElementById('filter-channel').value = '';
+        if (label === '模块') document.getElementById('filter-module').value = '';
+        if (label === '月份') document.getElementById('filter-month').value = '';
+        applyReportFilters();
       }});
+    }});
     }}
     function visibleReportCards() {{
       const theme = document.getElementById('filter-theme').value;
       const technology = document.getElementById('filter-technology').value;
       const channel = document.getElementById('filter-channel').value;
       const moduleName = document.getElementById('filter-module').value;
+      const month = document.getElementById('filter-month').value;
       const unsentOnly = document.getElementById('filter-unsent').checked;
       return Array.from(document.querySelectorAll('#report-source .report-card')).filter(card => {{
         const main = card.querySelector('.main');
@@ -3384,8 +3444,9 @@ def _ai_influence_html(
         const okTechnology = !technology || (main.dataset.technologies || '').includes(technology);
         const okChannel = !channel || (main.dataset.channels || '').includes(channel);
         const okModule = !moduleName || (main.dataset.module || '') === moduleName;
+        const okMonth = !month || (main.dataset.month || '') === month;
         const okMail = !unsentOnly || !['sent', 'warn'].includes((main.dataset.mailStatus || '').toLowerCase());
-        return okTheme && okTechnology && okChannel && okModule && okMail;
+        return okTheme && okTechnology && okChannel && okModule && okMonth && okMail;
       }});
     }}
     function sortReportCards(cards) {{
@@ -3409,32 +3470,44 @@ def _ai_influence_html(
     function renderReportCards(cards) {{
       const container = document.getElementById('report-results');
       const counter = document.getElementById('report-results-count');
+      const groupedByMonth = {{}};
+      const toDisplayMonth = (value) => value || 'N/A';
       const renderedCards = cards.map(card => card.cloneNode(true));
+      renderedCards.forEach(card => {{
+        const month = toDisplayMonth(card.querySelector('.main').dataset.month || '');
+        if (!groupedByMonth[month]) {{
+          groupedByMonth[month] = [];
+        }}
+        groupedByMonth[month].push(card);
+      }});
+      const months = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
       container.innerHTML = '';
       counter.textContent = '当前可见：' + cards.length + ' 份报告';
       if (!cards.length) {{
         container.innerHTML = "<div class='empty'>当前筛选条件下没有报告。</div>";
         return;
       }}
-      if (document.getElementById('group-channel').checked) {{
+      const groupByChannel = (entries, containerDom) => {{
         const grouped = new Map();
-        renderedCards.forEach(card => {{
+        entries.forEach(card => {{
           const channel = card.querySelector('.main').dataset.primaryChannel || '未分配频道';
-          if (!grouped.has(channel)) grouped.set(channel, []);
+          if (!grouped.has(channel)) {{
+            grouped.set(channel, []);
+          }}
           grouped.get(channel).push(card);
         }});
-        Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([channel, entries]) => {{
+        Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([channel, channelCards]) => {{
           const details = document.createElement('details');
           details.className = 'channel-group';
           details.open = true;
-          const unsent = entries.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          const unsent = channelCards.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
           const summary = document.createElement('summary');
-          summary.innerHTML = '<span class="channel-group-left"><span>' + channel + '</span><span class="channel-group-count">' + entries.length + ' 份报告</span></span>'
+          summary.innerHTML = '<span class="channel-group-left"><span>' + channel + '</span><span class="channel-group-count">' + channelCards.length + ' 份报告</span></span>'
             + '<span class="channel-group-right">'
             + (unsent.length ? '<button type="button" class="group-send-btn">发送本组未发送（' + unsent.length + '）</button>' : '')
             + '</span>';
           details.appendChild(summary);
-          entries.forEach(card => details.appendChild(card));
+          channelCards.forEach(card => details.appendChild(card));
           const sendBtn = summary.querySelector('.group-send-btn');
           if (sendBtn) {{
             sendBtn.addEventListener('click', async (ev) => {{
@@ -3443,11 +3516,42 @@ def _ai_influence_html(
               await sendBatchReports(unsent, channel);
             }});
           }}
-          container.appendChild(details);
+          containerDom.appendChild(details);
         }});
-        return;
+      }};
+      if (document.getElementById('group-channel').checked) {{
+        months.forEach(month => {{
+          const monthCards = groupedByMonth[month];
+          const monthDetails = document.createElement('details');
+          const unsent = monthCards.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          monthDetails.className = 'month-group';
+          monthDetails.open = true;
+          const monthSummary = document.createElement('summary');
+          monthSummary.className = 'month-summary';
+          monthSummary.innerHTML = '<span class="month-group-header"><span>' + month + '</span><span class="month-summary-count">' + monthCards.length + ' 份报告</span></span>'
+            + '<span class="month-summary-count">未发送 ' + unsent.length + '</span>';
+          monthDetails.appendChild(monthSummary);
+          const monthContainer = document.createElement('div');
+          groupByChannel(monthCards, monthContainer);
+          monthDetails.appendChild(monthContainer);
+          container.appendChild(monthDetails);
+        }});
+      }} else {{
+        months.forEach(month => {{
+          const monthCards = groupedByMonth[month];
+          const monthDetails = document.createElement('details');
+          const unsent = monthCards.filter(card => !['sent', 'warn'].includes((card.querySelector('.main').dataset.mailStatus || '').toLowerCase()));
+          monthDetails.className = 'month-group';
+          monthDetails.open = true;
+          const monthSummary = document.createElement('summary');
+          monthSummary.className = 'month-summary';
+          monthSummary.innerHTML = '<span class="month-group-header"><span>' + month + '</span><span class="month-summary-count">' + monthCards.length + ' 份报告</span></span>'
+            + '<span class="month-summary-count">未发送 ' + unsent.length + '</span>';
+          monthDetails.appendChild(monthSummary);
+          monthCards.forEach(card => monthDetails.appendChild(card));
+          container.appendChild(monthDetails);
+        }});
       }}
-      renderedCards.forEach(card => container.appendChild(card));
     }}
     function applyReportFilters() {{
       syncReportFilterUrl();
@@ -11956,6 +12060,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 technology=params.get("technology", [""])[0],
                 channel=params.get("channel", [""])[0],
                 module=params.get("module", [""])[0],
+                month=params.get("month", [""])[0],
                 unsent=params.get("unsent", ["0"])[0].lower() in ("1", "true", "yes", "on"),
                 group_channel=params.get("group_channel", ["0"])[0].lower() in ("1", "true", "yes", "on"),
                 sort_mode=params.get("sort", ["date_desc"])[0],
@@ -11989,6 +12094,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 technology=params.get("technology", [""])[0],
                 channel=params.get("channel", [""])[0],
                 module=params.get("module", [""])[0],
+                month=params.get("month", [""])[0],
                 unsent=params.get("unsent", ["0"])[0].lower() in ("1", "true", "yes", "on"),
                 sort_mode=params.get("sort", ["date_desc"])[0],
             ))

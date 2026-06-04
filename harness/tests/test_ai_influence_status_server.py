@@ -142,6 +142,78 @@ def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypat
     assert "/ai-influence/youtube-videos" in html
 
 
+def test_ai_influence_html_has_month_tab_and_module_tab(tmp_path, monkeypatch):
+    mod = _load_module()
+    hotspot_root = tmp_path / "tech-hotspot-radar"
+    planned_root = hotspot_root / "ai-influence-planned"
+
+    def _build_planned_report(report_day: str, idx: int, headline: str) -> None:
+        planned_report = planned_root / report_day / "reports" / f"planned-{idx}"
+        planned_report.mkdir(parents=True, exist_ok=True)
+        (planned_report / "report.html").write_text("<html>planned</html>", encoding="utf-8")
+        (planned_report / "report.md").write_text(f"# planned {idx}\n", encoding="utf-8")
+        (planned_report / "report-result.json").write_text(
+            json.dumps(
+                {"headline": headline, "_model": "chatgpt-5.5", "_reasoning_effort": "high"},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (planned_report / "evidence-pack.json").write_text(json.dumps({"videos": []}, ensure_ascii=False), encoding="utf-8")
+
+    _build_planned_report("2026-05-10", 1, "五月报告")
+    _build_planned_report("2026-04-11", 2, "四月报告")
+
+    monkeypatch.setattr(mod, "AI_INFLUENCE_RAW_DIR", tmp_path / "legacy-ai-influence")
+    monkeypatch.setattr(mod, "HUGGINGFACE_PAPERS_RAW_DIR", tmp_path / "huggingface-papers")
+    monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
+
+    html = mod._ai_influence_html(period="all")
+
+    assert "月份" in html
+    assert "全部月份" in html
+    assert "2026-05" in html
+    assert "2026-04" in html
+    assert 'class="module-tabs"' in html
+    assert 'data-month="2026-05"' in html
+
+
+def test_ai_influence_payload_month_filter(tmp_path, monkeypatch):
+    mod = _load_module()
+    hotspot_root = tmp_path / "tech-hotspot-radar"
+    planned_root = hotspot_root / "ai-influence-planned"
+
+    def _build_planned_report(report_day: str, idx: int, headline: str) -> None:
+        planned_report = planned_root / report_day / "reports" / f"planned-{idx}"
+        planned_report.mkdir(parents=True, exist_ok=True)
+        (planned_report / "report.html").write_text("<html>planned</html>", encoding="utf-8")
+        (planned_report / "report.md").write_text(f"# planned {idx}\n", encoding="utf-8")
+        (planned_report / "report-result.json").write_text(
+            json.dumps(
+                {"headline": headline, "_model": "chatgpt-5.5", "_reasoning_effort": "high"},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (planned_report / "evidence-pack.json").write_text(json.dumps({"videos": []}, ensure_ascii=False), encoding="utf-8")
+
+    _build_planned_report("2026-05-10", 1, "五月报告")
+    _build_planned_report("2026-04-11", 2, "四月报告")
+
+    monkeypatch.setattr(mod, "AI_INFLUENCE_RAW_DIR", tmp_path / "legacy-ai-influence")
+    monkeypatch.setattr(mod, "HUGGINGFACE_PAPERS_RAW_DIR", tmp_path / "huggingface-papers")
+    monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
+
+    all_payload = mod._ai_influence_payload(period="all")
+    month_payload = mod._ai_influence_payload(period="all", month="2026-05")
+
+    assert all_payload["count"] == 2
+    assert month_payload["count"] == 1
+    assert month_payload["filters_applied"]["month"] == "2026-05"
+    assert "2026-05" in month_payload["filter_options"]["months"]
+    assert month_payload["items"][0]["month"] == "2026-05"
+
+
 def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkeypatch):
     mod = _load_module()
     db_path = tmp_path / "tech-hotspot-radar.sqlite"
