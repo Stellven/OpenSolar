@@ -97,6 +97,17 @@ class ActorRuntime:
         )
         return int(result.get("pid") or 0)
 
+    def _recover_browser_agent_session_stale_runtime(self) -> dict[str, Any]:
+        if str(BROWSER_AGENT_SESSION_WORKER.parent) not in sys.path:
+            sys.path.insert(0, str(BROWSER_AGENT_SESSION_WORKER.parent))
+        from browser_agent_session_actor import recover_stale_supervisor_runtime  # type: ignore
+
+        return recover_stale_supervisor_runtime(
+            actor_id=BROWSER_AGENT_SESSION_ACTOR_ID,
+            mailbox_base=self.mailbox_base,
+            lease_dir=self.harness_dir / "run" / "actor-leases",
+        )
+
     def _ensure_execution_plan_metadata(
         self,
         task_envelope: Dict[str, Any],
@@ -216,6 +227,11 @@ class ActorRuntime:
         # Check profile risk denial
         profile = self.profiles.get(actor_id)
         evidence_path = f"actors/{actor_id}/evidence/{task_id}"
+        if actor_id == BROWSER_AGENT_SESSION_ACTOR_ID:
+            try:
+                self._recover_browser_agent_session_stale_runtime()
+            except Exception:
+                pass
 
         # Acquire lease
         lease = self.broker.acquire(

@@ -3,6 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 import sys
+import importlib.util
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "lib"))
 
 from logical_operator_router import LogicalOperatorRouter, P0_LOGICAL_OPERATORS
@@ -116,6 +117,24 @@ def test_all_operators_bound():
         unbound = router.validate_all_operators_bound()
         assert unbound == [], f"unbound: {unbound}"
         print("PASS: all_operators_bound")
+
+
+def test_default_paths_respect_harness_dir_env(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        config_dir = Path(td) / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        bp, ap = _make_bindings(config_dir)
+        monkeypatch.setenv("HARNESS_DIR", td)
+        module_path = Path(__file__).resolve().parent.parent.parent / "lib" / "logical_operator_router.py"
+        spec = importlib.util.spec_from_file_location("logical_operator_router_env_test", module_path)
+        assert spec and spec.loader
+        lor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(lor)
+        router = lor.LogicalOperatorRouter()
+        assert router.bindings_path == Path(td) / "config" / "logical-operators.json"
+        assert router.actors_path == Path(td) / "config" / "agent-actors.json"
+        assert router.get_candidates("DeepArchitect")
+        assert bp.exists() and ap.exists()
 
 if __name__ == "__main__":
     test_all_17_operators()

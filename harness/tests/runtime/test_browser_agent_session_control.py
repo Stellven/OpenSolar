@@ -45,10 +45,15 @@ def test_supervisor_status_drain_stop(monkeypatch):
         assert rc == 0
         assert Path(drain["drain_flag"]).exists()
 
-        monkeypatch.setattr("os.kill", lambda pid, sig: None)
+        killpg_calls: list[tuple[int, int]] = []
+        kill_calls: list[tuple[int, int]] = []
+        monkeypatch.setattr("os.killpg", lambda pid, sig: killpg_calls.append((pid, sig)))
+        monkeypatch.setattr("os.kill", lambda pid, sig: kill_calls.append((pid, sig)))
         rc, stop = _run_cli(["supervisor", "stop"])
         assert rc == 0
         assert Path(stop["stop_flag"]).exists()
+        assert killpg_calls == [(43210, 15)]
+        assert kill_calls == []
 
 
 def test_submit_poll_collect_cli(monkeypatch):

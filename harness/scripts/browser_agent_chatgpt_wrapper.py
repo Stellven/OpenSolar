@@ -6,11 +6,14 @@ import base64
 import json
 import logging
 import os
+import re
 import subprocess
 import shutil
 import sys
 import time
 from pathlib import Path
+from typing import NoReturn
+from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "lib"
@@ -21,6 +24,7 @@ import browser_job_runtime as bjrt
 from browser import runtime_control as brtc
 from browser_use.browser.profile import BrowserProfile
 from browser_use.browser.session import BrowserSession
+from browser_use.browser.watchdogs.local_browser_watchdog import LocalBrowserWatchdog
 
 
 DEFAULT_URL = "https://chatgpt.com/"
@@ -29,6 +33,7 @@ DEFAULT_PROFILE_DIRECTORY = "Profile 1"
 DEFAULT_BROWSER_CHANNEL = "chrome"
 DEFAULT_CHROME_EXECUTABLE = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 DEFAULT_ALLOWED_DOMAINS = ["chatgpt.com", "auth.openai.com", "challenges.cloudflare.com"]
+_BROWSER_USE_CDP_PATCHED = False
 
 
 def _env_flag(*names: str, default: bool = False) -> bool:
@@ -38,6 +43,58 @@ def _env_flag(*names: str, default: bool = False) -> bool:
             continue
         return value in {"1", "true", "yes", "on"}
     return default
+
+
+def _force_wrapper_exit(code: int) -> NoReturn:
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    finally:
+        os._exit(code)
+
+
+def _finalize_runtime_success(
+    *,
+    control_ctx: dict,
+    browser,
+    headless: bool,
+    reused_existing_session: bool,
+    runtime_staged_dir,
+    runtime_cleanup_dir,
+    request_dir: Path,
+    action: str,
+    final_page_state: dict | None,
+    keep_session_alive: bool,
+) -> None:
+    if keep_session_alive:
+        brtc.activate_reusable_session(
+            control_ctx,
+            cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+            browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
+            headless=headless,
+            attached=reused_existing_session,
+            details={
+                "request_dir": str(request_dir),
+                "staged_user_data_dir": str(runtime_staged_dir or ""),
+                "cleanup_dir": str(runtime_cleanup_dir or ""),
+            },
+        )
+    else:
+        brtc.clear_active_session(control_ctx)
+    brtc.finalize_runtime_contract(
+        control_ctx,
+        success=True,
+        error_text="",
+        page_state=final_page_state,
+        logged_in_state_verified=True,
+        details={
+            "provider": "browser_agent_chatgpt",
+            "action": action,
+            "request_dir": str(request_dir),
+            "forced_exit": True,
+        },
+        requires_precise_page_control=False,
+    )
 
 
 def _headed_run_allowed() -> bool:
@@ -96,6 +153,100 @@ def _browser_user_agent(*, browser_channel: str) -> str:
     return _build_mac_chrome_user_agent("148.0.0.0")
 
 
+def _is_cdp_connect_failure(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    markers = (
+        "failed to establish cdp connection",
+        "failed to setup cdp connection",
+        "connect call failed",
+        "root cdp client not initialized",
+    )
+    return any(marker in text for marker in markers)
+
+
+async def _wait_for_cdp_websocket_ready(ws_url: str, *, timeout: float = 5.0) -> None:
+    parsed = urlparse(str(ws_url or "").strip())
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+    deadline = time.monotonic() + max(0.5, timeout)
+    stable_hits = 0
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        writer = None
+        try:
+            _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=0.5)
+            stable_hits += 1
+            if stable_hits >= 2:
+                return
+            await asyncio.sleep(0.1)
+        except Exception as exc:
+            last_error = exc
+            stable_hits = 0
+            await asyncio.sleep(0.1)
+        finally:
+            if writer is not None:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+    detail = f"{type(last_error).__name__}: {last_error}" if last_error else "unknown"
+    raise RuntimeError(f"CDP websocket endpoint not ready at {host}:{port} ({detail})")
+
+
+async def _patched_wait_for_cdp_url(port: int, timeout: float = 30) -> str:
+    import aiohttp
+
+    start_time = time.monotonic()
+    last_error: Exception | None = None
+    last_status: int | None = None
+    while time.monotonic() - start_time < timeout:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"http://127.0.0.1:{port}/json/version") as resp:
+                    last_status = resp.status
+                    if resp.status != 200:
+                        await asyncio.sleep(0.1)
+                        continue
+                    payload = await resp.json()
+                    ws_url = str(payload.get("webSocketDebuggerUrl") or "").strip()
+                    if not ws_url:
+                        raise RuntimeError(f"Missing webSocketDebuggerUrl in /json/version payload for port {port}")
+                    remaining = max(0.5, timeout - (time.monotonic() - start_time))
+                    await _wait_for_cdp_websocket_ready(ws_url, timeout=min(5.0, remaining))
+                    return f"http://127.0.0.1:{port}/"
+        except Exception as exc:
+            last_error = exc
+            await asyncio.sleep(0.1)
+    status_text = f" last_status={last_status}" if last_status is not None else ""
+    detail = f"{type(last_error).__name__}: {last_error}" if last_error else "unknown"
+    raise TimeoutError(f"Browser did not expose a stable CDP endpoint within {timeout} seconds ({detail}{status_text})")
+
+
+async def on_BrowserStopEvent(self, event) -> None:
+    browser_profile = getattr(getattr(self, "browser_session", None), "browser_profile", None)
+    keep_alive = bool(getattr(browser_profile, "keep_alive", False))
+    if keep_alive and not bool(getattr(event, "force", False)):
+        return
+    original = getattr(self, "_solar_original_on_BrowserStopEvent", None)
+    if callable(original):
+        await original(event)
+
+
+def _install_browser_use_cdp_patch() -> None:
+    global _BROWSER_USE_CDP_PATCHED
+    if _BROWSER_USE_CDP_PATCHED:
+        return
+    setattr(LocalBrowserWatchdog, "_solar_original_on_BrowserStopEvent", getattr(LocalBrowserWatchdog, "on_BrowserStopEvent", None))
+    LocalBrowserWatchdog._wait_for_cdp_url = staticmethod(_patched_wait_for_cdp_url)
+    LocalBrowserWatchdog.on_BrowserStopEvent = on_BrowserStopEvent
+    setattr(LocalBrowserWatchdog, "_solar_cdp_patch_installed", True)
+    _BROWSER_USE_CDP_PATCHED = True
+
+
+_install_browser_use_cdp_patch()
+
+
 def _challenge_grace_seconds() -> float:
     raw = str(
         os.environ.get("BROWSER_AGENT_CHATGPT_CHALLENGE_GRACE_SECONDS")
@@ -114,6 +265,88 @@ def _challenge_persisted_too_long(challenge_since: float | None, *, now: float |
         return False
     deadline = challenge_since + (grace_s if grace_s is not None else _challenge_grace_seconds())
     return (now if now is not None else time.time()) >= deadline
+
+
+def _is_generic_chatgpt_root(url: str) -> bool:
+    normalized = str(url or "").strip().rstrip("/")
+    return normalized in {"https://chatgpt.com", "https://chat.openai.com"}
+
+
+def _conversation_target_id(url: str) -> str:
+    match = re.search(r"/c/([^/?#]+)", str(url or ""))
+    return unquote(match.group(1)) if match else ""
+
+
+def _conversation_state_ready(data: dict, *, expected_conversation_id: str = "") -> bool:
+    conversation_id = str((data or {}).get("conversation_id") or "").strip()
+    if expected_conversation_id and conversation_id != expected_conversation_id:
+        return False
+    message_count = int((data or {}).get("message_count") or 0)
+    assistant_count = int((data or {}).get("assistant_count") or 0)
+    latest_assistant_text = str((data or {}).get("latest_assistant_text") or "").strip()
+    if bool((data or {}).get("is_generating")) and (
+        message_count > 0 or assistant_count > 0 or latest_assistant_text
+    ):
+        return True
+    if latest_assistant_text:
+        return True
+    return message_count > 0
+
+
+async def _wait_for_submitted_conversation(page, initial_state: dict, *, timeout_s: int = 15) -> dict:
+    best = dict(initial_state or {})
+    deadline = time.monotonic() + max(1, int(timeout_s))
+    while time.monotonic() < deadline:
+        state = json.loads(await page.evaluate(CAPTURE_JS))
+        if state:
+            best = state
+        conversation_id = str((state or {}).get("conversation_id") or "").strip()
+        current_url = str((state or {}).get("url") or "").strip()
+        if conversation_id or (current_url and not _is_generic_chatgpt_root(current_url)):
+            return state
+        await asyncio.sleep(1.0)
+    return best
+
+
+async def _wait_for_conversation_ready(page, *, target_url: str, timeout_s: int = 12) -> dict:
+    expected_conversation_id = _conversation_target_id(target_url)
+    last_data = json.loads(await page.evaluate(CAPTURE_JS))
+    if not expected_conversation_id:
+        return last_data
+    deadline = time.time() + max(1, int(timeout_s))
+    while time.time() < deadline:
+        data = json.loads(await page.evaluate(CAPTURE_JS))
+        last_data = data
+        if _conversation_state_ready(data, expected_conversation_id=expected_conversation_id):
+            return data
+        await asyncio.sleep(1.0)
+    return last_data
+
+
+async def _find_existing_conversation_page(browser, *, target_url: str):
+    expected_conversation_id = _conversation_target_id(target_url)
+    if not expected_conversation_id:
+        return None
+    try:
+        pages = await asyncio.wait_for(browser.get_pages(), timeout=10)
+    except Exception:
+        return None
+    for page in pages:
+        try:
+            state = json.loads(await page.evaluate(CAPTURE_JS))
+        except Exception:
+            continue
+        conversation_id = str((state or {}).get("conversation_id") or "").strip()
+        page_url = str((state or {}).get("url") or "").strip()
+        canonical_url = str((state or {}).get("canonical_url") or "").strip()
+        if conversation_id == expected_conversation_id:
+            return page
+        if expected_conversation_id and (
+            expected_conversation_id in page_url
+            or expected_conversation_id in canonical_url
+        ):
+            return page
+    return None
 
 CAPTURE_JS = r"""() => {
   const clean = (value) => String(value || "")
@@ -311,6 +544,36 @@ SUBMIT_JS = r"""() => {
   }
   const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
   return JSON.stringify({ ok: false, error: "submit_button_not_found" });
+}"""
+
+SUBMIT_FALLBACK_JS = r"""() => {
+  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea");
+  if (!composer) return JSON.stringify({ ok: false, error: "composer_not_found" });
+  const value = String(composer.value || composer.innerText || composer.textContent || "").trim();
+  if (!value) return JSON.stringify({ ok: false, error: "composer_empty" });
+  composer.focus();
+  composer.dispatchEvent(new Event("input", { bubbles: true }));
+  composer.dispatchEvent(new Event("change", { bubbles: true }));
+  const form = composer.closest("form");
+  if (form && typeof form.requestSubmit === "function") {
+    form.requestSubmit();
+    return JSON.stringify({ ok: true, mode: "form_request_submit" });
+  }
+  if (form) {
+    const event = new Event("submit", { bubbles: true, cancelable: true });
+    form.dispatchEvent(event);
+    return JSON.stringify({ ok: true, mode: "form_submit_event", default_prevented: event.defaultPrevented });
+  }
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    composer.dispatchEvent(new KeyboardEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+      code: "Enter",
+      metaKey: true,
+    }));
+  }
+  return JSON.stringify({ ok: true, mode: "composer_meta_enter_dispatch" });
 }"""
 
 HTML_JS = r"""() => document.documentElement.outerHTML"""
@@ -885,23 +1148,6 @@ async def _submit_prompt(page, prompt: str) -> dict:
     baseline_message_count = int(baseline.get("message_count") or 0)
     if len(prompt) > 1000 or "\n" in prompt:
         try:
-            keyboard_note = await _keyboard_insert_prompt(page, prompt)
-            if keyboard_note.get("ok"):
-                await asyncio.sleep(1.0)
-                composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
-                submit_note = json.loads(await page.evaluate(SUBMIT_JS))
-                if not submit_note.get("ok") and int(composer_state.get("text_length") or 0) > 0:
-                    await page.press("Enter")
-                    submit_note = {"mode": "enter_key_after_keyboard_insert", "js_error": submit_note.get("error")}
-                post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
-                post_submit["_submit_note"] = {
-                    "mode": "keyboard_insert_submit",
-                    "keyboard": keyboard_note,
-                    "submit": submit_note,
-                }
-                post_submit["_composer_state_before_submit"] = composer_state
-                if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
-                    return post_submit
             set_note = json.loads(await page.evaluate(SET_PROMPT_JS, prompt))
             if not set_note.get("ok"):
                 raise RuntimeError(f"set_prompt_failed:{set_note}")
@@ -910,15 +1156,39 @@ async def _submit_prompt(page, prompt: str) -> dict:
             if int(composer_state.get("text_length") or 0) > 0:
                 submit_result = json.loads(await page.evaluate(SUBMIT_JS))
                 if not submit_result.get("ok"):
-                    await page.press("Meta+Enter")
-                    submit_note = {"mode": "meta_enter_after_native_setter", "js_error": submit_result.get("error")}
+                    submit_fallback = json.loads(await page.evaluate(SUBMIT_FALLBACK_JS))
+                    submit_note = {
+                        "mode": "dom_fallback_after_native_setter",
+                        "js_error": submit_result.get("error"),
+                        "fallback": submit_fallback,
+                    }
                 else:
                     submit_note = {"mode": "js_submit_after_native_setter", **submit_result}
                 post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
                 post_submit["_submit_note"] = {
                     "mode": "native_setter_submit",
-                    "keyboard_first": keyboard_note,
                     "set_prompt": set_note,
+                    "submit": submit_note,
+                }
+                post_submit["_composer_state_before_submit"] = composer_state
+                if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
+                    return post_submit
+            keyboard_note = await _keyboard_insert_prompt(page, prompt)
+            if keyboard_note.get("ok"):
+                await asyncio.sleep(1.0)
+                composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+                submit_note = json.loads(await page.evaluate(SUBMIT_JS))
+                if not submit_note.get("ok") and int(composer_state.get("text_length") or 0) > 0:
+                    submit_fallback = json.loads(await page.evaluate(SUBMIT_FALLBACK_JS))
+                    submit_note = {
+                        "mode": "dom_fallback_after_keyboard_insert",
+                        "js_error": submit_note.get("error"),
+                        "fallback": submit_fallback,
+                    }
+                post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
+                post_submit["_submit_note"] = {
+                    "mode": "keyboard_insert_submit",
+                    "keyboard": keyboard_note,
                     "submit": submit_note,
                 }
                 post_submit["_composer_state_before_submit"] = composer_state
@@ -930,9 +1200,13 @@ async def _submit_prompt(page, prompt: str) -> dict:
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
             if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
-            await page.press("Meta+Enter")
+            submit_fallback = json.loads(await page.evaluate(SUBMIT_FALLBACK_JS))
             post_submit = await _wait_for_prompt_submission(page, baseline_message_count)
-            post_submit["_submit_note"] = {"mode": "clipboard_paste_meta_enter_retry", "clipboard": clipboard_note}
+            post_submit["_submit_note"] = {
+                "mode": "clipboard_dom_submit_retry",
+                "clipboard": clipboard_note,
+                "fallback": submit_fallback,
+            }
             post_submit["_composer_state_before_submit"] = clipboard_note.get("composer_state_after_paste") or {}
             if _post_submit_has_current_prompt(post_submit, prompt) and (int(post_submit.get("message_count") or 0) > baseline_message_count or post_submit.get("is_generating")):
                 return post_submit
@@ -1501,6 +1775,7 @@ async def _run(prompt: str) -> int:
                 cdp_url=str(active_session.get("cdp_url") or "").strip(),
                 browser_profile=BrowserProfile(
                     headless=headless,
+                    keep_alive=keep_session_alive,
                     allowed_domains=allowed_domains,
                     channel=browser_channel,
                     user_agent=browser_user_agent,
@@ -1524,6 +1799,7 @@ async def _run(prompt: str) -> int:
         browser = BrowserSession(
             browser_profile=BrowserProfile(
                 headless=headless,
+                keep_alive=keep_session_alive,
                 user_data_dir=staged_dir,
                 profile_directory=profile_directory,
                 allowed_domains=allowed_domains,
@@ -1533,22 +1809,63 @@ async def _run(prompt: str) -> int:
         )
     try:
         if not reused_existing_session:
-            await asyncio.wait_for(browser.start(), timeout=40)
+            try:
+                await asyncio.wait_for(browser.start(), timeout=40)
+            except Exception as exc:
+                if not _is_cdp_connect_failure(exc):
+                    raise
+                brtc.clear_active_session(control_ctx)
+                try:
+                    await asyncio.wait_for(browser.kill(), timeout=20)
+                except Exception:
+                    pass
+                await asyncio.sleep(1.0)
+                browser = BrowserSession(
+                    browser_profile=BrowserProfile(
+                        headless=headless,
+                        keep_alive=keep_session_alive,
+                        user_data_dir=staged_dir,
+                        profile_directory=profile_directory,
+                        allowed_domains=allowed_domains,
+                        channel=browser_channel,
+                        user_agent=browser_user_agent,
+                    )
+                )
+                await asyncio.wait_for(browser.start(), timeout=40)
         brtc.update_runtime_endpoint(
             control_ctx,
             cdp_url=str(getattr(browser, "cdp_url", "") or ""),
             browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
         )
+        collect_target_id = _conversation_target_id(target_url)
         if action in {"run", "submit"}:
             page = await asyncio.wait_for(browser.new_page(), timeout=15)
+        elif action in {"poll", "collect"} and collect_target_id:
+            page = await _find_existing_conversation_page(browser, target_url=target_url)
+            if page is None:
+                page = await asyncio.wait_for(browser.new_page(), timeout=15)
         else:
             page = await asyncio.wait_for(browser.get_current_page(), timeout=15)
             if page is None:
                 page = await asyncio.wait_for(browser.new_page(), timeout=15)
-        try:
-            await asyncio.wait_for(page.goto(target_url), timeout=30)
-        except Exception:
-            await asyncio.wait_for(page.navigate(target_url), timeout=30)
+        should_navigate = True
+        if action in {"poll", "collect"} and collect_target_id:
+            current_state = json.loads(await page.evaluate(CAPTURE_JS))
+            if str((current_state or {}).get("conversation_id") or "").strip() == collect_target_id:
+                should_navigate = False
+        if action in {"poll", "collect"} and _is_generic_chatgpt_root(target_url):
+            current_url = ""
+            try:
+                current_url = str(await page.get_url() or "").strip()
+            except Exception:
+                current_url = ""
+            if current_url:
+                should_navigate = False
+        if should_navigate:
+            try:
+                await asyncio.wait_for(page.goto(target_url), timeout=30)
+            except Exception:
+                await asyncio.wait_for(page.navigate(target_url), timeout=30)
         try:
             ready = await _wait_for_ready(page, timeout_s=90)
         except Exception:
@@ -1586,8 +1903,61 @@ async def _run(prompt: str) -> int:
             if int(ready.get("message_count") or 0) > 0:
                 raise RuntimeError("chatgpt_new_chat_did_not_clear_existing_conversation")
         if action in {"poll", "collect"}:
-            final_data = json.loads(await page.evaluate(CAPTURE_JS))
+            expected_conversation_id = collect_target_id
+            final_data = await _wait_for_conversation_ready(
+                page,
+                target_url=target_url,
+                timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_COLLECT_READY_TIMEOUT") or "12"),
+            )
+            if expected_conversation_id and not _conversation_state_ready(
+                final_data,
+                expected_conversation_id=expected_conversation_id,
+            ):
+                try:
+                    await page.reload()
+                    await asyncio.sleep(1.0)
+                    ready = await _wait_for_ready(page, timeout_s=45)
+                    _write_json(request_dir / f"{action}-reload-ready-state.json", ready)
+                    final_data = await _wait_for_conversation_ready(
+                        page,
+                        target_url=target_url,
+                        timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_COLLECT_READY_TIMEOUT") or "12"),
+                    )
+                except Exception as exc:
+                    _write_json(
+                        request_dir / f"{action}-reload-error.json",
+                        {"error": f"{type(exc).__name__}: {exc}", "checked_at": bjrt._now()},
+                    )
+            latest_ready_text = str(final_data.get("latest_assistant_text") or "").strip()
+            if (
+                action == "collect"
+                and not final_data.get("is_generating")
+                and not latest_ready_text
+                and int(final_data.get("assistant_count") or 0) > 0
+            ):
+                try:
+                    final_data = await _wait_for_answer(
+                        page,
+                        -1,
+                        timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_COLLECT_TIMEOUT") or "45"),
+                    )
+                except TimeoutError:
+                    final_data = json.loads(await page.evaluate(CAPTURE_JS))
             if final_data.get("is_generating") or not str(final_data.get("latest_assistant_text") or "").strip():
+                if expected_conversation_id and int(final_data.get("message_count") or 0) == 0:
+                    try:
+                        html = await page.evaluate(HTML_JS)
+                        page_text = await page.evaluate(TEXT_JS)
+                        title = await page.get_title()
+                        final_url = await page.get_url()
+                        (request_dir / f"{action}-empty-conversation-page.html").write_text(str(html or ""), encoding="utf-8")
+                        (request_dir / f"{action}-empty-conversation-page.txt").write_text(str(page_text or "") + "\n", encoding="utf-8")
+                        _write_json(
+                            request_dir / f"{action}-empty-conversation-page.json",
+                            {"title": title, "url": final_url, "state": final_data},
+                        )
+                    except Exception:
+                        pass
                 _write_json(request_dir / f"{action}-state.json", {
                     "ok": True,
                     "status": "running" if final_data.get("is_generating") else "submitted",
@@ -1648,7 +2018,19 @@ async def _run(prompt: str) -> int:
                 }
                 logged_in_verified = True
                 print(latest)
-                return 0
+                _finalize_runtime_success(
+                    control_ctx=control_ctx,
+                    browser=browser,
+                    headless=headless,
+                    reused_existing_session=reused_existing_session,
+                    runtime_staged_dir=runtime_staged_dir,
+                    runtime_cleanup_dir=runtime_cleanup_dir,
+                    request_dir=request_dir,
+                    action=action,
+                    final_page_state=final_page_state,
+                    keep_session_alive=keep_session_alive,
+                )
+                _force_wrapper_exit(0)
             _write_json(request_dir / f"{action}-state.json", {
                 "ok": True,
                 "status": "running",
@@ -1762,13 +2144,19 @@ async def _run(prompt: str) -> int:
                         + json.dumps(post_submit_mode_state, ensure_ascii=False)
                     )
         if action == "submit":
+            submitted_state = await _wait_for_submitted_conversation(
+                page,
+                post_submit,
+                timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_SUBMIT_STABILIZE_SECONDS") or "15"),
+            )
+            _write_json(request_dir / "submitted-state.json", submitted_state)
             submitted = {
                 "ok": True,
-                "status": "running" if post_submit.get("is_generating") else "submitted",
-                "url": post_submit.get("url"),
-                "conversation_id": post_submit.get("conversation_id"),
-                "message_count": post_submit.get("message_count"),
-                "assistant_count": post_submit.get("assistant_count"),
+                "status": "running" if submitted_state.get("is_generating") else "submitted",
+                "url": submitted_state.get("url"),
+                "conversation_id": submitted_state.get("conversation_id"),
+                "message_count": submitted_state.get("message_count"),
+                "assistant_count": submitted_state.get("assistant_count"),
                 "submitted_at": bjrt._now(),
             }
             _write_json(request_dir / "submitted-run.json", submitted)
@@ -1780,7 +2168,41 @@ async def _run(prompt: str) -> int:
             }
             logged_in_verified = True
             print(json.dumps(submitted, ensure_ascii=False))
-            return 0
+            if keep_session_alive and not final_error_text:
+                brtc.activate_reusable_session(
+                    control_ctx,
+                    cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+                    browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
+                    headless=headless,
+                    attached=reused_existing_session,
+                    details={
+                        "request_dir": str(request_dir),
+                        "staged_user_data_dir": str(runtime_staged_dir or ""),
+                        "cleanup_dir": str(runtime_cleanup_dir or ""),
+                    },
+                )
+            else:
+                brtc.clear_active_session(control_ctx)
+            brtc.finalize_runtime_contract(
+                control_ctx,
+                success=True,
+                error_text="",
+                page_state=final_page_state,
+                logged_in_state_verified=True,
+                details={
+                    "provider": "browser_agent_chatgpt",
+                    "action": action,
+                    "request_dir": str(request_dir),
+                    "forced_exit_after_submit": True,
+                },
+                requires_precise_page_control=False,
+            )
+            # Force the dedicated wrapper process to exit after submit so
+            # browser-use background activity cannot block actor handoff.
+            # browser-use can keep the event loop alive after submit artifacts
+            # are already persisted. Exit the dedicated wrapper process here so
+            # actor handoff can advance into collect immediately.
+            _force_wrapper_exit(0)
         final_data = await _wait_for_answer(page, baseline_assistant_count, timeout_s=timeout_s)
         final_page_state = {
             "url": final_data.get("url"),
@@ -1809,7 +2231,19 @@ async def _run(prompt: str) -> int:
 
         print(latest)
         logged_in_verified = True
-        return 0
+        _finalize_runtime_success(
+            control_ctx=control_ctx,
+            browser=browser,
+            headless=headless,
+            reused_existing_session=reused_existing_session,
+            runtime_staged_dir=runtime_staged_dir,
+            runtime_cleanup_dir=runtime_cleanup_dir,
+            request_dir=request_dir,
+            action=action,
+            final_page_state=final_page_state,
+            keep_session_alive=keep_session_alive,
+        )
+        _force_wrapper_exit(0)
     except Exception as exc:
         final_error_text = str(exc)
         raise
@@ -1828,7 +2262,11 @@ async def _run(prompt: str) -> int:
                         "cleanup_dir": str(runtime_cleanup_dir or ""),
                     },
                 )
-                await asyncio.wait_for(browser.stop(), timeout=20)
+                # Let the wrapper process exit without synchronously stopping
+                # browser-use here. We keep Chrome alive for pooled reuse, and
+                # browser.stop() has been observed to hang after submit/poll
+                # success, which prevents the actor from ever advancing into
+                # collect.
             else:
                 await asyncio.wait_for(browser.kill(), timeout=20)
                 brtc.clear_active_session(control_ctx)
@@ -1879,4 +2317,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    exit_code = main()
+    _force_wrapper_exit(exit_code)

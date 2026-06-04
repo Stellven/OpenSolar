@@ -6,13 +6,15 @@ Changing a binding changes the selected actor without editing the DAG node.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 HOME = Path.home()
-HARNESS_DIR = Path.home() / ".solar" / "harness"
-LOGICAL_OPS_PATH = HARNESS_DIR / "config" / "logical-operators.json"
-ACTORS_PATH = HARNESS_DIR / "config" / "agent-actors.json"
+
+
+def _default_harness_dir() -> Path:
+    return Path(os.environ.get("HARNESS_DIR", HOME / ".solar" / "harness")).expanduser()
 
 P0_LOGICAL_OPERATORS = frozenset([
     "DeepArchitect", "RootCauseDebugger", "ImplementationWorker", "PatchWorker",
@@ -30,8 +32,9 @@ class LogicalOperatorRouter:
         bindings_path: Optional[Path] = None,
         actors_path: Optional[Path] = None,
     ):
-        self.bindings_path = bindings_path or LOGICAL_OPS_PATH
-        self.actors_path = actors_path or ACTORS_PATH
+        harness_dir = _default_harness_dir()
+        self.bindings_path = bindings_path or (harness_dir / "config" / "logical-operators.json")
+        self.actors_path = actors_path or (harness_dir / "config" / "agent-actors.json")
         self._bindings: Dict[str, Dict[str, Any]] = {}
         self._actors: Dict[str, Dict[str, Any]] = {}
         self._load()

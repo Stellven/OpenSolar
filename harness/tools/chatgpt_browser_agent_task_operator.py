@@ -17,6 +17,7 @@ if str(ROOT / "lib") not in sys.path:
     sys.path.insert(0, str(ROOT / "lib"))
 
 import operator_flow_control as ofc  # noqa: E402
+from browser.profile_selection import pick_available_profile  # noqa: E402
 
 
 DEFAULT_OPERATOR_ID = "mini-chatgpt-deep-research"
@@ -98,18 +99,6 @@ def _pick_policy_key(request: dict[str, Any]) -> str:
     return "default"
 
 
-def _pick_profile(purpose: str, profiles: list[str], selection: str) -> str:
-    clean = [item for item in profiles if str(item).strip()]
-    if not clean:
-        return ""
-    if len(clean) == 1 or selection == "first":
-        return clean[0]
-    import hashlib
-
-    digest = hashlib.sha256(str(purpose or "").encode("utf-8")).hexdigest()
-    return clean[int(digest[:8], 16) % len(clean)]
-
-
 def _enforce_no_default_profile_for_scoped_chatgpt(policy_key: str, policy: dict[str, Any], resolved_profile: str, purpose: str) -> None:
     protected_keys = {"hf_paper_insight", "github_trend_report", "ai_influence_report"}
     allow_default = bool(policy.get("allow_default_profile") or policy.get("allow_default_chatgpt_profile"))
@@ -141,6 +130,7 @@ def apply_profile_policy(env: dict[str, str], request: dict[str, Any]) -> dict[s
     user_data_dir = str(policy.get("user_data_dir") or "").strip()
 
     explicit_profile = str(env.get("BROWSER_AGENT_PROFILE_DIRECTORY") or "").strip()
+    explicit_profile_id = str(env.get("BROWSER_AGENT_PROFILE_ID") or "").strip()
     explicit_account = str(
         env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
         or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
@@ -157,11 +147,23 @@ def apply_profile_policy(env: dict[str, str], request: dict[str, Any]) -> dict[s
             f"purpose={purpose or 'N/A'}:allowed={','.join(allowed_profiles)}:actual={explicit_profile}"
         )
 
-    resolved_profile = explicit_profile or _pick_profile(purpose, allowed_profiles, selection)
+    profile_pick = pick_available_profile(
+        service="chatgpt",
+        purpose=purpose,
+        allowed_profiles=allowed_profiles,
+        selection=selection,
+        account_identifier=expected_account or explicit_account,
+        explicit_profile=explicit_profile,
+        explicit_profile_id=explicit_profile_id,
+    )
+    resolved_profile = str(profile_pick.get("selected_profile_directory") or "")
+    resolved_profile_id = str(profile_pick.get("selected_profile_id") or "")
     resolved_account = explicit_account or expected_account
     _enforce_no_default_profile_for_scoped_chatgpt(key, policy, resolved_profile, purpose)
     if resolved_profile:
         env["BROWSER_AGENT_PROFILE_DIRECTORY"] = resolved_profile
+    if resolved_profile_id:
+        env["BROWSER_AGENT_PROFILE_ID"] = resolved_profile_id
     if resolved_account:
         env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = resolved_account
         env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = resolved_account
@@ -183,8 +185,12 @@ def apply_profile_policy(env: dict[str, str], request: dict[str, Any]) -> dict[s
         "policy_key": key,
         "policy_path": loaded.get("path") or "",
         "selected_profile_directory": resolved_profile,
+        "selected_profile_id": resolved_profile_id,
         "selected_account_email": resolved_account,
         "profile_strategy": profile_strategy,
+        "lease_blocked_profiles": list(profile_pick.get("lease_blocked_profiles") or []),
+        "lease_probe": list(profile_pick.get("lease_probe") or []),
+        "selection_reason": str(profile_pick.get("selection_reason") or ""),
         "user_data_dir_set": bool(env.get("BROWSER_AGENT_USER_DATA_DIR")),
         "headless_forced": False,
         "headed_recovery_allowed": headed_recovery_allowed,
@@ -192,7 +198,13 @@ def apply_profile_policy(env: dict[str, str], request: dict[str, Any]) -> dict[s
 
 
 def _operator_id(envelope: dict[str, Any]) -> str:
-    return str(envelope.get("operator_id") or "").strip() or DEFAULT_OPERATOR_ID
+    explicit = str(envelope.get("operator_id") or "").strip()
+    if explicit:
+        return explicit
+    logical_operator = str(envelope.get("logical_operator") or "").strip()
+    if logical_operator in {"DeepResearchChatGPT", "GPTRequirementWriter"}:
+        return "browser_agent_session"
+    return DEFAULT_OPERATOR_ID
 
 
 def _read_request_file(path_value: str) -> dict[str, Any]:
@@ -375,22 +387,28 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
         encoding="utf-8",
     )
     timeout = ofc.int_value(request.get("timeout_seconds") or os.environ.get("BROWSER_AGENT_CHATGPT_TIMEOUT"), 1800)
-    proc = subprocess.run(
-        cmd,
-        input=prompt,
-        text=True,
-        capture_output=True,
-        env=env,
-        timeout=timeout,
-    )
-    combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    stdout_path = task_dir / "chatgpt-browser-agent-stdout.txt"
+    stderr_path = task_dir / "chatgpt-browser-agent-stderr.txt"
+    with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
+        proc = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            env=env,
+            timeout=timeout,
+        )
+    stdout_text = stdout_path.read_text(encoding="utf-8")
+    stderr_text = stderr_path.read_text(encoding="utf-8")
+    combined = (stdout_text + "\n" + stderr_text).strip()
     (task_dir / "chatgpt-browser-agent-output.txt").write_text(
         combined + ("\n" if combined else ""),
         encoding="utf-8",
     )
     if proc.returncode != 0:
         raise RuntimeError(f"ChatGPT browser-agent failed rc={proc.returncode}: {combined[-1000:]}")
-    text = str(proc.stdout or "").strip()
+    text = str(stdout_text or "").strip()
     if not text:
         raise RuntimeError("ChatGPT browser-agent returned empty output")
     result = {
@@ -418,18 +436,19 @@ def main() -> int:
     is_followup_action = action in {"poll", "collect"}
     rate_control = _rate_control_settings(envelope)
     operator_id = str(rate_control["operator_id"])
+    skip_flow_control = is_followup_action or operator_id == "browser_agent_session"
     try:
-        if not is_followup_action:
+        if not skip_flow_control:
             ofc.ensure_operator_available(operator_id)
         run_request(request, task_dir=task_dir)
-        if not is_followup_action:
+        if not skip_flow_control:
             ofc.apply_success_cooldown(
                 operator_id,
                 success_cooldown_seconds=int(rate_control.get("success_cooldown_seconds") or 0),
             )
         return 0
     except Exception as exc:
-        if not is_followup_action:
+        if not skip_flow_control:
             ofc.apply_failure_flow_control(
                 task_dir,
                 operator_id=operator_id,

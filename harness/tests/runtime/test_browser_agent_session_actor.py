@@ -12,7 +12,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from actor_mailbox import ActorMailbox
 from actor_lease import LeaseBroker
-from browser_agent_session_actor import drain_once, ensure_supervisor_running, supervise_loop
+from browser.profile_lease import ProfileLease
+from browser_agent_session_actor import (
+    drain_once,
+    ensure_supervisor_running,
+    recover_stale_supervisor_runtime,
+    supervise_loop,
+)
 
 
 def test_browser_agent_session_actor_processes_deepresearch_task(monkeypatch):
@@ -239,3 +245,141 @@ def test_ensure_supervisor_running_reuses_alive_pid(monkeypatch):
         assert result["ok"] is True
         assert result["reused"] is True
         assert result["pid"] == 43210
+
+
+def test_ensure_supervisor_running_replaces_stale_pid(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "actors"
+        lease_dir = Path(td) / "run" / "actor-leases"
+        pid_path = Path(td) / "run" / "browser-agent-session-supervisor" / "browser_agent_session.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("43210", encoding="utf-8")
+        monkeypatch.setenv("HARNESS_DIR", str(Path(td)))
+        monkeypatch.setattr("browser_agent_session_actor._pid_alive", lambda pid: False)
+
+        class FakeProc:
+            pid = 54321
+
+        monkeypatch.setattr("browser_agent_session_actor.subprocess.Popen", lambda *args, **kwargs: FakeProc())
+        result = ensure_supervisor_running(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert result["ok"] is True
+        assert result["reused"] is False
+        assert result["pid"] == 54321
+        assert pid_path.read_text(encoding="utf-8").strip() == "54321"
+
+
+def test_recover_stale_supervisor_runtime_resets_lease_slot_and_inbox(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "actors"
+        lease_dir = Path(td) / "run" / "actor-leases"
+        mailbox = ActorMailbox("browser_agent_session", base)
+        mailbox.ensure_dirs()
+        monkeypatch.setenv("HARNESS_DIR", str(Path(td)))
+
+        pid_dir = Path(td) / "run" / "browser-agent-session-supervisor"
+        pid_dir.mkdir(parents=True, exist_ok=True)
+        (pid_dir / "browser_agent_session.pid").write_text("43210", encoding="utf-8")
+        (pid_dir / "browser_agent_session.stop").write_text("1\n", encoding="utf-8")
+
+        broker = LeaseBroker(lease_dir)
+        lease = broker.acquire(
+            actor_id="browser_agent_session",
+            task_id="task-stale",
+            sprint_id="s1",
+            node_id="n1",
+        )
+        assert lease is not None
+        broker.transition("browser_agent_session", "RUNNING")
+
+        mailbox.submit_task({"task_id": "task-stale", "logical_operator": "DeepResearchBrowser"})
+
+        request_dir = Path(td) / "request-dir"
+        request_dir.mkdir(parents=True, exist_ok=True)
+        (request_dir / "runtime.json").write_text(
+            json.dumps(
+                {
+                    "profile_id": "chatgpt/test-profile",
+                    "lease": {
+                        "profile_id": "chatgpt/test-profile",
+                        "task_id": "phase1-stage-stale",
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        profile_lease = ProfileLease(root=Path(td) / "profile-leases")
+        acquired = profile_lease.acquire(
+            "chatgpt/test-profile",
+            task_id="phase1-stage-stale",
+            runtime="browser_use",
+            mode="exclusive",
+        )
+        assert acquired["acquired"] is True
+        task_log_dir = base / "browser_agent_session" / "logs" / "task-stale"
+        task_log_dir.mkdir(parents=True, exist_ok=True)
+        (task_log_dir / "chatgpt-browser-agent-request.json").write_text(
+            json.dumps({"request_dir": str(request_dir)}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        pool_dir = Path(td) / "run" / "browser-agent-session-pool" / "chatgpt"
+        pool_dir.mkdir(parents=True, exist_ok=True)
+        (pool_dir / "slot-01.json").write_text(
+            json.dumps(
+                {
+                    "slot_id": "slot-01",
+                    "service": "chatgpt",
+                    "state": "running",
+                    "session_lineage": "browser-agent-session:chatgpt:slot-01",
+                    "assigned_task_id": "task-stale",
+                    "assigned_request_lineage": "lineage",
+                    "assigned_request_dir": str(task_log_dir),
+                    "leased_at": "2026-06-04T18:02:17Z",
+                    "last_used_at": "",
+                    "warm": True,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
+
+        active_dir = Path(td) / "run" / "browser-agent-session-active" / "chatgpt"
+        active_dir.mkdir(parents=True, exist_ok=True)
+        (active_dir / "task-stale.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "task-stale",
+                    "request": {"request_dir": str(request_dir)},
+                },
+                ensure_ascii=False,
+                indent=2,
+            ) + "\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr("browser_agent_session_actor._pid_alive", lambda pid: False)
+        monkeypatch.setenv("BROWSER_PROFILE_LEASE_DIR", str(Path(td) / "profile-leases"))
+        result = recover_stale_supervisor_runtime(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert result["ok"] is True
+        assert result["recovered"] is True
+        assert "task-stale" in result["recovered_task_ids"]
+        recovered_lease = broker.get("browser_agent_session")
+        assert recovered_lease is None or recovered_lease.state == "READY"
+        slot = json.loads((pool_dir / "slot-01.json").read_text(encoding="utf-8"))
+        assert slot["state"] == "idle"
+        assert slot["assigned_task_id"] == ""
+        assert mailbox.read_inbox() == []
+        results = mailbox.read_results("task-stale")
+        assert any(item["error"] == "stale_supervisor_runtime_recovered" for item in results)
+        assert profile_lease.peek("chatgpt/test-profile") is None

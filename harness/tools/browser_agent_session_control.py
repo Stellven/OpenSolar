@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 import uuid
@@ -210,9 +211,12 @@ def _supervisor_stop_cmd(args: argparse.Namespace) -> int:
     pid = int(payload.get("pid") or 0)
     if pid > 0:
         try:
-            os.kill(pid, 15)
+            os.killpg(pid, signal.SIGTERM)
         except OSError:
-            pass
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
     _json_dump({"ok": True, "actor_id": actor_id, "stop_flag": str(path), "pid": pid})
     return 0
 

@@ -8,8 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "lib"))
 
 import chatgpt_browser_agent_task_operator as cto  # noqa: E402
+from browser.profile_lease import ProfileLease  # noqa: E402
 
 
 def test_build_request_reads_prompt_file(tmp_path):
@@ -29,14 +31,13 @@ def test_build_request_reads_prompt_file(tmp_path):
 def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
     class Result:
         returncode = 0
-        stdout = "final answer"
-        stderr = ""
 
     monkeypatch.setattr(cto, "_wrapper_cmd", lambda: ["fake-wrapper"])
     seen_env = {}
 
     def _fake_run(*args, **kwargs):
         seen_env.update(kwargs.get("env") or {})
+        kwargs["stdout"].write("final answer")
         return Result()
 
     monkeypatch.setattr(cto.subprocess, "run", _fake_run)
@@ -48,20 +49,20 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
     assert seen_env["BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE"] == "true"
     assert (tmp_path / "chatgpt-browser-agent-request.json").exists()
     assert (tmp_path / "chatgpt-browser-agent-result.json").exists()
+    assert (tmp_path / "chatgpt-browser-agent-stdout.txt").read_text(encoding="utf-8") == "final answer"
     assert "ChatGPT Browser Agent Result" in capsys.readouterr().out
 
 
 def test_run_request_allows_collect_without_prompt_and_sets_conversation_url(monkeypatch, tmp_path):
     class Result:
         returncode = 0
-        stdout = "final answer"
-        stderr = ""
 
     monkeypatch.setattr(cto, "_wrapper_cmd", lambda: ["fake-wrapper"])
     seen_env = {}
 
     def _fake_run(*args, **kwargs):
         seen_env.update(kwargs.get("env") or {})
+        kwargs["stdout"].write("final answer")
         return Result()
 
     monkeypatch.setattr(cto.subprocess, "run", _fake_run)
@@ -159,3 +160,73 @@ def test_main_collect_bypasses_flow_control(monkeypatch, tmp_path):
     assert ensure_calls == []
     assert failure_calls == []
     assert success_calls == []
+
+
+def test_main_browser_agent_session_bypasses_flow_control(monkeypatch, tmp_path):
+    envelope = {
+        "task_id": "T4",
+        "logical_operator": "DeepResearchChatGPT",
+        "chatgpt_browser_agent_request": {
+            "action": "submit",
+            "prompt": "hello",
+        },
+    }
+    envelope_path = tmp_path / "envelope.json"
+    envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+    monkeypatch.setenv("SOLAR_OPERATOR_ENVELOPE_JSON", str(envelope_path))
+    monkeypatch.setenv("TASK_DIR", str(tmp_path / "task"))
+    ensure_calls: list[str] = []
+    failure_calls: list[str] = []
+    success_calls: list[str] = []
+    monkeypatch.setattr(cto.ofc, "ensure_operator_available", lambda operator_id: ensure_calls.append(operator_id))
+    monkeypatch.setattr(cto.ofc, "apply_failure_flow_control", lambda *args, **kwargs: failure_calls.append("called"))
+    monkeypatch.setattr(cto.ofc, "apply_success_cooldown", lambda *args, **kwargs: success_calls.append("called"))
+    monkeypatch.setattr(cto, "run_request", lambda request, task_dir: {"ok": True})
+    assert cto.main() == 0
+    assert ensure_calls == []
+    assert failure_calls == []
+    assert success_calls == []
+
+
+def test_operator_id_defaults_to_browser_agent_session_for_session_control_chatgpt():
+    assert cto._operator_id({"logical_operator": "DeepResearchChatGPT"}) == "browser_agent_session"
+    assert cto._operator_id({"logical_operator": "GPTRequirementWriter"}) == "browser_agent_session"
+    assert cto._operator_id({}) == "mini-chatgpt-deep-research"
+
+
+def test_apply_profile_policy_skips_leased_primary_profile(monkeypatch, tmp_path):
+    lease_root = tmp_path / "leases"
+    lease = ProfileLease(root=lease_root)
+    acquired = lease.acquire(
+        "chatgpt/browser-agent",
+        task_id="occupied-task",
+        runtime="browser_use",
+        mode="exclusive",
+    )
+    assert acquired["acquired"] is True
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "browser-agent@example.com",
+                        "allowed_profiles": ["Profile 1", "Profile 2"],
+                        "selection": "first",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED", "0")
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE", str(policy))
+    monkeypatch.setenv("BROWSER_PROFILE_LEASE_DIR", str(lease_root))
+    env: dict[str, str] = {}
+    meta = cto.apply_profile_policy(env, {"purpose": "github-trend-report-demo"})
+    assert env["BROWSER_AGENT_PROFILE_DIRECTORY"] == "Profile 2"
+    assert env["BROWSER_AGENT_PROFILE_ID"] == "chatgpt/browser-agent-profile-2"
+    assert meta["lease_blocked_profiles"] == ["Profile 1"]
+    assert meta["selected_profile_directory"] == "Profile 2"

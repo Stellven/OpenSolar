@@ -13,7 +13,6 @@ commands are read from environment variables only.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import signal
@@ -34,8 +33,11 @@ DEFAULT_LOCAL_PROFILE_POLICY = Path.home() / ".solar" / "harness" / "browser-age
 
 if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
+if str(ROOT / "lib") not in sys.path:
+    sys.path.insert(0, str(ROOT / "lib"))
 
 from browser_agent_session_control import collect_request, submit_request  # type: ignore  # noqa: E402
+from browser.profile_selection import pick_available_profile  # type: ignore  # noqa: E402
 
 
 def infer_kind(purpose: str, explicit: str = "") -> str:
@@ -131,19 +133,6 @@ def _merge_policy(base: dict[str, Any], override: dict[str, Any]) -> dict[str, A
     return merged
 
 
-def _pick_profile_from_pool(purpose: str, allowed_profiles: list[str], selection: str) -> str:
-    clean = [item for item in allowed_profiles if str(item).strip()]
-    if not clean:
-        return ""
-    if len(clean) == 1:
-        return clean[0]
-    if selection == "first":
-        return clean[0]
-    digest = hashlib.sha256(str(purpose or "").encode("utf-8")).hexdigest()
-    index = int(digest[:8], 16) % len(clean)
-    return clean[index]
-
-
 def _enforce_no_default_profile_for_scoped_chatgpt(policy_key: str, policy: dict[str, Any], resolved_profile: str, purpose: str) -> None:
     protected_keys = {"hf_paper_insight", "github_trend_report", "ai_influence_report"}
     allow_default = bool(policy.get("allow_default_profile") or policy.get("allow_default_chatgpt_profile"))
@@ -183,6 +172,7 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
     profile_strategy = str(policy.get("profile_strategy") or "persistent").strip().lower()
     user_data_dir = str(policy.get("user_data_dir") or "").strip()
     explicit_profile = str(env.get("BROWSER_AGENT_PROFILE_DIRECTORY") or "").strip()
+    explicit_profile_id = str(env.get("BROWSER_AGENT_PROFILE_ID") or "").strip()
     explicit_account = str(
         env.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
         or env.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
@@ -200,7 +190,17 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
             f"purpose={purpose or 'N/A'}:allowed={','.join(allowed_profiles)}:actual={explicit_profile}"
         )
 
-    resolved_profile = explicit_profile or _pick_profile_from_pool(purpose, allowed_profiles, selection)
+    profile_pick = pick_available_profile(
+        service="chatgpt",
+        purpose=purpose,
+        allowed_profiles=allowed_profiles,
+        selection=selection,
+        account_identifier=expected_account_email or explicit_account,
+        explicit_profile=explicit_profile,
+        explicit_profile_id=explicit_profile_id,
+    )
+    resolved_profile = str(profile_pick.get("selected_profile_directory") or "")
+    resolved_profile_id = str(profile_pick.get("selected_profile_id") or "")
     resolved_account = explicit_account or expected_account_email
     if allowed_profiles and not resolved_profile:
         raise RuntimeError(
@@ -216,6 +216,8 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
 
     if resolved_profile:
         env["BROWSER_AGENT_PROFILE_DIRECTORY"] = resolved_profile
+    if resolved_profile_id:
+        env["BROWSER_AGENT_PROFILE_ID"] = resolved_profile_id
     if resolved_account:
         env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = resolved_account
         env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = resolved_account
@@ -236,8 +238,12 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
         "policy_key": key,
         "policy_path": str(loaded.get("path") or ""),
         "selected_profile_directory": resolved_profile,
+        "selected_profile_id": resolved_profile_id,
         "selected_account_email": resolved_account,
         "allowed_profiles": allowed_profiles,
+        "lease_blocked_profiles": list(profile_pick.get("lease_blocked_profiles") or []),
+        "lease_probe": list(profile_pick.get("lease_probe") or []),
+        "selection_reason": str(profile_pick.get("selection_reason") or ""),
         "selection": selection,
         "profile_strategy": profile_strategy,
         "user_data_dir_set": bool(env.get("BROWSER_AGENT_USER_DATA_DIR")),
@@ -444,8 +450,10 @@ def _run_via_session_control(
     if not task_id:
         task_id = f"chatgpt-report-{uuid.uuid4().hex[:12]}"
     if action == "submit":
+        submit_request_payload = dict(request)
+        submit_request_payload["action"] = "submit"
         submit_payload = submit_request(
-            request,
+            submit_request_payload,
             logical_operator="DeepResearchChatGPT",
             objective=str(env.get("BROWSER_AGENT_PURPOSE") or prompt[:120] or "chatgpt-report"),
             task_id=task_id,
@@ -463,8 +471,10 @@ def _run_via_session_control(
         output = _extract_text_from_status_payload(status_payload)
         return rc, output or json.dumps({"status": status_payload.get("status"), "task_id": task_id}, ensure_ascii=False)
     if action == "run":
+        submit_request_payload = dict(request)
+        submit_request_payload["action"] = "submit"
         submit_payload = submit_request(
-            request,
+            submit_request_payload,
             logical_operator="DeepResearchChatGPT",
             objective=str(env.get("BROWSER_AGENT_PURPOSE") or prompt[:120] or "chatgpt-report"),
             task_id=task_id,

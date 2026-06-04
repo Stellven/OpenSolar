@@ -1,18 +1,31 @@
+import importlib.util
 import json
-import tempfile
-import pytest
-from pathlib import Path
 import sys
+import tempfile
+from pathlib import Path
 
-# Insert lib path so we can import actor_runtime
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "lib"))
+LIB = ROOT / "lib"
+sys.path.insert(0, str(LIB))
 
-from actor_runtime import ActorRuntime, SubmitResult
-from verification_gate import VerificationGate
-from actor_lease import LeaseBroker
-from evidence_ledger import EvidenceLedger
-from context_store import ContextStore
+
+def _load_local_module(name: str):
+    module_path = LIB / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"test_runtime_{name}", module_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+actor_runtime = _load_local_module("actor_runtime")
+verification_gate = _load_local_module("verification_gate")
+
+ActorRuntime = actor_runtime.ActorRuntime
+SubmitResult = actor_runtime.SubmitResult
+VerificationGate = verification_gate.VerificationGate
 
 def _make_mock_configs(tmpdir):
     # Minimal logical operators JSON
@@ -23,6 +36,13 @@ def _make_mock_configs(tmpdir):
                 "candidates": [
                     {"actor_id": "browser_agent_session", "priority": 1, "condition": "always"},
                     {"actor_id": "op.browser.webwright.playwright.01", "priority": 2, "condition": "always"}
+                ]
+            },
+            "DeepResearchChatGPT": {
+                "operator_type": "DeepResearchChatGPT",
+                "candidates": [
+                    {"actor_id": "browser_agent_session", "priority": 1, "condition": "always"},
+                    {"actor_id": "mini-chatgpt-deep-research", "priority": 2, "condition": "always"}
                 ]
             },
             "WebwrightPlaywright": {
@@ -70,6 +90,15 @@ def _make_mock_configs(tmpdir):
                 "aliases": ["browser_agent_session"],
                 "role": "knowledge-extractor",
                 "capability_profile": {"browser_use": 5},
+                "policy": {}
+            },
+            "mini-chatgpt-deep-research": {
+                "actor_id": "mini-chatgpt-deep-research",
+                "host_id": "mini",
+                "operator_alias": "mini-chatgpt-deep-research",
+                "aliases": ["mini-chatgpt-deep-research"],
+                "role": "knowledge-extractor",
+                "capability_profile": {"browser_use": 4},
                 "policy": {}
             }
         }
@@ -150,6 +179,11 @@ def test_custom_routing():
         assert res6.success is True
         assert res6.lease.actor_id == "op.browser.browser_use_mcp.quick.01"
 
+        env7 = {"objective": "ChatGPT browser report"}
+        res7 = runtime.submit(env7, logical_operator="DeepResearchChatGPT")
+        assert res7.success is True
+        assert res7.lease.actor_id == "browser_agent_session"
+
 
 def test_browser_agent_session_submit_ensures_supervisor(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
@@ -173,6 +207,30 @@ def test_browser_agent_session_submit_ensures_supervisor(monkeypatch):
         res = runtime.submit({"objective": "Read browser page"}, logical_operator="DeepResearchBrowser")
         assert res.success is True
         assert res.lease.actor_id == "browser_agent_session"
+        assert kicked == [1]
+
+
+def test_browser_agent_session_submit_recovers_stale_runtime_before_lease(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        bp, ap = _make_mock_configs(td)
+        runtime = ActorRuntime(
+            harness_dir=Path(td),
+            lease_broker=DummyLeaseBroker(),
+            mailbox_base=Path(td),
+            evidence_ledger=DummyEvidenceLedger(),
+            context_store=DummyContextStore(),
+            profiles_path=ap,
+            bindings_path=bp,
+        )
+        recovered: list[int] = []
+        kicked: list[int] = []
+
+        monkeypatch.setattr(runtime, "_recover_browser_agent_session_stale_runtime", lambda: recovered.append(1) or {"ok": True})
+        monkeypatch.setattr(runtime, "_ensure_browser_agent_session_supervisor", lambda: kicked.append(1) or 12345)
+        res = runtime.submit({"objective": "Read browser page"}, logical_operator="DeepResearchBrowser")
+        assert res.success is True
+        assert res.lease.actor_id == "browser_agent_session"
+        assert recovered == [1]
         assert kicked == [1]
 
 

@@ -14,9 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "lib") not in sys.path:
     sys.path.insert(0, str(ROOT / "lib"))
 
-from actor_lease import FINALIZING, READY, RUNNING, LeaseBroker
+from actor_lease import FINALIZING, LEASED, READY, RUNNING, LeaseBroker
 from actor_mailbox import ActorMailbox
 from browser_agent_session_pool import BrowserAgentSessionPool
+from browser.profile_lease import ProfileLease
 
 
 DEFAULT_ACTOR_ID = "browser_agent_session"
@@ -77,9 +78,26 @@ def _pid_alive(pid: int) -> bool:
         return False
     try:
         os.kill(pid, 0)
-        return True
     except OSError:
         return False
+    try:
+        proc = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "stat=", "-o", "command="],
+            text=True,
+            capture_output=True,
+            timeout=2,
+        )
+        line = str(proc.stdout or "").strip()
+        if not line:
+            return False
+        parts = line.split(None, 1)
+        stat = parts[0] if parts else ""
+        command = parts[1] if len(parts) > 1 else ""
+        if "Z" in stat or "<defunct>" in command:
+            return False
+    except Exception:
+        pass
+    return True
 
 
 def _read_supervisor_pid(actor_id: str) -> int | None:
@@ -109,6 +127,8 @@ def ensure_supervisor_running(
     existing_pid = _read_supervisor_pid(actor_id)
     if existing_pid and _pid_alive(existing_pid):
         return {"ok": True, "pid": existing_pid, "reused": True}
+    if existing_pid:
+        _supervisor_pid_path(actor_id).unlink(missing_ok=True)
     cmd = [
         sys.executable,
         str(Path(__file__).resolve()),
@@ -219,6 +239,146 @@ def _iter_active_runs() -> list[dict[str, Any]]:
         except Exception:
             continue
     return items
+
+
+def _force_lease_ready(broker: LeaseBroker, actor_id: str) -> str:
+    lease = broker.get(actor_id)
+    if not lease:
+        return ""
+    task_id = str(lease.task_id or "")
+    state = str(lease.state or "")
+    if state == READY:
+        return task_id
+    if state == LEASED:
+        broker.transition(actor_id, READY)
+        return task_id
+    if state == RUNNING:
+        broker.transition(actor_id, FINALIZING)
+        broker.transition(actor_id, READY)
+        return task_id
+    if state == FINALIZING:
+        broker.transition(actor_id, READY)
+        return task_id
+    if state in {"STALE", "CRASHED", "DRAINING", "QUOTA_BLOCKED", "AUTH_BLOCKED", "POLICY_BLOCKED", "HUMAN_REQUIRED", "DISABLED"}:
+        broker.transition(actor_id, READY)
+        return task_id
+    return task_id
+
+
+def _release_profile_lease_from_request_dir(request_dir: str | Path | None) -> dict[str, Any] | None:
+    if not request_dir:
+        return None
+    runtime_path = Path(request_dir).expanduser() / "runtime.json"
+    if not runtime_path.exists():
+        return None
+    try:
+        runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(runtime, dict):
+        return None
+    lease = runtime.get("lease") if isinstance(runtime.get("lease"), dict) else {}
+    profile_id = str(runtime.get("profile_id") or lease.get("profile_id") or "").strip()
+    task_id = str(lease.get("task_id") or "").strip()
+    if not profile_id or not task_id:
+        return None
+    return ProfileLease().release(profile_id, task_id)
+
+
+def _release_profile_lease_from_task_dir(task_dir: str | Path | None) -> dict[str, Any] | None:
+    if not task_dir:
+        return None
+    base = Path(task_dir).expanduser()
+    request_path = base / "chatgpt-browser-agent-request.json"
+    if not request_path.exists():
+        return None
+    try:
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(request, dict):
+        return None
+    return _release_profile_lease_from_request_dir(request.get("request_dir"))
+
+
+def recover_stale_supervisor_runtime(
+    *,
+    actor_id: str,
+    mailbox_base: Path,
+    lease_dir: Path,
+) -> dict[str, Any]:
+    pid = _read_supervisor_pid(actor_id)
+    if pid and _pid_alive(pid):
+        return {"ok": True, "recovered": False, "reason": "supervisor_alive", "pid": pid}
+
+    mailbox = ActorMailbox(actor_id, mailbox_base)
+    mailbox.ensure_dirs()
+    broker = LeaseBroker(lease_dir)
+    pool = BrowserAgentSessionPool(_current_harness_dir() / "run" / "browser-agent-session-pool", pool_size=_pool_size())
+    recovered_task_ids: set[str] = set()
+
+    _supervisor_pid_path(actor_id).unlink(missing_ok=True)
+    _supervisor_stop_flag(actor_id).unlink(missing_ok=True)
+    _supervisor_drain_flag(actor_id).unlink(missing_ok=True)
+
+    lease_task_id = _force_lease_ready(broker, actor_id)
+    if lease_task_id:
+        recovered_task_ids.add(lease_task_id)
+
+    for manifest in _iter_active_runs():
+        task_id = str(manifest.get("task_id") or "").strip()
+        request = manifest.get("request") if isinstance(manifest.get("request"), dict) else {}
+        _release_profile_lease_from_request_dir(request.get("request_dir"))
+        if task_id:
+            recovered_task_ids.add(task_id)
+            _delete_active_run(task_id)
+
+    for slot in pool.list_slots():
+        task_id = str(slot.get("assigned_task_id") or "").strip()
+        _release_profile_lease_from_task_dir(slot.get("assigned_request_dir"))
+        if task_id:
+            recovered_task_ids.add(task_id)
+        if str(slot.get("state") or "") != "idle" or task_id:
+            pool.release_slot(str(slot.get("slot_id") or ""), keep_warm=False)
+
+    for task_id in sorted(recovered_task_ids):
+        for task_file in mailbox.inbox.glob(f"task-{task_id}-*.json"):
+            task_file.unlink(missing_ok=True)
+        mailbox.write_result(
+            task_id,
+            {
+                "task_id": task_id,
+                "actor_id": actor_id,
+                "status": "failed",
+                "returncode": 1,
+                "error": "stale_supervisor_runtime_recovered",
+                "completed_at": _now_iso(),
+            },
+        )
+
+    mailbox.write_heartbeat(
+        "idle",
+        {
+            "reason": "stale_supervisor_runtime_recovered",
+            "recovered_task_count": len(recovered_task_ids),
+        },
+    )
+    _write_supervisor_state(
+        actor_id,
+        {
+            "actor_id": actor_id,
+            "pid": None,
+            "status": "recovered_stale_runtime",
+            "recovered_at": _now_iso(),
+            "recovered_task_count": len(recovered_task_ids),
+        },
+    )
+    return {
+        "ok": True,
+        "recovered": True,
+        "pid": pid,
+        "recovered_task_ids": sorted(recovered_task_ids),
+    }
 
 
 def _request_field(logical_operator: str) -> str:

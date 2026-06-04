@@ -243,6 +243,17 @@ class ProfileLease:
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
             lock_fh.close()
 
+    def peek(self, profile_id: str) -> dict[str, Any] | None:
+        """Return the current active lease record without mutating ownership."""
+        profile = _normalise_profile_id(profile_id)
+        current = self._read(profile)
+        if current is None:
+            return None
+        if current.is_expired:
+            self.expire(profile)
+            return None
+        return current.to_dict()
+
     def expire(self, profile_id: str | None = None) -> int:
         """Expire one lease or all expired leases.
 

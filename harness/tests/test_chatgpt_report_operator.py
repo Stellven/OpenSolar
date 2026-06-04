@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "chatgpt_report_operator.py"
 sys.path.append(str(ROOT / "tools"))
 import chatgpt_report_operator as cro  # noqa: E402
+from browser.profile_lease import ProfileLease  # noqa: E402
 
 
 def run_operator(
@@ -166,6 +167,51 @@ def test_local_profile_policy_can_fill_account_and_choose_from_pool(tmp_path):
     assert meta["profile_policy"]["policy_key"] == "hf_paper_insight"
     assert meta["profile_policy"]["selected_profile_directory"] == "Profile 1"
     assert meta["profile_policy"]["selected_account_email"] == "browser-agent@example.com"
+
+
+def test_local_profile_policy_skips_leased_profile_and_uses_backup(tmp_path):
+    lease_root = tmp_path / "leases"
+    lease = ProfileLease(root=lease_root)
+    acquired = lease.acquire(
+        "chatgpt/browser-agent",
+        task_id="held-by-other-task",
+        runtime="browser_use",
+        mode="exclusive",
+    )
+    assert acquired["acquired"] is True
+    policy = tmp_path / "browser-agent-chatgpt-local.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "policies": {
+                    "default": {
+                        "expected_account_email": "browser-agent@example.com",
+                        "allowed_profiles": ["Profile 1", "Profile 2"],
+                        "selection": "first",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    proc = run_operator(
+        tmp_path,
+        purpose="github-trend-report-demo",
+        env_extra={
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "0",
+            "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(policy),
+            "BROWSER_PROFILE_LEASE_DIR": str(lease_root),
+        },
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["profile_directory"] == "Profile 2"
+    meta = json.loads((tmp_path / "request" / "report-operator-request.json").read_text())
+    assert meta["profile_policy"]["selected_profile_directory"] == "Profile 2"
+    assert meta["profile_policy"]["selected_profile_id"] == "chatgpt/browser-agent-profile-2"
+    assert meta["profile_policy"]["lease_blocked_profiles"] == ["Profile 1"]
+    assert meta["profile_policy"]["selection_reason"] == "lease_available"
 
 
 def test_protected_profile_policy_keeps_headless_default(tmp_path):
@@ -429,4 +475,5 @@ def test_report_operator_defaults_to_session_control(monkeypatch, tmp_path, caps
     assert cro.main() == 0
     assert submit_calls
     assert submit_calls[0][1] == "DeepResearchChatGPT"
+    assert submit_calls[0][0]["action"] == "submit"
     assert capsys.readouterr().out.strip() == "session control output"

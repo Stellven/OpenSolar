@@ -15,6 +15,8 @@ def _load_namespace() -> dict:
     browser_use_browser = types.ModuleType("browser_use.browser")
     browser_use_browser_profile = types.ModuleType("browser_use.browser.profile")
     browser_use_browser_session = types.ModuleType("browser_use.browser.session")
+    browser_use_browser_watchdogs = types.ModuleType("browser_use.browser.watchdogs")
+    browser_use_browser_watchdogs_local = types.ModuleType("browser_use.browser.watchdogs.local_browser_watchdog")
 
     class _DummyProfile:
         pass
@@ -22,8 +24,15 @@ def _load_namespace() -> dict:
     class _DummySession:
         pass
 
+    class _DummyLocalBrowserWatchdog:
+        _wait_for_cdp_url = None
+
+        async def on_BrowserStopEvent(self, event):  # pragma: no cover - stub only
+            return None
+
     browser_use_browser_profile.BrowserProfile = _DummyProfile
     browser_use_browser_session.BrowserSession = _DummySession
+    browser_use_browser_watchdogs_local.LocalBrowserWatchdog = _DummyLocalBrowserWatchdog
 
     prev_modules = {
         name: sys.modules.get(name)
@@ -32,12 +41,16 @@ def _load_namespace() -> dict:
             "browser_use.browser",
             "browser_use.browser.profile",
             "browser_use.browser.session",
+            "browser_use.browser.watchdogs",
+            "browser_use.browser.watchdogs.local_browser_watchdog",
         )
     }
     sys.modules["browser_use"] = browser_use
     sys.modules["browser_use.browser"] = browser_use_browser
     sys.modules["browser_use.browser.profile"] = browser_use_browser_profile
     sys.modules["browser_use.browser.session"] = browser_use_browser_session
+    sys.modules["browser_use.browser.watchdogs"] = browser_use_browser_watchdogs
+    sys.modules["browser_use.browser.watchdogs.local_browser_watchdog"] = browser_use_browser_watchdogs_local
     try:
         ns: dict = {"__file__": str(SCRIPT), "__name__": "browser_agent_chatgpt_wrapper_test"}
         code = compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec")
@@ -178,6 +191,74 @@ def test_browser_user_agent_defaults_to_non_headless_chrome(monkeypatch):
     assert "HeadlessChrome/" not in ua
 
 
+def test_is_cdp_connect_failure_matches_known_browser_use_errors():
+    ns = _load_namespace()
+    assert ns["_is_cdp_connect_failure"](RuntimeError("Failed to establish CDP connection to browser: [Errno 61] Connect call failed")) is True
+    assert ns["_is_cdp_connect_failure"](RuntimeError("Root CDP client not initialized")) is True
+    assert ns["_is_cdp_connect_failure"](RuntimeError("some unrelated failure")) is False
+
+
+def test_conversation_target_id_extracts_chatgpt_conversation():
+    ns = _load_namespace()
+    assert ns["_conversation_target_id"]("https://chatgpt.com/c/abc-123") == "abc-123"
+    assert ns["_conversation_target_id"]("https://chatgpt.com/") == ""
+
+
+def test_conversation_state_ready_requires_matching_conversation_and_messages():
+    ns = _load_namespace()
+    assert ns["_conversation_state_ready"](
+        {"conversation_id": "abc", "message_count": 1},
+        expected_conversation_id="abc",
+    ) is True
+    assert ns["_conversation_state_ready"](
+        {"conversation_id": "abc", "message_count": 0, "latest_assistant_text": "", "is_generating": False},
+        expected_conversation_id="abc",
+    ) is False
+    assert ns["_conversation_state_ready"](
+        {"conversation_id": "other", "message_count": 3},
+        expected_conversation_id="abc",
+    ) is False
+    assert ns["_conversation_state_ready"](
+        {
+            "conversation_id": "abc",
+            "message_count": 0,
+            "assistant_count": 0,
+            "latest_assistant_text": "",
+            "is_generating": True,
+        },
+        expected_conversation_id="abc",
+    ) is False
+    assert ns["_conversation_state_ready"](
+        {
+            "conversation_id": "abc",
+            "message_count": 1,
+            "assistant_count": 0,
+            "latest_assistant_text": "",
+            "is_generating": True,
+        },
+        expected_conversation_id="abc",
+    ) is True
+
+
+def test_chatgpt_wrapper_reuses_existing_conversation_page_for_collect():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "async def _find_existing_conversation_page(browser, *, target_url: str):" in source
+    assert "page = await _find_existing_conversation_page(browser, target_url=target_url)" in source
+    assert "if str((current_state or {}).get(\"conversation_id\") or \"\").strip() == collect_target_id:" in source
+    assert "should_navigate = False" in source
+    assert "action == \"collect\"" in source
+    assert "and not final_data.get(\"is_generating\")" in source
+    assert "and int(final_data.get(\"assistant_count\") or 0) > 0" in source
+    assert "final_data = await _wait_for_answer(" in source
+
+
+def test_chatgpt_wrapper_installs_browser_use_cdp_patch():
+    ns = _load_namespace()
+    assert ns["_BROWSER_USE_CDP_PATCHED"] is True
+    assert ns["LocalBrowserWatchdog"]._wait_for_cdp_url is ns["_patched_wait_for_cdp_url"]
+    assert ns["LocalBrowserWatchdog"].on_BrowserStopEvent is ns["on_BrowserStopEvent"]
+
+
 def test_open_project_js_targets_sidebar_project_group():
     ns = _load_namespace()
     script = ns["OPEN_PROJECT_JS"]
@@ -191,10 +272,33 @@ def test_chatgpt_wrapper_defaults_to_headless_true():
     source = SCRIPT.read_text(encoding="utf-8")
     assert '_env_flag("BROWSER_AGENT_HEADLESS", default=True)' in source
     assert "await asyncio.wait_for(browser.kill(), timeout=20)" in source
+    assert "def _force_wrapper_exit(code: int) -> NoReturn:" in source
+    assert "_force_wrapper_exit(exit_code)" in source
 
 
 def test_chatgpt_wrapper_reads_and_writes_active_session_broker():
     source = SCRIPT.read_text(encoding="utf-8")
     assert "brtc.read_active_session(control_ctx, require_lineage_match=False)" in source
     assert "brtc.activate_reusable_session(" in source
-    assert "await asyncio.wait_for(browser.stop(), timeout=20)" in source
+    assert "if not _is_cdp_connect_failure(exc):" in source
+    assert "LocalBrowserWatchdog._wait_for_cdp_url = staticmethod(_patched_wait_for_cdp_url)" in source
+    assert "LocalBrowserWatchdog.on_BrowserStopEvent = on_BrowserStopEvent" in source
+    assert "await _wait_for_cdp_websocket_ready(ws_url" in source
+    assert "browser.stop() has been observed to hang after submit/poll" in source
+    assert "await asyncio.wait_for(browser.stop(), timeout=20)" not in source
+    assert "Force the dedicated wrapper process to exit" in source
+    assert "\"forced_exit_after_submit\": True" in source
+    assert "_force_wrapper_exit(0)" in source
+    assert "keep_alive=keep_session_alive" in source
+    assert "if action in {\"poll\", \"collect\"} and _is_generic_chatgpt_root(target_url):" in source
+    assert "should_navigate = False" in source
+    assert "submitted_state = await _wait_for_submitted_conversation(" in source
+    assert "\"BROWSER_AGENT_CHATGPT_SUBMIT_STABILIZE_SECONDS\"" in source
+    assert "final_data = await _wait_for_conversation_ready(" in source
+    assert "await page.reload()" in source
+    assert "collect-empty-conversation-page.json" not in source
+    assert "f\"{action}-empty-conversation-page.json\"" in source
+    assert "elif action in {\"poll\", \"collect\"} and collect_target_id:" in source
+    assert "SUBMIT_FALLBACK_JS" in source
+    assert "\"mode\": \"dom_fallback_after_native_setter\"" in source
+    assert "\"mode\": \"clipboard_dom_submit_retry\"" in source
