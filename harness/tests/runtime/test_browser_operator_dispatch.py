@@ -21,8 +21,8 @@ def _make_mock_configs(tmpdir):
             "DeepResearchBrowser": {
                 "operator_type": "DeepResearchBrowser",
                 "candidates": [
-                    {"actor_id": "op.browser.webwright.playwright.01", "priority": 1, "condition": "always"},
-                    {"actor_id": "browser_agent_session", "priority": 2, "condition": "always"}
+                    {"actor_id": "browser_agent_session", "priority": 1, "condition": "always"},
+                    {"actor_id": "op.browser.webwright.playwright.01", "priority": 2, "condition": "always"}
                 ]
             },
             "WebwrightPlaywright": {
@@ -133,11 +133,22 @@ def test_custom_routing():
         assert res3.success is True
         assert res3.lease.actor_id == "op.browser.browser_use_mcp.quick.01"
 
-        # 4. Fallback Default to Webwright for browser ops if no specific flag is set
+        # 4. Default DeepResearchBrowser should respect logical binding first
         env4 = {"objective": "Read news article"}
         res4 = runtime.submit(env4, logical_operator="DeepResearchBrowser")
         assert res4.success is True
-        assert res4.lease.actor_id == "op.browser.webwright.playwright.01"
+        assert res4.lease.actor_id == "browser_agent_session"
+
+        # 5. Explicit browser logical operators still resolve through bindings
+        env5 = {"objective": "Long-form replayable browser task"}
+        res5 = runtime.submit(env5, logical_operator="WebwrightPlaywright")
+        assert res5.success is True
+        assert res5.lease.actor_id == "op.browser.webwright.playwright.01"
+
+        env6 = {"objective": "Quick localhost extract"}
+        res6 = runtime.submit(env6, logical_operator="BrowserUseMcp")
+        assert res6.success is True
+        assert res6.lease.actor_id == "op.browser.browser_use_mcp.quick.01"
 
 
 def test_security_gates():

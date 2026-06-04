@@ -170,23 +170,17 @@ class ActorRuntime:
 
         # Resolve actor
         if not actor_id and logical_operator:
-            is_browser_op = (
-                logical_operator in ("DeepResearchBrowser", "WebwrightPlaywright", "BrowserUseMcp") or
+            browser_override_actor_id: str | None = None
+            if (
                 task_envelope.get("requires_replayable_evidence") or
-                task_envelope.get("is_long_horizon_web_task") or
-                task_envelope.get("is_localhost_smoke_or_quick_extract")
-            )
-            if is_browser_op:
-                if (
-                    task_envelope.get("requires_replayable_evidence") or
-                    task_envelope.get("is_long_horizon_web_task")
-                ):
-                    actor_id = "op.browser.webwright.playwright.01"
-                elif task_envelope.get("is_localhost_smoke_or_quick_extract"):
-                    actor_id = "op.browser.browser_use_mcp.quick.01"
-                else:
-                    # Default Fallback: Webwright
-                    actor_id = "op.browser.webwright.playwright.01"
+                task_envelope.get("is_long_horizon_web_task")
+            ):
+                browser_override_actor_id = "op.browser.webwright.playwright.01"
+            elif task_envelope.get("is_localhost_smoke_or_quick_extract"):
+                browser_override_actor_id = "op.browser.browser_use_mcp.quick.01"
+
+            if browser_override_actor_id:
+                actor_id = browser_override_actor_id
             else:
                 selected, rejected = self.router.select_actor(logical_operator)
                 if not selected:
