@@ -131,6 +131,10 @@ SCENARIOS: list[dict[str, Any]] = [
         ],
         "runtime_commands": [["bash", "-n", str(HARNESS / "chain-watcher.sh")]],
     },
+]
+
+
+OPTIONAL_SCENARIOS: list[dict[str, Any]] = [
     {
         "id": "ruflo",
         "name": "Ruflo / Claude Flow",
@@ -151,6 +155,8 @@ SCENARIOS: list[dict[str, Any]] = [
             "ruflo-runtime-smoke",
             "--json",
         ]],
+        "optional": True,
+        "release_gate": False,
     },
 ]
 
@@ -165,14 +171,29 @@ def run(cmd: list[str], timeout: int = 20) -> tuple[int, str]:
 
 def run_json(cmd: list[str], timeout: int = 30) -> dict[str, Any]:
     code, out = run(cmd, timeout=timeout)
+    data = _load_json_object(out)
+    if isinstance(data, dict):
+        data["_exit_code"] = code
+        return data
+    return {"ok": False, "_exit_code": code, "_raw": out[:2000]}
+
+
+def _load_json_object(text: str) -> Any:
+    """Parse JSON from command output that may include a human prefix."""
     try:
-        data = json.loads(out)
-        if isinstance(data, dict):
-            data["_exit_code"] = code
-            return data
+        return json.loads(text)
     except Exception:
         pass
-    return {"ok": False, "_exit_code": code, "_raw": out[:2000]}
+
+    for index, char in enumerate(text):
+        if char not in "{[":
+            continue
+        try:
+            data, _ = json.JSONDecoder().raw_decode(text[index:])
+            return data
+        except Exception:
+            continue
+    return None
 
 
 def now() -> str:
@@ -225,7 +246,7 @@ def score_bool(ok: bool, points: int) -> int:
     return points if ok else 0
 
 
-def benchmark(threshold: int, evidence_dir: Path | None = None) -> dict[str, Any]:
+def benchmark(threshold: int, evidence_dir: Path | None = None, include_optional: bool = False) -> dict[str, Any]:
     REPORTS.mkdir(parents=True, exist_ok=True)
     if evidence_dir:
         if evidence_dir.exists():
@@ -246,8 +267,22 @@ def benchmark(threshold: int, evidence_dir: Path | None = None) -> dict[str, Any
     caps_list = caps.get("capabilities", [])
     health_items = by_key(health.get("integrations", []), "name")
 
+    scenarios = list(SCENARIOS)
+    optional_skipped = []
+    if include_optional:
+        scenarios.extend(OPTIONAL_SCENARIOS)
+    else:
+        optional_skipped = [
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "reason": "optional runtime scenario excluded from release gate; enable with --include-optional",
+            }
+            for item in OPTIONAL_SCENARIOS
+        ]
+
     scenarios_out: list[dict[str, Any]] = []
-    for scenario in SCENARIOS:
+    for scenario in scenarios:
         checks: dict[str, Any] = {}
 
         plugin = plugin_results.get(scenario["plugin"], {})
@@ -334,6 +369,8 @@ def benchmark(threshold: int, evidence_dir: Path | None = None) -> dict[str, Any
             "max_score": sum(WEIGHTS.values()),
             "passed": score >= threshold,
             "candidate": bool(scenario.get("candidate", False)),
+            "optional": bool(scenario.get("optional", False)),
+            "release_gate": bool(scenario.get("release_gate", True)),
             "checks": checks,
         })
 
@@ -355,9 +392,12 @@ def benchmark(threshold: int, evidence_dir: Path | None = None) -> dict[str, Any
             "passed": sum(1 for s in scenarios_out if s["passed"]),
             "failed": sum(1 for s in scenarios_out if not s["passed"]),
             "candidate": sum(1 for s in scenarios_out if s.get("candidate")),
+            "optional": sum(1 for s in scenarios_out if s.get("optional")),
+            "optional_skipped": len(optional_skipped),
         },
         "weights": WEIGHTS,
         "scenarios": scenarios_out,
+        "optional_skipped": optional_skipped,
         "evidence_dir": str(evidence_dir) if evidence_dir else "",
         "global_evidence": {
             "plugins_checked": plugin_validate.get("checked"),
@@ -409,6 +449,7 @@ def write_markdown(path: Path, data: dict[str, Any]) -> None:
         "## Boundary",
         "",
         "`openai-agents-python PoC` is expected to score as `basic_usable`: it is a design capability, not the production Solar executor.",
+        "`Ruflo / Claude Flow` is an optional managed runtime scenario because the release artifact intentionally excludes `vendor/` and `state/`; run with `--include-optional` after `ruflo-runtime-bootstrap` to certify the local runtime.",
         "",
     ])
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -422,9 +463,14 @@ def main() -> int:
     ap.add_argument("--out-json", default=str(REPORTS / "capability-fusion-benchmark-latest.json"))
     ap.add_argument("--out-md", default=str(REPORTS / "capability-fusion-benchmark-latest.md"))
     ap.add_argument("--evidence-dir", default=str(REPORTS / "capability-fusion-evidence" / "latest"))
+    ap.add_argument("--include-optional", action="store_true", help="include local optional runtime scenarios such as Ruflo")
     args = ap.parse_args()
 
-    data = benchmark(threshold=args.threshold, evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None)
+    data = benchmark(
+        threshold=args.threshold,
+        evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
+        include_optional=args.include_optional or os.environ.get("SOLAR_CAPABILITY_BENCH_INCLUDE_OPTIONAL") == "1",
+    )
     write_json(Path(args.out_json), data)
     write_markdown(Path(args.out_md), data)
 

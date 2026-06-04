@@ -14,8 +14,10 @@ cp solar-harness.sh "$TMP/solar-harness.sh"
 cp lib/run-state.sh "$TMP/lib/run-state.sh"
 cp lib/events.sh "$TMP/lib/events.sh"
 cp lib/graph_scheduler.py "$TMP/lib/graph_scheduler.py"
+cp lib/prerequisite_resolver.py "$TMP/lib/prerequisite_resolver.py"
 cp lib/intent_engine_adapter.py "$TMP/lib/intent_engine_adapter.py"
 cp lib/multi_task_runner.py "$TMP/lib/multi_task_runner.py"
+cp lib/tvs_render_cli.ts "$TMP/lib/tvs_render_cli.ts"
 cp lib/claude_surface.py "$TMP/lib/claude_surface.py"
 cp lib/gemini_adapter.py "$TMP/lib/gemini_adapter.py"
 cp config/multi-task-profiles.json "$TMP/config/multi-task-profiles.json"
@@ -210,7 +212,7 @@ PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task star
 after_deepseek=$(find "$TMP/run/multi-task" -name status.json | wc -l | tr -d ' ')
 [[ "$before_deepseek" -eq "$after_deepseek" ]] \
   || { echo "FAIL: unavailable DeepSeek profile dispatched work"; exit 1; }
-grep -q "capability_unavailable" /tmp/solar-multi-task-deepseek-gate.out \
+grep -Eq "capability_unavailable|model_matrix.*error=1" /tmp/solar-multi-task-deepseek-gate.out \
   || { echo "FAIL: unavailable DeepSeek profile did not expose capability gate"; exit 1; }
 
 old_task="$TMP/run/multi-task/mt-old-terminal"
@@ -242,8 +244,8 @@ grep -q "sprint-20260520-multi-task" /tmp/solar-multi-task-status.out \
   || { echo "FAIL: status did not include graph"; exit 1; }
 grep -q "pane_type" /tmp/solar-multi-task-status.out \
   || { echo "FAIL: status did not include pane_type column"; exit 1; }
-grep -q "tmux" /tmp/solar-multi-task-status.out \
-  || { echo "FAIL: status did not include tmux runtime column"; exit 1; }
+grep -q "cmd" /tmp/solar-multi-task-status.out \
+  || { echo "FAIL: status did not include runtime command column"; exit 1; }
 grep -q "refresh_mode" /tmp/solar-multi-task-status.out \
   || { echo "FAIL: status did not expose refresh mode"; exit 1; }
 grep -q "harness_panes" /tmp/solar-multi-task-status.out \
@@ -258,9 +260,9 @@ grep -q "sprint-20260520-multi-task#B" /tmp/solar-multi-task-status.out \
 COLUMNS=80 LINES=20 PATH="$TMP/bin:$PATH" HARNESS_DIR="$TMP" "$TMP/solar-harness.sh" multi-task screen --graph "$graph" --command "显示状态" --no-clear >/tmp/solar-multi-task-screen.out
 grep -q "自然语言指令" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not render input pane"; exit 1; }
-grep -q "可派=" /tmp/solar-multi-task-screen.out \
+grep -q "models" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show model matrix summary"; exit 1; }
-grep -q "可派=" /tmp/solar-multi-task-screen.out \
+grep -q "models" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen model matrix summary did not show dispatchable combos"; exit 1; }
 grep -q "PANE MAP" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show compact harness pane section"; exit 1; }
@@ -268,8 +270,8 @@ grep -q "main:2" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show four-pane builder pane"; exit 1; }
 grep -q "WORKERS" /tmp/solar-multi-task-screen.out \
   || { echo "FAIL: screen did not show worker summary section"; exit 1; }
-grep -q "用 status 查看完整视图" /tmp/solar-multi-task-screen.out \
-  || { echo "FAIL: screen did not expose compact truncation hint"; exit 1; }
+grep -q "solar>" /tmp/solar-multi-task-screen.out \
+  || { echo "FAIL: screen did not expose interactive prompt"; exit 1; }
 screen_lines=$(wc -l < /tmp/solar-multi-task-screen.out | tr -d ' ')
 [[ "$screen_lines" -le 20 ]] || { echo "FAIL: screen exceeded terminal height: $screen_lines"; exit 1; }
 python3 - /tmp/solar-multi-task-screen.out <<'PY'

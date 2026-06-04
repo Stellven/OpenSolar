@@ -31,6 +31,7 @@ import sys
 import re
 import html
 import hashlib
+import math
 import importlib.util
 import shutil
 import time
@@ -2021,12 +2022,160 @@ def _youtube_video_channel_type(channel: str) -> tuple[str, str]:
     return "other", "其他频道"
 
 
+_YOUTUBE_RECOMMENDED_CHANNELS: list[dict[str, str]] = [
+    {
+        "name": "Latent Space",
+        "url": "https://www.youtube.com/@LatentSpacePod",
+        "category": "AI / Tech / Podcast",
+        "priority": "rotation",
+        "channel_type": "influencer",
+        "why": "和 No Priors、AI Engineer 相近，适合补充开发者生态、模型发布和创业访谈信号。",
+    },
+    {
+        "name": "The Cognitive Revolution",
+        "url": "https://www.youtube.com/@CognitiveRevolutionPodcast",
+        "category": "AI / Tech / Podcast",
+        "priority": "rotation",
+        "channel_type": "influencer",
+        "why": "长访谈密度高，适合捕捉 agent、模型能力边界和产业采用的一手观点。",
+    },
+    {
+        "name": "Lex Fridman",
+        "url": "https://www.youtube.com/@lexfridman",
+        "category": "AI / Tech / Interview",
+        "priority": "rotation",
+        "channel_type": "influencer",
+        "why": "覆盖 AI 科学家和创业者访谈，可作为大咖观点与长期技术叙事补充。",
+    },
+    {
+        "name": "TWIML AI Podcast",
+        "url": "https://www.youtube.com/@twimlai",
+        "category": "AI / Tech / Podcast",
+        "priority": "rotation",
+        "channel_type": "influencer",
+        "why": "偏工程和研究落地，适合补齐 MLOps、应用 AI 和企业实践访谈。",
+    },
+    {
+        "name": "MIT CSAIL",
+        "url": "https://www.youtube.com/@MITCSAIL",
+        "category": "AI / Research",
+        "priority": "rotation",
+        "channel_type": "academic",
+        "why": "学术机构信号源，适合补充机器人、系统、AI 安全和基础研究方向。",
+    },
+    {
+        "name": "Stanford HAI",
+        "url": "https://www.youtube.com/@StanfordHAI",
+        "category": "AI / Research / Policy",
+        "priority": "rotation",
+        "channel_type": "academic",
+        "why": "连接研究、产业和治理，适合补足 AI 影响力报告里的政策与社会影响维度。",
+    },
+    {
+        "name": "NeurIPS Conference",
+        "url": "https://www.youtube.com/@NeurIPSConf",
+        "category": "AI / Research / Conference",
+        "priority": "rotation",
+        "channel_type": "academic",
+        "why": "顶会视频信号源，适合在会议季捕捉研究路线、benchmark 和社区关注转移。",
+    },
+    {
+        "name": "NVIDIA Developer",
+        "url": "https://www.youtube.com/@NVIDIADeveloper",
+        "category": "AI / Infra / Product",
+        "priority": "rotation",
+        "channel_type": "industry",
+        "why": "AI 基础设施和 GPU 生态强信号，适合观察推理、机器人、CUDA 和数据中心路线。",
+    },
+    {
+        "name": "AWS Developers",
+        "url": "https://www.youtube.com/@AWSDevelopers",
+        "category": "AI / Cloud / Product",
+        "priority": "rotation",
+        "channel_type": "industry",
+        "why": "云厂商产品和开发者生态信号，可与 Google Cloud、Azure 形成横向对比。",
+    },
+    {
+        "name": "Hugging Face",
+        "url": "https://www.youtube.com/@HuggingFace",
+        "category": "AI / Open Source / Product",
+        "priority": "rotation",
+        "channel_type": "industry",
+        "why": "开源模型、数据集和 Spaces 生态的视频入口，能补强 HF Paper 与 YouTube 的交叉信号。",
+    },
+]
+
+
+def _youtube_subscription_channels() -> list[dict]:
+    cfg = _read_yaml_file(YOUTUBE_DIGEST_CONFIG)
+    channels = cfg.get("channels") if isinstance(cfg.get("channels"), list) else []
+    return [channel for channel in channels if isinstance(channel, dict)]
+
+
+def _youtube_subscription_recommendations(limit: int = 9) -> list[dict]:
+    channels = _youtube_subscription_channels()
+    existing_keys = set()
+    type_counts = {"influencer": 0, "academic": 0, "industry": 0, "other": 0}
+    for channel in channels:
+        for key in ("url", "channel_id", "handle", "name"):
+            value = str(channel.get(key) or "").strip().lower()
+            if value:
+                existing_keys.add(value)
+        channel_type, _ = _youtube_video_channel_type(str(channel.get("name") or channel.get("url") or ""))
+        type_counts[channel_type] = type_counts.get(channel_type, 0) + 1
+
+    recommendations = []
+    for candidate in _YOUTUBE_RECOMMENDED_CHANNELS:
+        keys = {
+            str(candidate.get("url") or "").strip().lower(),
+            str(candidate.get("name") or "").strip().lower(),
+        }
+        if keys & existing_keys:
+            continue
+        channel_type = str(candidate.get("channel_type") or "other")
+        _, label = _youtube_video_channel_type(str(candidate.get("name") or ""))
+        if channel_type == "influencer":
+            label = "大V/访谈频道"
+        elif channel_type == "academic":
+            label = "学术/机构频道"
+        elif channel_type == "industry":
+            label = "产业/产品频道"
+        score = 50 + min(type_counts.get(channel_type, 0), 12) * 4
+        if channel_type in ("academic", "industry") and type_counts.get(channel_type, 0) < type_counts.get("influencer", 0):
+            score += 8
+        recommendations.append({
+            **candidate,
+            "channel_type_label": label,
+            "recommendation_score": score,
+        })
+    recommendations.sort(key=lambda item: (-int(item.get("recommendation_score") or 0), str(item.get("name") or "").lower()))
+    return recommendations[: max(1, min(int(limit or 9), 20))]
+
+
 def _connect_tech_hotspot_db():
     if not TECH_HOTSPOT_DB.exists():
         raise FileNotFoundError(f"tech-hotspot-radar sqlite missing: {TECH_HOTSPOT_DB}")
     conn = sqlite3.connect(str(TECH_HOTSPOT_DB))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _youtube_video_influence_score(item: dict) -> float:
+    views = max(0, int(item.get("views") or 0))
+    likes = max(0, int(item.get("likes") or 0))
+    comments = max(0, int(item.get("comments") or 0))
+    quality_tier = str(item.get("quality_tier") or "").upper()
+    source = str(item.get("transcript_source") or "").lower()
+    quality_bonus = {"T0": 7.0, "T1": 5.0, "T2": 2.0}.get(quality_tier, 0.0)
+    source_bonus = 1.5 if source in {"standard_caption", "youtube_auto_caption", "browser_caption"} else 0.0
+    return round(
+        math.log1p(views) * 3.0
+        + math.log1p(likes) * 5.0
+        + math.log1p(comments) * 6.0
+        + quality_bonus
+        + source_bonus,
+        3,
+    )
 
 
 def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, include_archived: bool = False, limit: int = 2000) -> list[dict]:
@@ -2089,7 +2238,7 @@ def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, incl
         raw_summary = _youtube_video_summary(row)
         summary_zh = _youtube_video_summary_zh(raw_summary, title=title, channel=channel, tags=tags)
         channel_type, channel_type_label = _youtube_video_channel_type(channel)
-        items.append({
+        item = {
             "video_id": video_id,
             "title": title,
             "channel": channel,
@@ -2113,7 +2262,9 @@ def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, incl
             "likes": int(row.get("like_count") or 0),
             "comments": int(row.get("comment_count") or 0),
             "archived": video_id in archived,
-        })
+        }
+        item["influence_score"] = _youtube_video_influence_score(item)
+        items.append(item)
     return items
 
 
@@ -2140,16 +2291,33 @@ def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archive
         channel = str(item.get("channel") or "N/A")
         month = str(item.get("month") or "N/A")
         date = str(item.get("date") or "N/A")
-        channel_group = groups.setdefault(channel, {"channel": channel, "count": 0, "months": {}})
+        channel_group = groups.setdefault(
+            channel,
+            {
+                "channel": channel,
+                "count": 0,
+                "months": {},
+                "influence_score": 0.0,
+                "views": 0,
+                "likes": 0,
+                "comments": 0,
+                "usable_transcripts": 0,
+            },
+        )
         channel_group["count"] += 1
+        channel_group["influence_score"] = round(float(channel_group.get("influence_score") or 0.0) + float(item.get("influence_score") or 0.0), 3)
+        channel_group["views"] += int(item.get("views") or 0)
+        channel_group["likes"] += int(item.get("likes") or 0)
+        channel_group["comments"] += int(item.get("comments") or 0)
+        if str(item.get("quality_tier") or "").upper() in {"T0", "T1", "T2"}:
+            channel_group["usable_transcripts"] += 1
         month_group = channel_group["months"].setdefault(month, {"month": month, "count": 0, "dates": {}})
         month_group["count"] += 1
         date_group = month_group["dates"].setdefault(date, {"date": date, "count": 0, "videos": []})
         date_group["count"] += 1
         date_group["videos"].append(item)
     group_list = []
-    for channel in sorted(groups):
-        channel_group = groups[channel]
+    for channel_group in groups.values():
         months = []
         for month in sorted(channel_group["months"], reverse=True):
             month_group = channel_group["months"][month]
@@ -2160,6 +2328,13 @@ def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archive
             months.append(month_group)
         channel_group["months"] = months
         group_list.append(channel_group)
+    group_list.sort(
+        key=lambda group: (
+            -float(group.get("influence_score") or 0.0),
+            -int(group.get("count") or 0),
+            str(group.get("channel") or "").lower(),
+        )
+    )
     section_order = ("influencer", "academic", "industry", "other")
     section_labels = {
         "influencer": "大V/访谈频道",
@@ -2168,7 +2343,7 @@ def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archive
         "other": "其他频道",
     }
     section_map: dict[str, dict] = {
-        key: {"channel_type": key, "label": section_labels[key], "count": 0, "channels": []}
+        key: {"channel_type": key, "label": section_labels[key], "count": 0, "influence_score": 0.0, "channels": []}
         for key in section_order
     }
     for channel_group in group_list:
@@ -2185,7 +2360,16 @@ def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archive
         if channel_type not in section_map:
             channel_type = "other"
         section_map[channel_type]["count"] += int(channel_group.get("count") or 0)
+        section_map[channel_type]["influence_score"] = round(float(section_map[channel_type].get("influence_score") or 0.0) + float(channel_group.get("influence_score") or 0.0), 3)
         section_map[channel_type]["channels"].append(channel_group)
+    for section in section_map.values():
+        section["channels"].sort(
+            key=lambda group: (
+                -float(group.get("influence_score") or 0.0),
+                -int(group.get("count") or 0),
+                str(group.get("channel") or "").lower(),
+            )
+        )
     channel_sections = [section_map[key] for key in section_order if section_map[key]["channels"]]
     return {
         "ok": True,
@@ -2378,6 +2562,7 @@ def shlex_quote(value: str) -> str:
 def _ai_influence_youtube_videos_html(period: str = "all") -> str:
     payload = _ai_influence_youtube_videos_payload(period=period)
     sections = payload.get("channel_sections") or []
+    recommendations = _youtube_subscription_recommendations(limit=9)
     section_html = []
     tab_html = []
     for section_index, section in enumerate(sections):
@@ -2425,7 +2610,7 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
                 """)
             cards_html.append(f"""
             <details class="channel">
-              <summary><span class="summary-left"><span class="chevron">›</span>{html.escape(str(group.get("channel") or "N/A"))}</span><span class="summary-right">{int(group.get("count") or 0)} 个视频 · 点击展开/收起</span></summary>
+              <summary><span class="summary-left"><span class="chevron">›</span>{html.escape(str(group.get("channel") or "N/A"))}</span><span class="summary-right">影响力 {float(group.get("influence_score") or 0.0):.1f} · {int(group.get("count") or 0)} 个视频 · 点击展开/收起</span></summary>
               {''.join(month_blocks)}
             </details>
             """)
@@ -2436,7 +2621,7 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
               <div class="section-kicker">频道分组</div>
               <h2>{html.escape(section_label)}</h2>
             </div>
-            <span>{int(section.get("count") or 0)} 个视频 · {len(section.get("channels") or [])} 个频道</span>
+            <span>影响力 {float(section.get("influence_score") or 0.0):.1f} · {int(section.get("count") or 0)} 个视频 · {len(section.get("channels") or [])} 个频道</span>
           </div>
           {''.join(cards_html)}
         </section>
@@ -2446,6 +2631,35 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
         for group in payload.get("groups") or []:
             section_html.append(f"<section class='channel-section'><h2>{html.escape(str(group.get('channel') or 'N/A'))}</h2></section>")
     tabs = f"<div class='channel-tabs' role='tablist' aria-label='频道分组'>{''.join(tab_html)}</div>" if tab_html else ""
+    recommendation_cards = []
+    for item in recommendations:
+        recommendation_cards.append(f"""
+        <label class="recommend-card">
+          <input type="checkbox" class="recommend-select"
+                 data-url="{html.escape(str(item.get("url") or ""))}"
+                 data-name="{html.escape(str(item.get("name") or ""))}"
+                 data-category="{html.escape(str(item.get("category") or "AI / Tech"))}"
+                 data-priority="{html.escape(str(item.get("priority") or "rotation"))}">
+          <span class="recommend-body">
+            <span class="recommend-top"><b>{html.escape(str(item.get("name") or "N/A"))}</b><em>{html.escape(str(item.get("channel_type_label") or "其他频道"))}</em></span>
+            <span class="recommend-why">{html.escape(str(item.get("why") or ""))}</span>
+            <span class="recommend-url">{html.escape(str(item.get("url") or ""))}</span>
+          </span>
+        </label>
+        """)
+    recommendations_html = f"""
+    <section class="recommend-panel">
+      <div class="recommend-head">
+        <div>
+          <div class="section-kicker">推荐关注</div>
+          <h2>根据当前订阅频道推荐</h2>
+        </div>
+        <button class="btn primary" onclick="addRecommendedChannels()">加入订阅列表</button>
+      </div>
+      <p>这些候选会补充当前频道池的大V访谈、学术机构和产业产品信号。勾选后点击确定，会写入 YouTube 订阅配置，不影响已有字幕数据。</p>
+      <div class="recommend-grid">{''.join(recommendation_cards) or "<div class='empty'>暂无新的推荐频道。</div>"}</div>
+    </section>
+    """
     body = "".join(section_html) if section_html else "<div class='empty'>当前没有可展示的 YouTube 视频。</div>"
     current_to = str(_ai_influence_mail_config_payload().get("to") or "")
     period_links = " ".join(
@@ -2475,6 +2689,19 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
 .channel-tab b{{display:inline-grid;place-items:center;min-width:26px;height:22px;padding:0 6px;border-radius:999px;background:#f1eadf;color:#806b42;font-size:12px;}}
 .channel-tab.active{{background:var(--green);color:#fff;border-color:var(--green);box-shadow:0 8px 20px rgba(23,63,54,.16);}}
 .channel-tab.active b{{background:rgba(255,255,255,.18);color:#fff;}}
+.recommend-panel{{margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:28px;background:linear-gradient(135deg,#fffdf8,#f4ead6);box-shadow:0 14px 38px rgba(49,42,31,.06);}}
+.recommend-head{{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:8px;}}
+.recommend-head h2{{margin:2px 0 0;color:var(--green);font-size:24px;}}
+.recommend-panel p{{margin:0 0 14px;color:var(--muted);line-height:1.7;}}
+.recommend-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;}}
+.recommend-card{{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;padding:12px;border:1px solid #eadfcd;border-radius:20px;background:#fff;cursor:pointer;}}
+.recommend-card input{{width:18px;height:18px;accent-color:var(--green);margin-top:2px;}}
+.recommend-body{{display:grid;gap:6px;}}
+.recommend-top{{display:flex;justify-content:space-between;gap:8px;align-items:center;}}
+.recommend-top b{{color:var(--green);font-size:15px;}}
+.recommend-top em{{font-style:normal;color:#806b42;background:#f4ecd9;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:900;white-space:nowrap;}}
+.recommend-why{{color:#4f5b50;line-height:1.55;font-size:13px;}}
+.recommend-url{{color:var(--muted);font-size:11px;word-break:break-all;}}
 .channel-section{{margin:24px 0 30px;padding:18px;border:1px solid var(--line);border-radius:30px;background:linear-gradient(180deg,rgba(255,253,248,.88),rgba(248,242,229,.76));box-shadow:0 16px 46px rgba(49,42,31,.06);}}
 .channel-section[hidden]{{display:none;}}
 .channel-section.type-influencer{{background:linear-gradient(180deg,rgba(255,251,239,.94),rgba(246,237,214,.78));}}
@@ -2528,6 +2755,7 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
     <span class="pill">收件人：{html.escape(current_to or 'N/A')}</span>
     <span id="status" class="status"></span>
   </div>
+  {recommendations_html}
   {tabs}
   {body}
 </div>
@@ -2544,6 +2772,21 @@ function showChannelSection(id) {{
     tab.classList.toggle('active', tab.dataset.channelTab === id);
   }});
   setStatus('已切换频道分组');
+}}
+async function addRecommendedChannels() {{
+  const selected = Array.from(document.querySelectorAll('.recommend-select:checked')).map(x => ({{
+    url: x.dataset.url || '',
+    name: x.dataset.name || '',
+    category: x.dataset.category || 'AI / Tech',
+    priority: x.dataset.priority || 'rotation'
+  }})).filter(x => x.url);
+  if (!selected.length) return setStatus('请先勾选推荐频道', false);
+  setStatus('正在加入订阅列表...');
+  try {{
+    const data = await postJson('/ai-influence/youtube-videos/add-recommended-channels', {{channels:selected}});
+    setStatus('订阅更新完成：新增 '+(data.added||0)+'，已存在 '+(data.exists||0));
+    setTimeout(()=>location.reload(), 800);
+  }} catch(e) {{ setStatus('加入失败：'+e.message, false); }}
 }}
 function selectAllVisible() {{ document.querySelectorAll('.video-select').forEach(x => x.checked=true); setStatus('已选择 '+selectedIds().length+' 个视频'); }}
 function clearSelection() {{ document.querySelectorAll('.video-select').forEach(x => x.checked=false); setStatus('已清空选择'); }}
@@ -4243,6 +4486,32 @@ def _append_youtube_subscription(data: dict) -> dict:
     cfg["channels"] = channels
     _write_yaml_file(YOUTUBE_DIGEST_CONFIG, cfg)
     return {"ok": True, "status": "added", "entry": entry}
+
+
+def _append_youtube_recommended_subscriptions(data: dict) -> dict:
+    requested = data.get("channels") if isinstance(data.get("channels"), list) else []
+    allowed = {
+        str(item.get("url") or "").strip(): item
+        for item in _YOUTUBE_RECOMMENDED_CHANNELS
+        if str(item.get("url") or "").strip()
+    }
+    results = []
+    for raw in requested:
+        if not isinstance(raw, dict):
+            continue
+        url = str(raw.get("url") or "").strip()
+        candidate = allowed.get(url)
+        if not candidate:
+            results.append({"ok": False, "status": "rejected", "url": url, "error": "unknown_recommendation"})
+            continue
+        try:
+            results.append(_append_youtube_subscription(candidate))
+        except Exception as exc:
+            results.append({"ok": False, "status": "error", "url": url, "error": f"{type(exc).__name__}: {exc}"})
+    added = sum(1 for item in results if item.get("status") == "added")
+    exists = sum(1 for item in results if item.get("status") == "exists")
+    errors = [item for item in results if item.get("ok") is False]
+    return {"ok": not errors, "status": "ok" if not errors else "partial_error", "added": added, "exists": exists, "errors": errors, "results": results}
 
 
 def _append_social_subscription(data: dict) -> dict:
@@ -11580,6 +11849,8 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send_json(_ai_influence_youtube_videos_send(data))
             elif path == "/ai-influence/youtube-videos/archive":
                 self._send_json(_ai_influence_youtube_videos_archive(data))
+            elif path == "/ai-influence/youtube-videos/add-recommended-channels":
+                self._send_json(_append_youtube_recommended_subscriptions(data))
             elif path == "/ai-influence/youtube-videos/deep-analysis":
                 self._send_json(_ai_influence_youtube_videos_deep_analysis(data))
             elif path == "/ai-influence/youtube-videos/regenerate-daily":

@@ -238,13 +238,8 @@ def _json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False)
 
 
-def _dispatch_role_for_pane(pane: str) -> str:
-    title = _pane_title(pane)
-    if infer_pane_dispatch_role is not None:
-        try:
-            return str(infer_pane_dispatch_role(pane, title) or "builder")
-        except Exception:
-            pass
+def _dispatch_role_for_pane(pane: str, title: str | None = None) -> str:
+    title = _pane_title(pane) if title is None else str(title or "")
     lowered = title.lower()
     if "planner" in lowered or "规划者" in title:
         return "planner"
@@ -252,6 +247,11 @@ def _dispatch_role_for_pane(pane: str) -> str:
         return "evaluator"
     if "pm" in lowered or "产品经理" in title:
         return "pm"
+    if infer_pane_dispatch_role is not None:
+        try:
+            return str(infer_pane_dispatch_role(pane, title) or "builder")
+        except Exception:
+            pass
     return "builder"
 
 
@@ -5288,7 +5288,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
     for row in pane_rows:
         pane = row[0].strip()
         title = row[1].strip() if len(row) > 1 else ""
-        dispatch_role = _dispatch_role_for_pane(pane)
+        dispatch_role = _dispatch_role_for_pane(pane, title)
         if restrict_to_session:
             continue
         if not (
@@ -5298,7 +5298,7 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             or pane.startswith("solar-harness-multi-task:")
         ):
             continue
-        if dispatch_role in {"pm", "observer", ""}:
+        if dispatch_role != "builder":
             continue
         models = _models_for_pane(pane, title)
         tail = _pane_tail(pane)
