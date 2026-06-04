@@ -34,6 +34,21 @@ GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES = (
     "需求改写",
     "需求展开",
 )
+GPT_REQUIREMENT_WRITER_RESEARCH_TERMS = (
+    "研究", "调研", "论文", "报告", "deepdive", "deep dive", "deep research", "分析",
+)
+GPT_REQUIREMENT_WRITER_IMPLEMENTATION_TERMS = (
+    "实现", "开发", "接入", "集成", "落地", "修复", "重构", "固化", "发单", "派单",
+)
+GPT_REQUIREMENT_WRITER_COMPLEXITY_TERMS = (
+    "架构", "schema", "路由", "traceability", "质量门", "验收", "回归", "测试",
+    "operator", "算子", "pipeline", "流程", "状态", "配置", "registry", "contract",
+    "source", "evidence", "chapter", "chief-editor", "compiler", "migration",
+)
+GPT_REQUIREMENT_WRITER_SCOPE_TERMS = (
+    "youtube", "huggingface", "github", "social", "knowledge", "deepdive",
+    "ai influence", "需求管道", "browser agent", "status",
+)
 
 
 def now_iso() -> str:
@@ -81,18 +96,105 @@ def extract_research_artifact(args: argparse.Namespace) -> dict[str, Any] | None
     }
 
 
+def requirement_writer_intelligence(raw_text: str) -> dict[str, Any]:
+    text = raw_text.strip()
+    lowered = text.lower()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    bullet_like = [
+        line for line in lines
+        if re.match(r"^([0-9]+[.)]|[-*•]|[（(]?[一二三四五六七八九十]+[）)])", line)
+    ]
+    research_hits = [term for term in GPT_REQUIREMENT_WRITER_RESEARCH_TERMS if term in lowered or term in text]
+    implementation_hits = [term for term in GPT_REQUIREMENT_WRITER_IMPLEMENTATION_TERMS if term in lowered or term in text]
+    complexity_hits = [term for term in GPT_REQUIREMENT_WRITER_COMPLEXITY_TERMS if term in lowered or term in text]
+    scope_hits = [term for term in GPT_REQUIREMENT_WRITER_SCOPE_TERMS if term in lowered or term in text]
+    score = 0
+    reasons: list[str] = []
+
+    if len(text) >= 500:
+        score += 2
+        reasons.append("long_requirement")
+    elif len(text) >= 260:
+        score += 1
+        reasons.append("medium_requirement")
+    if len(bullet_like) >= 4:
+        score += 2
+        reasons.append("multi_item_structure")
+    elif len(bullet_like) >= 2:
+        score += 1
+        reasons.append("some_structured_items")
+    if research_hits and implementation_hits:
+        score += 3
+        reasons.append("research_plus_implementation")
+    elif research_hits:
+        score += 1
+        reasons.append("research_or_analysis")
+    if len(complexity_hits) >= 4:
+        score += 3
+        reasons.append("many_architecture_or_quality_terms")
+    elif len(complexity_hits) >= 2:
+        score += 2
+        reasons.append("architecture_or_quality_terms")
+    if len(scope_hits) >= 2:
+        score += 2
+        reasons.append("cross_module_scope")
+    elif scope_hits:
+        score += 1
+        reasons.append("named_system_scope")
+    if any(marker in text for marker in ("P0", "P1", "S01", "S02", "Phase", "阶段", "验收标准")):
+        score += 2
+        reasons.append("delivery_stage_or_acceptance_language")
+    if any(marker in text for marker in ("不要", "必须", "不能", "禁止")) and len(lines) >= 3:
+        score += 1
+        reasons.append("explicit_constraints")
+
+    try:
+        threshold = int(os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_INTELLIGENT_THRESHOLD", "5") or "5")
+    except Exception:
+        threshold = 5
+    return {
+        "score": score,
+        "threshold": threshold,
+        "enabled": score >= threshold,
+        "reasons": reasons,
+        "signals": {
+            "line_count": len(lines),
+            "bullet_like_count": len(bullet_like),
+            "research_terms": research_hits[:8],
+            "implementation_terms": implementation_hits[:8],
+            "complexity_terms": complexity_hits[:12],
+            "scope_terms": scope_hits[:8],
+        },
+    }
+
+
 def requirement_writer_trigger(raw_text: str) -> dict[str, Any]:
     text = raw_text.strip()
     matched = [phrase for phrase in GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES if phrase in text]
     explicit = bool(matched)
     forced = os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_FORCE", "").strip().lower() in {"1", "true", "yes"}
     disabled = os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_DISABLED", "").strip().lower() in {"1", "true", "yes"}
+    intelligence = requirement_writer_intelligence(text)
+    intelligent = bool(intelligence.get("enabled"))
+    if disabled:
+        decision = "disabled"
+    elif forced:
+        decision = "forced"
+    elif explicit:
+        decision = "explicit_phrase"
+    elif intelligent:
+        decision = "intelligent_score"
+    else:
+        decision = "below_threshold"
     return {
-        "enabled": bool((explicit or forced) and not disabled),
+        "enabled": bool((explicit or intelligent or forced) and not disabled),
         "explicit": explicit,
+        "intelligent": intelligent,
         "forced": forced,
         "disabled": disabled,
+        "decision": decision,
         "matched_phrases": matched,
+        "intelligence": intelligence,
     }
 
 
