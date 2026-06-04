@@ -563,6 +563,94 @@ def fetch_transcript(
 CURRENT_CONFIG: dict[str, Any] = {}
 
 
+def browser_agent_report_config(config: dict[str, Any]) -> dict[str, Any]:
+    out_cfg = dict(config.get("output") or {})
+    report_cfg = dict(out_cfg.get("browser_agent_report") or {})
+    report_cfg.setdefault("enabled", False)
+    report_cfg.setdefault("requested_model", "chatgpt-5.5-thinking-high")
+    report_cfg.setdefault("title_prefix", "AI Influence YouTube Report")
+    report_cfg.setdefault("lineage_prefix", "ai-influence-youtube-report")
+    report_cfg.setdefault("project_name", "杂项")
+    return report_cfg
+
+
+def build_browser_agent_report_sources(videos: list[Video], config: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, video in enumerate(videos, start=1):
+        quality = assess_transcript_quality(
+            meta={
+                "video_id": video.video_id,
+                "title": video.title,
+                "channel_name": video.channel_name,
+            },
+            transcript=video.transcript,
+            status=video.transcript_status,
+            source=video.transcript_source,
+            config=config,
+        )
+        rows.append(
+            {
+                "evidence_ref": f"E{index:03d}",
+                "channel": video.channel_name,
+                "title": video.title,
+                "published_at": video.published_at,
+                "transcript_grade": str(quality.get("tier") or "T3"),
+                "citation_span": (video.summary or video.why_it_matters or video.transcript[:220]).strip(),
+                "group_type": "other",
+                "summary": video.summary,
+                "why_it_matters": video.why_it_matters,
+                "transcript": video.transcript,
+                "url": video.url,
+                "category": video.category,
+                "signal_type": video.signal_type,
+            }
+        )
+    return rows
+
+
+def maybe_write_browser_agent_report(
+    videos: list[Video],
+    *,
+    config: dict[str, Any],
+    run_dir: Path,
+    run_id: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    report_cfg = browser_agent_report_config(config)
+    if dry_run:
+        return {"enabled": bool(report_cfg.get("enabled")), "ok": False, "status": "dry_run_skipped"}
+    if not bool(report_cfg.get("enabled")):
+        return {"enabled": False, "ok": False, "status": "disabled"}
+
+    lib_root = Path(__file__).resolve().parents[1] / "lib"
+    if str(lib_root) not in sys.path:
+        sys.path.insert(0, str(lib_root))
+    from ai_influence_youtube_report.runtime import generate_browser_agent_report_bundle  # noqa: WPS433
+
+    report_sources = build_browser_agent_report_sources(videos, config)
+    report_title = f"{report_cfg.get('title_prefix') or 'AI Influence YouTube Report'} — {run_id}"
+    provider_options = {
+        "project_name": str(report_cfg.get("project_name") or "杂项"),
+        "lineage_prefix": str(report_cfg.get("lineage_prefix") or "ai-influence-youtube-report"),
+    }
+    for key in ("target_account_email", "profile_directory", "timeout_seconds", "headless", "session_reuse"):
+        if report_cfg.get(key) is not None:
+            provider_options[key] = report_cfg.get(key)
+
+    result = generate_browser_agent_report_bundle(
+        report_sources,
+        run_dir=run_dir,
+        run_id=run_id,
+        report_title=report_title,
+        requested_model=str(report_cfg.get("requested_model") or "chatgpt-5.5-thinking-high"),
+        sprint_id=f"youtube-influence-{run_id}",
+        provider_options=provider_options,
+    )
+    status_path = run_dir / "browser-agent-report-status.json"
+    status_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return result
+
+
 def score_signal(text: str, config: dict[str, Any], priority: str) -> tuple[str, str, int]:
     lower = text.lower()
     keywords = config.get("analysis_keywords") or {}
@@ -1383,7 +1471,23 @@ def write_markdown(videos: list[Video], channels: list[Channel], config: dict[st
         if not dry_run:
             (items_dir / item_name).write_text("\n".join(item_lines), encoding="utf-8")
 
-    return {"run_dir": str(run_dir), "digest_path": str(digest_path), "videos": len(videos), "transcripts_ok": transcript_ok, "asr_queued": asr_queued, "wiki_dispatch": dispatch}
+    browser_agent_report = maybe_write_browser_agent_report(
+        videos,
+        config=config,
+        run_dir=run_dir,
+        run_id=run_id,
+        dry_run=dry_run,
+    )
+
+    return {
+        "run_dir": str(run_dir),
+        "digest_path": str(digest_path),
+        "videos": len(videos),
+        "transcripts_ok": transcript_ok,
+        "asr_queued": asr_queued,
+        "wiki_dispatch": dispatch,
+        "browser_agent_report": browser_agent_report,
+    }
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

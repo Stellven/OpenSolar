@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -46,3 +47,48 @@ def test_render_transcript_for_report_hides_t3_body():
     )
     rendered = yid.render_transcript_for_report(video)
     assert "质量门禁判定为 `T3`" in rendered
+
+
+def test_maybe_write_browser_agent_report_respects_enabled_flag(tmp_path: Path):
+    video = yid.build_video(
+        _base_meta(),
+        "Today we build an AI agent demo with tools. The workflow shows automation and evaluation.",
+        "ok",
+        "browser_agent_operator:abc123xyz00",
+        {"analysis_keywords": {"agent": ["agent", "tools"]}},
+    )
+    disabled = yid.maybe_write_browser_agent_report(
+        [video],
+        config={"output": {"browser_agent_report": {"enabled": False}}},
+        run_dir=tmp_path,
+        run_id="run-1",
+        dry_run=False,
+    )
+    assert disabled["enabled"] is False
+    assert disabled["status"] == "disabled"
+
+
+def test_write_markdown_attaches_browser_agent_report_when_enabled(tmp_path: Path):
+    video = yid.build_video(
+        _base_meta(),
+        "Today we build an AI agent demo with tools. The workflow shows automation and evaluation.",
+        "ok",
+        "browser_agent_operator:abc123xyz00",
+        {"analysis_keywords": {"agent": ["agent", "tools"]}},
+    )
+    config = {
+        "output": {
+            "raw_dir": str(tmp_path / "raw"),
+            "state_dir": str(tmp_path / "state"),
+            "browser_agent_report": {"enabled": True},
+        }
+    }
+    with mock.patch.object(
+        yid,
+        "maybe_write_browser_agent_report",
+        return_value={"enabled": True, "ok": True, "status": "generated", "runtime_dir": str(tmp_path / "report")},
+    ) as patched:
+        result = yid.write_markdown([video], [], config, dry_run=False)
+    assert patched.called
+    assert result["browser_agent_report"]["ok"] is True
+    assert Path(result["digest_path"]).exists()

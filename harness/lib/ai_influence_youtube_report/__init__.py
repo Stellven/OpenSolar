@@ -3,6 +3,7 @@
 from .compat import TranscriptStatusDriftError, compat_adapter_v1
 from .gate import transcript_gate
 from .classifier import group_classifier
+from .runtime import generate_browser_agent_report_bundle
 from .hierarchy import build_hierarchy
 from .schema import (
     GateDecision,
@@ -28,6 +29,7 @@ __all__ = [
     "compat_adapter_v1",
     "build_hierarchy",
     "group_classifier",
+    "generate_browser_agent_report_bundle",
     "transition_run",
     "transcript_gate",
 ]
