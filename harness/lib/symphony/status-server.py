@@ -1572,11 +1572,6 @@ def _ai_influence_payload_internal(
                 items.append(_unified_daily_report_item(child))
             if child.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", child.name) and ((child / "hf-paper-report.md").exists() or (child / "hf-paper-insight-pack.json").exists()):
                 items.append(_huggingface_papers_item(child))
-        for phase_dir in sorted((p for p in tech_hotspot_raw_dir.iterdir() if p.is_dir() and p.name.startswith("phase-"))):
-            for child in sorted((p for p in phase_dir.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
-                if (child / "report.html").exists() and (child / "phase-report.json").exists():
-                    items.append(_phase_report_item(child, phase_dir.name))
-                    
     github_report_root = tech_hotspot_raw_dir / "github-trend-report"
     if github_report_root.exists():
         for child in github_report_root.iterdir():
@@ -3131,7 +3126,6 @@ def _ai_influence_html(
         for group in (payload.get("groups") or [])
     )
     preset_buttons = "".join([
-        "<button class='quick-btn preset-btn' data-preset='planned_unsent' onclick=\"applyPreset('planned_unsent', this)\">大咖访谈及大展洞察未发送</button>",
         "<a class='quick-btn preset-link' href='/ai-influence?period=7d'>最近 7 天</a>",
         "<a class='quick-btn preset-link' href='/ai-influence?period=30d'>近 30 天</a>",
     ])
@@ -3247,7 +3241,7 @@ def _ai_influence_html(
     <section class="hero">
       <div class="kicker">Solar Harness · AI Influence</div>
       <h1>AI Influence 报告中心</h1>
-      <p>这里统一挂 AI Influence 的日度洞察、专题报告、统一日报和历史 phase 洞察。每条都可以直接打开，也可以在旁边一键发到配置好的邮箱。</p>
+      <p>这里统一挂 AI Influence 的日度洞察、大咖访谈及大展洞察、GitHub/HF 研究洞察和统一日报。每条都可以直接打开，也可以在旁边一键发到配置好的邮箱。</p>
     </section>
     <div class="toolbar">
       <span class="pill">状态：{html.escape(str(payload.get("status") or "N/A"))}</span>
@@ -3371,7 +3365,6 @@ def _ai_influence_html(
       const select = document.getElementById('filter-module');
       select.value = value;
       document.querySelectorAll('.quick-btn[data-module]').forEach(el => el.classList.toggle('active', el === btn));
-      document.querySelectorAll('.preset-btn').forEach(el => el.classList.remove('active'));
       document.getElementById('filter-unsent').checked = false;
       applyReportFilters();
     }}
@@ -3410,16 +3403,6 @@ def _ai_influence_html(
       document.querySelectorAll('.quick-btn').forEach(el => el.classList.remove('active'));
       const allBtn = document.querySelector('.quick-btn[data-module=""]');
       if (allBtn) allBtn.classList.add('active');
-    }}
-    function applyPreset(name, btn) {{
-      clearAllReportFilters();
-      if (name === 'planned_unsent') {{
-        document.getElementById('filter-module').value = '大咖访谈及大展洞察报告';
-        document.getElementById('filter-unsent').checked = true;
-      }}
-      document.querySelectorAll('.quick-btn[data-module]').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.preset-btn').forEach(el => el.classList.toggle('active', el === btn));
-      applyReportFilters();
     }}
     function renderActiveChips() {{
       const root = document.getElementById('active-chips');
@@ -3583,11 +3566,6 @@ def _ai_influence_html(
       syncReportFilterUrl();
       const selectedModule = document.getElementById('filter-module').value;
       document.querySelectorAll('.quick-btn[data-module]').forEach(el => el.classList.toggle('active', (el.dataset.module || '') === selectedModule));
-      document.querySelectorAll('.preset-btn').forEach(el => {{
-        if (document.getElementById('filter-module').value !== '大咖访谈及大展洞察报告' || !document.getElementById('filter-unsent').checked) {{
-          el.classList.remove('active');
-        }}
-      }});
       const cards = sortReportCards(visibleReportCards());
       renderActiveChips();
       renderReportCards(cards);
