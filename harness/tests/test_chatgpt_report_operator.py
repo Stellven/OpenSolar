@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import subprocess
@@ -7,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "chatgpt_report_operator.py"
+sys.path.append(str(ROOT / "tools"))
+import chatgpt_report_operator as cro  # noqa: E402
 
 
 def run_operator(
@@ -68,6 +71,7 @@ def run_operator(
             "BROWSER_AGENT_PURPOSE": purpose,
             "BROWSER_AGENT_EXPECTED_OUTPUT": expected,
             "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "1",
+            "BROWSER_AGENT_SESSION_CONTROL_DISABLED": "1",
         }
     )
     if env_extra:
@@ -404,3 +408,25 @@ def test_wrapper_timeout_returns_controlled_error(tmp_path):
     proc = run_operator(tmp_path, kind="deep_writer", write_deep_proof=True, sleep_seconds=5, check=False)
     assert proc.returncode == 124
     assert "wrapper timed out after 1s" in proc.stderr
+
+
+def test_report_operator_defaults_to_session_control(monkeypatch, tmp_path, capsys):
+    request_dir = tmp_path / "request"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    (request_dir / "chatgpt-mode-state.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    result_file = tmp_path / "result.json"
+    result_file.write_text(json.dumps({"text": "session control output"}, ensure_ascii=False), encoding="utf-8")
+    submit_calls = []
+
+    monkeypatch.delenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", raising=False)
+    monkeypatch.setenv("BROWSER_AGENT_REQUEST_DIR", str(request_dir))
+    monkeypatch.setenv("BROWSER_AGENT_PURPOSE", "ai-influence-report-plan-2026-06-04")
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED", "1")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("write from session control"))
+    monkeypatch.setattr(cro, "submit_request", lambda request, logical_operator, objective, task_id: submit_calls.append((request, logical_operator)) or {"success": True, "task_id": "task-report"})
+    monkeypatch.setattr(cro, "collect_request", lambda *args, **kwargs: (0, {"status": "completed", "latest_result": {"result_file": str(result_file)}}))
+
+    assert cro.main() == 0
+    assert submit_calls
+    assert submit_calls[0][1] == "DeepResearchChatGPT"
+    assert capsys.readouterr().out.strip() == "session control output"

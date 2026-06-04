@@ -21,6 +21,7 @@ import re
 import shlex
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,11 @@ DEFAULT_PROJECT_NAME = "杂项"
 DEFAULT_WRAPPER = ROOT / "scripts" / "browser_agent_chatgpt_wrapper.py"
 DEFAULT_BROWSER_USE_PYTHON = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
 DEFAULT_LOCAL_PROFILE_POLICY = Path.home() / ".solar" / "harness" / "browser-agent-chatgpt-local.json"
+
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
+
+from browser_agent_session_control import collect_request, submit_request  # type: ignore  # noqa: E402
 
 
 def infer_kind(purpose: str, explicit: str = "") -> str:
@@ -341,6 +347,159 @@ def run_wrapper_process(cmd: list[str], *, prompt: str, env: dict[str, str], tim
         return 124, (stdout or "") + f"\nchatgpt_report_operator: wrapper timed out after {timeout}s"
 
 
+def _session_control_enabled() -> bool:
+    disabled = str(os.environ.get("BROWSER_AGENT_SESSION_CONTROL_DISABLED") or "").strip().lower()
+    return disabled not in {"1", "true", "yes", "on"}
+
+
+def _submitted_run_path(request_dir: str) -> Path:
+    return Path(request_dir).expanduser() / "submitted-run.json"
+
+
+def _write_submitted_run(
+    request_dir: str,
+    *,
+    task_id: str,
+    status_payload: dict[str, Any],
+) -> None:
+    path = _submitted_run_path(request_dir)
+    payload = {
+        "task_id": task_id,
+        "status": str(status_payload.get("status") or ""),
+        "url": str((status_payload.get("latest_result") or {}).get("conversation_url") or ""),
+        "conversation_id": str((status_payload.get("latest_result") or {}).get("conversation_id") or ""),
+    }
+    latest_result = status_payload.get("latest_result") if isinstance(status_payload.get("latest_result"), dict) else {}
+    result_file = Path(str(latest_result.get("result_file") or "")).expanduser()
+    if result_file.exists():
+        try:
+            result_json = json.loads(result_file.read_text(encoding="utf-8"))
+            payload["url"] = str(result_json.get("url") or payload.get("url") or "")
+            payload["conversation_id"] = str(result_json.get("conversation_id") or payload.get("conversation_id") or "")
+        except Exception:
+            pass
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _load_submitted_task_id(request_dir: str) -> str:
+    path = _submitted_run_path(request_dir)
+    if not path.exists():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if isinstance(data, dict):
+        return str(data.get("task_id") or "").strip()
+    return ""
+
+
+def _extract_text_from_status_payload(status_payload: dict[str, Any]) -> str:
+    latest_result = status_payload.get("latest_result") if isinstance(status_payload.get("latest_result"), dict) else {}
+    result_file = Path(str(latest_result.get("result_file") or "")).expanduser()
+    if result_file.exists():
+        try:
+            result_json = json.loads(result_file.read_text(encoding="utf-8"))
+            return str(result_json.get("text") or "").strip()
+        except Exception:
+            return ""
+    return ""
+
+
+def _run_via_session_control(
+    *,
+    prompt: str,
+    env: dict[str, str],
+    timeout: int,
+    action: str,
+) -> tuple[int, str]:
+    request_dir = str(env.get("BROWSER_AGENT_REQUEST_DIR") or "").strip()
+    request = {
+        "prompt": prompt,
+        "expected_output": str(env.get("BROWSER_AGENT_EXPECTED_OUTPUT") or "markdown"),
+        "model": str(env.get("CHATGPT_MODEL") or "chatgpt-5.5"),
+        "reasoning_effort": str(env.get("CHATGPT_REASONING_EFFORT") or "high"),
+        "project_name": str(env.get("BROWSER_AGENT_CHATGPT_PROJECT_NAME") or DEFAULT_PROJECT_NAME),
+        "action": action,
+        "headless": str(env.get("BROWSER_AGENT_HEADLESS") or "true").strip().lower() != "false",
+        "session_reuse": str(env.get("BROWSER_AGENT_SESSION_REUSE") or "true").strip().lower() != "false",
+        "session_lineage": str(env.get("BROWSER_AGENT_SESSION_LINEAGE") or "").strip(),
+        "model_mode": str(env.get("BROWSER_AGENT_CHATGPT_MODEL_MODE") or ""),
+        "tool_mode": str(env.get("BROWSER_AGENT_CHATGPT_TOOL_MODE") or ""),
+        "require_ui_mode": str(env.get("BROWSER_AGENT_CHATGPT_REQUIRE_UI_MODE") or "").strip().lower() == "true",
+        "require_deep_research": str(env.get("BROWSER_AGENT_CHATGPT_REQUIRE_DEEP_RESEARCH") or "").strip().lower() == "true",
+        "request_dir": request_dir,
+    }
+    for src_key, dst_key in (
+        ("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL", "account_email"),
+        ("BROWSER_AGENT_CHATGPT_CONVERSATION_URL", "conversation_url"),
+        ("BROWSER_AGENT_PROFILE_DIRECTORY", "profile_directory"),
+    ):
+        value = str(env.get(src_key) or "").strip()
+        if value:
+            request[dst_key] = value
+    task_id = str(env.get("BROWSER_AGENT_SESSION_TASK_ID") or "").strip()
+    if action in {"poll", "collect"} and not task_id and request_dir:
+        task_id = _load_submitted_task_id(request_dir)
+    if not task_id:
+        task_id = f"chatgpt-report-{uuid.uuid4().hex[:12]}"
+    if action == "submit":
+        submit_payload = submit_request(
+            request,
+            logical_operator="DeepResearchChatGPT",
+            objective=str(env.get("BROWSER_AGENT_PURPOSE") or prompt[:120] or "chatgpt-report"),
+            task_id=task_id,
+        )
+        if not submit_payload.get("success"):
+            return 1, str(submit_payload.get("error") or "chatgpt_report_operator: submit failed")
+        rc, status_payload = collect_request(
+            task_id,
+            timeout_seconds=min(timeout, 60),
+            poll_interval_seconds=1.0,
+            terminal_statuses={"submitted", "failed"},
+        )
+        if request_dir:
+            _write_submitted_run(request_dir, task_id=task_id, status_payload=status_payload)
+        output = _extract_text_from_status_payload(status_payload)
+        return rc, output or json.dumps({"status": status_payload.get("status"), "task_id": task_id}, ensure_ascii=False)
+    if action == "run":
+        submit_payload = submit_request(
+            request,
+            logical_operator="DeepResearchChatGPT",
+            objective=str(env.get("BROWSER_AGENT_PURPOSE") or prompt[:120] or "chatgpt-report"),
+            task_id=task_id,
+        )
+        if not submit_payload.get("success"):
+            return 1, str(submit_payload.get("error") or "chatgpt_report_operator: submit failed")
+        rc, status_payload = collect_request(
+            task_id,
+            timeout_seconds=timeout,
+            poll_interval_seconds=1.0,
+            terminal_statuses={"completed", "failed"},
+        )
+        output = _extract_text_from_status_payload(status_payload)
+        return rc, output or str((status_payload.get("latest_result") or {}).get("error") or "")
+    rc, status_payload = collect_request(
+        task_id,
+        timeout_seconds=timeout,
+        poll_interval_seconds=1.0,
+        terminal_statuses={"completed", "failed"} if action == "collect" else {"submitted", "running", "completed", "failed"},
+    )
+    output = _extract_text_from_status_payload(status_payload)
+    if action == "poll":
+        if str(status_payload.get("status") or "").strip().lower() == "failed":
+            return 1, output or str((status_payload.get("latest_result") or {}).get("error") or "")
+        output = json.dumps(
+            {
+                "status": status_payload.get("status"),
+                "task_id": task_id,
+            },
+            ensure_ascii=False,
+        )
+        return 0, output
+    return rc, output or str((status_payload.get("latest_result") or {}).get("error") or "")
+
+
 def main() -> int:
     user_prompt = sys.stdin.read()
     action = (os.environ.get("CHATGPT_REPORT_ACTION") or "run").strip().lower()
@@ -356,7 +515,7 @@ def main() -> int:
     policy = stage_policy(kind, expected)
     prompt = build_prompt(user_prompt, kind=kind, expected=expected, purpose=purpose) if user_prompt.strip() else "poll/collect"
     cmd = wrapper_cmd()
-    if not cmd:
+    if not _session_control_enabled() and not cmd:
         print("chatgpt_report_operator: Browser Agent ChatGPT wrapper not configured", file=sys.stderr)
         return 2
 
@@ -435,7 +594,10 @@ def main() -> int:
                     pass
 
     timeout = int(env.get("BROWSER_AGENT_CHATGPT_TIMEOUT") or ("7200" if kind == "deep_writer" else "1800"))
-    returncode, raw_output = run_wrapper_process(cmd, prompt=prompt, env=env, timeout=timeout)
+    if _session_control_enabled():
+        returncode, raw_output = _run_via_session_control(prompt=prompt, env=env, timeout=timeout, action=action)
+    else:
+        returncode, raw_output = run_wrapper_process(cmd, prompt=prompt, env=env, timeout=timeout)
     output = (raw_output or "").strip()
     if returncode != 0:
         print(output, file=sys.stderr)

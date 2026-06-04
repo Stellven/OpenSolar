@@ -63,49 +63,40 @@ def _load_prompt(args: argparse.Namespace) -> str:
     return sys.stdin.read().strip()
 
 
-def _submit(args: argparse.Namespace) -> int:
-    prompt = _load_prompt(args)
-    if not prompt:
-        raise RuntimeError("prompt is required")
+def submit_request(
+    request: dict[str, Any],
+    *,
+    logical_operator: str = "DeepResearchBrowser",
+    objective: str = "",
+    task_id: str = "",
+) -> dict[str, Any]:
     runtime = _runtime()
-    request = {
-        "prompt": prompt,
-        "expected_output": str(args.expected_output or "markdown"),
-        "model": str(args.model or "chatgpt-5.5"),
-        "reasoning_effort": str(args.reasoning_effort or "high"),
-        "project_name": str(args.project_name or "杂项"),
-        "action": "submit" if args.async_mode else "run",
-        "headless": not bool(args.headed),
-        "session_reuse": True,
-        "session_lineage": str(args.session_lineage or "").strip(),
-    }
-    task_id = str(args.task_id or _task_id())
+    resolved_task_id = str(task_id or _task_id())
+    prompt = str(request.get("prompt") or "").strip()
     envelope = {
-        "task_id": task_id,
-        "objective": str(args.objective or prompt[:120]),
-        "logical_operator": str(args.logical_operator or "DeepResearchBrowser"),
-        "chatgpt_browser_agent_request": request,
+        "task_id": resolved_task_id,
+        "objective": str(objective or prompt[:120] or logical_operator),
+        "logical_operator": str(logical_operator or "DeepResearchBrowser"),
+        "chatgpt_browser_agent_request": dict(request or {}),
     }
-    result = runtime.submit(envelope, logical_operator=str(args.logical_operator or "DeepResearchBrowser"))
+    result = runtime.submit(envelope, logical_operator=str(logical_operator or "DeepResearchBrowser"))
     payload = result.to_dict()
-    payload["task_id"] = task_id
+    payload["task_id"] = resolved_task_id
     payload["actor_id"] = DEFAULT_ACTOR_ID
-    payload["inbox_task_file"] = _find_inbox_task(_mailbox(DEFAULT_ACTOR_ID), task_id)
-    _json_dump(payload)
-    return 0 if result.success else 1
+    payload["inbox_task_file"] = _find_inbox_task(_mailbox(DEFAULT_ACTOR_ID), resolved_task_id)
+    return payload
 
 
-def _poll(args: argparse.Namespace) -> int:
-    actor_id = str(args.actor_id or DEFAULT_ACTOR_ID)
+def poll_request(task_id: str, *, actor_id: str = DEFAULT_ACTOR_ID) -> dict[str, Any]:
     mailbox = _mailbox(actor_id)
-    task_id = str(args.task_id or "").strip()
-    if not task_id:
+    clean_task_id = str(task_id or "").strip()
+    if not clean_task_id:
         raise RuntimeError("task_id is required")
-    results = mailbox.read_results(task_id)
+    results = mailbox.read_results(clean_task_id)
     latest = results[-1] if results else {}
     status = str(latest.get("status") or "").strip().lower()
-    inbox_task_file = _find_inbox_task(mailbox, task_id)
-    active_manifest = _harness_dir() / "run" / "browser-agent-session-active" / "chatgpt" / f"{task_id}.json"
+    inbox_task_file = _find_inbox_task(mailbox, clean_task_id)
+    active_manifest = _harness_dir() / "run" / "browser-agent-session-active" / "chatgpt" / f"{clean_task_id}.json"
     manifest = {}
     if active_manifest.exists():
         try:
@@ -121,9 +112,9 @@ def _poll(args: argparse.Namespace) -> int:
             status = "queued"
         else:
             status = "unknown"
-    payload = {
+    return {
         "ok": True,
-        "task_id": task_id,
+        "task_id": clean_task_id,
         "actor_id": actor_id,
         "status": status,
         "queued": bool(inbox_task_file),
@@ -133,49 +124,70 @@ def _poll(args: argparse.Namespace) -> int:
         "latest_result": latest,
         "result_count": len(results),
     }
+
+
+def collect_request(
+    task_id: str,
+    *,
+    actor_id: str = DEFAULT_ACTOR_ID,
+    timeout_seconds: float = 60.0,
+    poll_interval_seconds: float = 2.0,
+    terminal_statuses: set[str] | None = None,
+) -> tuple[int, dict[str, Any]]:
+    terminal_statuses = {str(item).lower() for item in (terminal_statuses or {"completed", "failed"})}
+    deadline = time.time() + max(1.0, float(timeout_seconds))
+    last_payload: dict[str, Any] = {}
+    while time.time() <= deadline:
+        payload = poll_request(task_id, actor_id=actor_id)
+        status = str(payload.get("status") or "").strip().lower()
+        last_payload = payload
+        if status in terminal_statuses:
+            return (1 if status == "failed" else 0), payload
+        time.sleep(max(0.2, float(poll_interval_seconds)))
+    last_payload["timeout"] = True
+    return 2, last_payload
+
+
+def _submit(args: argparse.Namespace) -> int:
+    prompt = _load_prompt(args)
+    if not prompt:
+        raise RuntimeError("prompt is required")
+    request = {
+        "prompt": prompt,
+        "expected_output": str(args.expected_output or "markdown"),
+        "model": str(args.model or "chatgpt-5.5"),
+        "reasoning_effort": str(args.reasoning_effort or "high"),
+        "project_name": str(args.project_name or "杂项"),
+        "action": "submit" if args.async_mode else "run",
+        "headless": not bool(args.headed),
+        "session_reuse": True,
+        "session_lineage": str(args.session_lineage or "").strip(),
+    }
+    payload = submit_request(
+        request,
+        logical_operator=str(args.logical_operator or "DeepResearchBrowser"),
+        objective=str(args.objective or prompt[:120]),
+        task_id=str(args.task_id or ""),
+    )
+    _json_dump(payload)
+    return 0 if payload.get("success") else 1
+
+
+def _poll(args: argparse.Namespace) -> int:
+    payload = poll_request(str(args.task_id or ""), actor_id=str(args.actor_id or DEFAULT_ACTOR_ID))
     _json_dump(payload)
     return 0
 
 
 def _collect(args: argparse.Namespace) -> int:
-    timeout_seconds = max(1.0, float(args.timeout_seconds))
-    poll_interval_seconds = max(0.2, float(args.poll_interval_seconds))
-    deadline = time.time() + timeout_seconds
-    last_payload: dict[str, Any] = {}
-    while time.time() <= deadline:
-        actor_id = str(args.actor_id or DEFAULT_ACTOR_ID)
-        mailbox = _mailbox(actor_id)
-        task_id = str(args.task_id or "").strip()
-        results = mailbox.read_results(task_id)
-        latest = results[-1] if results else {}
-        status = str(latest.get("status") or "").strip().lower()
-        active_manifest = _harness_dir() / "run" / "browser-agent-session-active" / "chatgpt" / f"{task_id}.json"
-        manifest = {}
-        if active_manifest.exists():
-            try:
-                data = json.loads(active_manifest.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
-                    manifest = data
-            except Exception:
-                manifest = {}
-        if not status and manifest:
-            status = str(manifest.get("status") or "running")
-        last_payload = {
-            "ok": True,
-            "task_id": task_id,
-            "actor_id": actor_id,
-            "status": status or "unknown",
-            "latest_result": latest,
-            "active_manifest": manifest,
-            "result_count": len(results),
-        }
-        if status in {"completed", "failed"}:
-            _json_dump(last_payload)
-            return 0 if status == "completed" else 1
-        time.sleep(poll_interval_seconds)
-    last_payload["timeout"] = True
-    _json_dump(last_payload)
-    return 2
+    rc, payload = collect_request(
+        str(args.task_id or ""),
+        actor_id=str(args.actor_id or DEFAULT_ACTOR_ID),
+        timeout_seconds=float(args.timeout_seconds),
+        poll_interval_seconds=float(args.poll_interval_seconds),
+    )
+    _json_dump(payload)
+    return rc
 
 
 def _supervisor_status_cmd(args: argparse.Namespace) -> int:

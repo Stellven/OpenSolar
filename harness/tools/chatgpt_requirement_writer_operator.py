@@ -16,6 +16,8 @@ from pathlib import Path
 
 from chatgpt_report_operator import (  # type: ignore
     DEFAULT_PROJECT_NAME,
+    _run_via_session_control,
+    _session_control_enabled,
     apply_profile_policy,
     run_wrapper_process,
     wrapper_cmd,
@@ -167,7 +169,7 @@ def main() -> int:
             return 2
     prompt = build_prompt(raw_requirement, expected=expected, purpose=purpose, source_tag=source_tag)
     cmd = wrapper_cmd()
-    if not cmd:
+    if not _session_control_enabled() and not cmd:
         print("chatgpt_requirement_writer_operator: Browser Agent ChatGPT wrapper not configured", file=sys.stderr)
         return 2
 
@@ -240,7 +242,10 @@ def main() -> int:
         )
 
     timeout = int(env.get("CHATGPT_REQUIREMENT_WRITER_TIMEOUT") or env.get("BROWSER_AGENT_CHATGPT_TIMEOUT") or "2400")
-    returncode, raw_output = run_wrapper_process(cmd, prompt=prompt, env=env, timeout=timeout)
+    if _session_control_enabled():
+        returncode, raw_output = _run_via_session_control(prompt=prompt, env=env, timeout=timeout, action=action)
+    else:
+        returncode, raw_output = run_wrapper_process(cmd, prompt=prompt, env=env, timeout=timeout)
     output = (raw_output or "").strip()
     if returncode != 0:
         print(output, file=sys.stderr)

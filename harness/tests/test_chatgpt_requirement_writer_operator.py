@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import subprocess
@@ -8,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "chatgpt_requirement_writer_operator.py"
 CONFIG_DIR = ROOT / "config"
+sys.path.append(str(ROOT / "tools"))
+import chatgpt_requirement_writer_operator as crw  # noqa: E402
 
 
 def run_operator(
@@ -46,6 +49,7 @@ def run_operator(
             "BROWSER_AGENT_CHATGPT_WRAPPER_CMD": f"{sys.executable} {wrapper}",
             "BROWSER_AGENT_REQUEST_DIR": str(tmp_path / "request"),
             "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED": "1",
+            "BROWSER_AGENT_SESSION_CONTROL_DISABLED": "1",
         }
     )
     if env_extra:
@@ -166,3 +170,29 @@ def test_requirement_writer_requires_mode_proof(tmp_path):
     )
     assert proc.returncode == 1
     assert "chatgpt-mode-state.json" in proc.stderr
+
+
+def test_requirement_writer_defaults_to_session_control(monkeypatch, tmp_path, capsys):
+    request_dir = tmp_path / "request"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    (request_dir / "chatgpt-mode-state.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    result_file = tmp_path / "result.json"
+    result_file.write_text(json.dumps({"text": "requirement session output"}, ensure_ascii=False), encoding="utf-8")
+    transport_calls = []
+
+    monkeypatch.delenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", raising=False)
+    monkeypatch.setenv("BROWSER_AGENT_REQUEST_DIR", str(request_dir))
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED", "1")
+    monkeypatch.setenv("SOLAR_RAW_REQUIREMENT", "用户原始需求：把需求写成章节化设计")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("上游改写稿"))
+    monkeypatch.setattr(
+        crw,
+        "_run_via_session_control",
+        lambda *, prompt, env, timeout, action: transport_calls.append((env.get("BROWSER_AGENT_SESSION_LINEAGE"), action, prompt)) or (0, "requirement session output"),
+    )
+
+    assert crw.main() == 0
+    assert transport_calls
+    assert transport_calls[0][1] == "run"
+    assert "GPTRequirementWriter 固化执行协议" in transport_calls[0][2]
+    assert capsys.readouterr().out.strip() == "requirement session output"
