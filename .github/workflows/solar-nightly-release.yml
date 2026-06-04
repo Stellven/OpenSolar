@@ -48,74 +48,8 @@ jobs:
 
       - name: Check release prerequisites
         run: |
-          {
-            echo "## Solar nightly release preflight"
-            echo
-            echo "| Check | Status | Detail |"
-            echo "|---|---:|---|"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          check() {
-            local label="$1"
-            local status="$2"
-            local detail="$3"
-            printf '| %s | %s | `%s` |\n' "$label" "$status" "$detail" >> "$GITHUB_STEP_SUMMARY"
-          }
-
-          bash -n release/build.sh
-          check "release/build.sh syntax" "ok" "bash -n"
-
-          bash -n release/publish.sh
-          check "release/publish.sh syntax" "ok" "bash -n"
-
-          test -f VERSION
-          version="$(tr -d '[:space:]' < VERSION)"
-          check "VERSION" "ok" "$version"
-
-          dry_run_output="$(bash release/build.sh --dry-run 2>&1 || true)"
-          echo "$dry_run_output"
-          echo "$dry_run_output" | grep -q "would create"
-          echo "$dry_run_output" | grep -q "Exclusions"
-          check "release dry-run" "ok" "would create + exclusions"
-
-          python - <<'PY'
-          import json
-          import subprocess
-          import sys
-          result = subprocess.run(
-              [sys.executable, "lib/plugin_loader.py", "validate", "--json"],
-              check=True,
-              capture_output=True,
-              text=True,
-          )
-          payload = json.loads(result.stdout)
-          assert payload.get("ok") is True, payload
-          PY
-          check "plugin manifest schema" "ok" "plugin_loader.py validate"
-
-          if command -v bun >/dev/null 2>&1; then
-            check "bun" "ok" "$(command -v bun)"
-          else
-            check "bun" "warn" "missing; full publish audit G8 will fail without bun"
-          fi
-
-          if [[ -n "${SOLAR_TVS_ROOT:-}" && -f "${SOLAR_TVS_ROOT}/index.ts" ]]; then
-            check "SOLAR_TVS_ROOT" "ok" "$SOLAR_TVS_ROOT"
-          else
-            check "SOLAR_TVS_ROOT" "warn" "missing or index.ts absent; full publish audit G8 will fail"
-          fi
-
-          if bash solar-harness.sh context inject --query "nightly release preflight" --format markdown >/tmp/solar-nightly-context.md 2>/tmp/solar-nightly-context.err; then
-            check "Solar context" "ok" "context inject"
-          else
-            check "Solar context" "warn" "$(tail -1 /tmp/solar-nightly-context.err 2>/dev/null || echo context inject failed)"
-          fi
-
-          if bash solar-harness.sh mirage exec ls /drive >/tmp/solar-nightly-drive.txt 2>/tmp/solar-nightly-drive.err; then
-            check "Mirage /drive" "ok" "reachable"
-          else
-            check "Mirage /drive" "warn" "$(tail -1 /tmp/solar-nightly-drive.err 2>/dev/null || echo /drive unavailable)"
-          fi
+          python lib/nightly_release_doctor.py --harness-dir "$HARNESS_DIR" --json
+          python lib/nightly_release_doctor.py --harness-dir "$HARNESS_DIR" --markdown >> "$GITHUB_STEP_SUMMARY"
 
   full-release-gate:
     name: Full release gate
@@ -148,10 +82,7 @@ jobs:
 
       - name: Require external release dependencies
         run: |
-          command -v bun >/dev/null
-          test -n "${SOLAR_TVS_ROOT:-}"
-          test -f "${SOLAR_TVS_ROOT}/index.ts"
-          bash solar-harness.sh mirage exec ls /drive >/dev/null
+          python lib/nightly_release_doctor.py --harness-dir "$HARNESS_DIR" --require-full --markdown
 
       - name: Run full S7 release tooling gate
         run: |

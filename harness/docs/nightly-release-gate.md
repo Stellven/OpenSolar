@@ -21,6 +21,22 @@ that should not block normal pull requests.
   daily schedule.
 - `SOLAR_TVS_ROOT`: path to a TVS checkout containing `index.ts`.
 
+## Release doctor
+
+Run the reusable doctor before enabling full mode on a new runner:
+
+```bash
+python harness/lib/nightly_release_doctor.py --harness-dir harness --markdown
+```
+
+Preflight mode exits successfully when lightweight release checks pass, even if
+full-only dependencies such as `SOLAR_TVS_ROOT`, Bun, or Mirage `/drive` are not
+ready. Full mode must require those dependencies:
+
+```bash
+python harness/lib/nightly_release_doctor.py --harness-dir harness --require-full --markdown
+```
+
 ## Full gate coverage
 
 Full mode runs `harness/tests/release/test-s7-release.sh`, including real release
