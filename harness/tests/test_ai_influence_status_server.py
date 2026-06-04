@@ -264,6 +264,12 @@ def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkey
     assert "学术/机构频道" in html
     assert "type-influencer" in html
     assert "type-academic" in html
+    assert "channel-tabs" in html
+    assert "data-channel-tab" in html
+    assert "data-channel-section hidden" in html
+    assert "showChannelSection" in html
+    assert "Channel Group" not in html
+    assert "频道分组" in html
 
     result = mod._ai_influence_youtube_videos_archive({"video_ids": ["abc123"]})
     assert result["ok"] is True
