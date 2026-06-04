@@ -154,3 +154,27 @@ def test_wrapper_reads_and_writes_active_session_broker():
     assert "brtc.read_active_session(control_ctx, require_lineage_match=False)" in source
     assert "brtc.activate_reusable_session(" in source
     assert "await asyncio.wait_for(browser.stop(), timeout=20)" in source
+
+
+def test_wrapper_dismisses_beta_overlay_before_mode_selection():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert "async def _click_mode_selector(" in source
+    assert "await _dismiss_overlays(page)" in source
+    assert "button:has-text('知道了')" in source
+    assert "await selector_btn.click(force=True)" in source
+
+
+def test_wrapper_force_exits_after_main():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert "def _force_wrapper_exit(code: int) -> NoReturn" in source
+    assert "_force_wrapper_exit(int(rc))" in source
+
+
+def test_wrapper_force_exits_after_successful_collection():
+    source = MODULE_PATH.read_text(encoding="utf-8")
+    assert "def _finalize_runtime_success(" in source
+    assert "browser-use-session://gemini/" in source
+    assert "_finalize_runtime_success(" in source
+    assert "forced_exit" in source
+    assert "print(latest_txt)" in source
+    assert "_force_wrapper_exit(0)" in source

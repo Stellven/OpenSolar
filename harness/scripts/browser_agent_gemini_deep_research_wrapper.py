@@ -23,6 +23,7 @@ import sys
 import time
 from urllib.parse import parse_qs, urlparse
 from pathlib import Path
+from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "lib"
@@ -252,6 +253,56 @@ def _quiet_browser_logs() -> None:
     ):
         logging.getLogger(name).setLevel(logging.ERROR)
 
+
+def _force_wrapper_exit(code: int) -> NoReturn:
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    finally:
+        os._exit(code)
+
+
+def _finalize_runtime_success(
+    *,
+    control_ctx: dict,
+    browser,
+    headless: bool,
+    reused_existing_session: bool,
+    runtime_staged_dir,
+    runtime_cleanup_dir,
+    request_dir: Path,
+    final_page_state: dict | None,
+    keep_session_alive: bool,
+) -> None:
+    if keep_session_alive:
+        brtc.activate_reusable_session(
+            control_ctx,
+            cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+            browser_session_ref=f"browser-use-session://gemini/{control_ctx['profile_id']}",
+            headless=headless,
+            attached=reused_existing_session,
+            details={
+                "request_dir": str(request_dir),
+                "staged_user_data_dir": str(runtime_staged_dir or ""),
+                "cleanup_dir": str(runtime_cleanup_dir or ""),
+            },
+        )
+    else:
+        brtc.clear_active_session(control_ctx)
+    brtc.finalize_runtime_contract(
+        control_ctx,
+        success=True,
+        error_text="",
+        page_state=final_page_state,
+        logged_in_state_verified=True,
+        details={
+            "provider": "browser_agent_gemini_deep_research",
+            "request_dir": str(request_dir),
+            "forced_exit": True,
+        },
+        requires_precise_page_control=True,
+    )
+
 def _request_dir() -> Path:
     out = Path(os.environ.get("BROWSER_AGENT_REQUEST_DIR") or f"/tmp/gemini-dr-wrapper-{int(time.time())}").expanduser()
     out.mkdir(parents=True, exist_ok=True)
@@ -452,6 +503,45 @@ async def _dismiss_overlays(page) -> None:
         await page.wait_for_timeout(200)
     except Exception:
         pass
+    for selector in (
+        "button[aria-label*='关闭']",
+        "button[aria-label*='close']",
+        "button:has-text('知道了')",
+        "button:has-text('我知道了')",
+        "button:has-text('关闭')",
+        "button:has-text('稍后')",
+        "button:has-text('Got it')",
+        "button:has-text('Close')",
+    ):
+        try:
+            btn = page.locator(selector).first
+            if await btn.count() and await btn.is_visible():
+                await btn.click(force=True)
+                await page.wait_for_timeout(250)
+        except Exception:
+            continue
+    try:
+        await page.locator("body").click(position={"x": 8, "y": 8}, force=True)
+        await page.wait_for_timeout(150)
+    except Exception:
+        pass
+
+
+async def _click_mode_selector(page, selector_btn) -> None:
+    await _dismiss_overlays(page)
+    try:
+        await selector_btn.click(force=True)
+        return
+    except Exception:
+        pass
+    try:
+        handle = await selector_btn.element_handle()
+        if handle is not None:
+            await page.evaluate("(el) => el.click()", handle)
+            return
+    except Exception:
+        pass
+    await selector_btn.click()
 
 
 async def _click_send_button(page) -> None:
@@ -710,7 +800,7 @@ async def _ensure_pro_model_with_extended_thinking(page) -> None:
     current_mode = await _read_current_mode_label(page)
     print(f"[Gemini Wrapper] Current mode label before selection: {current_mode or 'N/A'}", flush=True)
 
-    await selector_btn.click()
+    await _click_mode_selector(page, selector_btn)
     await page.wait_for_timeout(1000)
 
     # 1. Ensure a Pro-grade model is selected instead of Flash-Lite.
@@ -757,7 +847,7 @@ async def _ensure_pro_model_with_extended_thinking(page) -> None:
 
     # Re-open dropdown for thinking level configuration.
     try:
-        await selector_btn.click()
+        await _click_mode_selector(page, selector_btn)
         await page.wait_for_timeout(1000)
     except Exception:
         pass
@@ -779,7 +869,7 @@ async def _ensure_pro_model_with_extended_thinking(page) -> None:
             else:
                 print("[Gemini Wrapper] '扩展' (Extended) thinking level is already selected.", flush=True)
                 # Close dropdown by clicking selector button again
-                await selector_btn.click()
+                await _click_mode_selector(page, selector_btn)
                 await page.wait_for_timeout(500)
         else:
             print("[Gemini Wrapper] Warning: '扩展' thinking level item not found.", flush=True)
@@ -788,7 +878,7 @@ async def _ensure_pro_model_with_extended_thinking(page) -> None:
 
     # 3. Final gate: do not proceed if the top mode is still Flash-Lite.
     try:
-        await selector_btn.click()
+        await _click_mode_selector(page, selector_btn)
         await page.wait_for_timeout(500)
     except Exception:
         pass
@@ -1120,7 +1210,18 @@ async def _run(prompt: str) -> int:
             _assert_mode_evidence_strength(mode_evidence_strength, minimum=minimum_mode_evidence)
 
             print(latest_txt)
-            return 0
+            _finalize_runtime_success(
+                control_ctx=control_ctx,
+                browser=browser,
+                headless=headless,
+                reused_existing_session=reused_existing_session,
+                runtime_staged_dir=runtime_staged_dir,
+                runtime_cleanup_dir=runtime_cleanup_dir,
+                request_dir=request_dir,
+                final_page_state=final_page_state,
+                keep_session_alive=keep_session_alive,
+            )
+            _force_wrapper_exit(0)
     except Exception as exc:
         final_error_text = str(exc)
         raise
@@ -1170,9 +1271,9 @@ def main() -> int:
     prompt = _prompt_from_stdin()
     if not prompt:
         print("ERROR: Stdin prompt input is empty.", file=sys.stderr)
-        return 1
+        _force_wrapper_exit(1)
     try:
-        return asyncio.run(_run(prompt))
+        rc = asyncio.run(_run(prompt))
     except Exception as exc:
         request_dir = _request_dir()
         _write_json(request_dir / "wrapper-error.json", {
@@ -1181,7 +1282,8 @@ def main() -> int:
             "failed_at": bjrt._now(),
         })
         print(f"browser_agent_gemini_deep_research_wrapper failed: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
+        rc = 1
+    _force_wrapper_exit(int(rc))
 
 if __name__ == "__main__":
     raise SystemExit(main())

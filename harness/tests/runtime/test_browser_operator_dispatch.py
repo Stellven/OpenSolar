@@ -45,6 +45,13 @@ def _make_mock_configs(tmpdir):
                     {"actor_id": "mini-chatgpt-deep-research", "priority": 2, "condition": "always"}
                 ]
             },
+            "DeepResearchGemini": {
+                "operator_type": "DeepResearchGemini",
+                "candidates": [
+                    {"actor_id": "browser_agent_session", "priority": 1, "condition": "always"},
+                    {"actor_id": "mini-gemini-deep-research", "priority": 2, "condition": "always"}
+                ]
+            },
             "WebwrightPlaywright": {
                 "operator_type": "WebwrightPlaywright",
                 "candidates": [
@@ -97,6 +104,15 @@ def _make_mock_configs(tmpdir):
                 "host_id": "mini",
                 "operator_alias": "mini-chatgpt-deep-research",
                 "aliases": ["mini-chatgpt-deep-research"],
+                "role": "knowledge-extractor",
+                "capability_profile": {"browser_use": 4},
+                "policy": {}
+            },
+            "mini-gemini-deep-research": {
+                "actor_id": "mini-gemini-deep-research",
+                "host_id": "mini",
+                "operator_alias": "mini-gemini-deep-research",
+                "aliases": ["mini-gemini-deep-research"],
                 "role": "knowledge-extractor",
                 "capability_profile": {"browser_use": 4},
                 "policy": {}
@@ -183,6 +199,11 @@ def test_custom_routing():
         res7 = runtime.submit(env7, logical_operator="DeepResearchChatGPT")
         assert res7.success is True
         assert res7.lease.actor_id == "browser_agent_session"
+
+        env8 = {"objective": "Gemini browser report"}
+        res8 = runtime.submit(env8, logical_operator="DeepResearchGemini")
+        assert res8.success is True
+        assert res8.lease.actor_id == "browser_agent_session"
 
 
 def test_browser_agent_session_submit_ensures_supervisor(monkeypatch):

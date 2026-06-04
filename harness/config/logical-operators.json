@@ -1099,12 +1099,12 @@
       "operator_type": "DeepResearchGemini",
       "candidates": [
         {
-          "actor_id": "mini-gemini-deep-research",
+          "actor_id": "browser_agent_session",
           "priority": 1,
           "condition": "always"
         },
         {
-          "actor_id": "browser_agent_session",
+          "actor_id": "mini-gemini-deep-research",
           "priority": 2,
           "condition": "quota_ok"
         },
