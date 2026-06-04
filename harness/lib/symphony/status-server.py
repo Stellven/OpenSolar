@@ -2379,7 +2379,17 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
     payload = _ai_influence_youtube_videos_payload(period=period)
     sections = payload.get("channel_sections") or []
     section_html = []
-    for section in sections:
+    tab_html = []
+    for section_index, section in enumerate(sections):
+        section_key = str(section.get("channel_type") or "other")
+        section_id = f"channel-section-{section_index}-{re.sub(r'[^a-z0-9_-]+', '-', section_key.lower()).strip('-') or 'other'}"
+        section_label = str(section.get("label") or "其他频道")
+        active = section_index == 0
+        tab_html.append(
+            f"<button class='channel-tab {'active' if active else ''}' type='button' "
+            f"data-channel-tab='{html.escape(section_id)}' onclick=\"showChannelSection('{html.escape(section_id)}')\">"
+            f"<span>{html.escape(section_label)}</span><b>{int(section.get('count') or 0)}</b></button>"
+        )
         cards_html = []
         for group in section.get("channels") or []:
             month_blocks = []
@@ -2420,11 +2430,11 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
             </details>
             """)
         section_html.append(f"""
-        <section class="channel-section type-{html.escape(str(section.get("channel_type") or "other"))}">
+        <section id="{html.escape(section_id)}" class="channel-section type-{html.escape(section_key)} {'active' if active else ''}" data-channel-section{' ' if active else ' hidden'}>
           <div class="section-head">
             <div>
-              <div class="section-kicker">Channel Group</div>
-              <h2>{html.escape(str(section.get("label") or "其他频道"))}</h2>
+              <div class="section-kicker">频道分组</div>
+              <h2>{html.escape(section_label)}</h2>
             </div>
             <span>{int(section.get("count") or 0)} 个视频 · {len(section.get("channels") or [])} 个频道</span>
           </div>
@@ -2435,6 +2445,7 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
         # Backward compatibility for older cached payloads without channel_sections.
         for group in payload.get("groups") or []:
             section_html.append(f"<section class='channel-section'><h2>{html.escape(str(group.get('channel') or 'N/A'))}</h2></section>")
+    tabs = f"<div class='channel-tabs' role='tablist' aria-label='频道分组'>{''.join(tab_html)}</div>" if tab_html else ""
     body = "".join(section_html) if section_html else "<div class='empty'>当前没有可展示的 YouTube 视频。</div>"
     current_to = str(_ai_influence_mail_config_payload().get("to") or "")
     period_links = " ".join(
@@ -2459,7 +2470,13 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
 .btn.danger{{background:#fff0ed;color:var(--red);}}
 .pill.active{{background:#e6efe5;border-color:#bfd7c7;}}
 .status{{min-height:22px;color:var(--muted);font-size:13px;}}
+.channel-tabs{{position:sticky;top:76px;z-index:4;margin:18px 0 10px;padding:8px;border:1px solid var(--line);border-radius:999px;background:rgba(255,253,248,.94);backdrop-filter:blur(12px);display:flex;gap:8px;flex-wrap:wrap;box-shadow:0 10px 28px rgba(49,42,31,.06);}}
+.channel-tab{{border:1px solid transparent;border-radius:999px;background:transparent;color:var(--muted);padding:10px 14px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}}
+.channel-tab b{{display:inline-grid;place-items:center;min-width:26px;height:22px;padding:0 6px;border-radius:999px;background:#f1eadf;color:#806b42;font-size:12px;}}
+.channel-tab.active{{background:var(--green);color:#fff;border-color:var(--green);box-shadow:0 8px 20px rgba(23,63,54,.16);}}
+.channel-tab.active b{{background:rgba(255,255,255,.18);color:#fff;}}
 .channel-section{{margin:24px 0 30px;padding:18px;border:1px solid var(--line);border-radius:30px;background:linear-gradient(180deg,rgba(255,253,248,.88),rgba(248,242,229,.76));box-shadow:0 16px 46px rgba(49,42,31,.06);}}
+.channel-section[hidden]{{display:none;}}
 .channel-section.type-influencer{{background:linear-gradient(180deg,rgba(255,251,239,.94),rgba(246,237,214,.78));}}
 .channel-section.type-academic{{background:linear-gradient(180deg,rgba(248,253,250,.94),rgba(229,241,236,.78));}}
 .channel-section.type-industry{{background:linear-gradient(180deg,rgba(250,251,255,.94),rgba(234,239,247,.78));}}
@@ -2511,11 +2528,23 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
     <span class="pill">收件人：{html.escape(current_to or 'N/A')}</span>
     <span id="status" class="status"></span>
   </div>
+  {tabs}
   {body}
 </div>
 <script>
 function selectedIds() {{ return Array.from(document.querySelectorAll('.video-select:checked')).map(x => x.value).filter(Boolean); }}
 function setStatus(text, ok=true) {{ const el=document.getElementById('status'); el.textContent=text; el.style.color=ok?'#43614e':'#a33d2d'; }}
+function showChannelSection(id) {{
+  document.querySelectorAll('[data-channel-section]').forEach(section => {{
+    const active = section.id === id;
+    section.hidden = !active;
+    section.classList.toggle('active', active);
+  }});
+  document.querySelectorAll('[data-channel-tab]').forEach(tab => {{
+    tab.classList.toggle('active', tab.dataset.channelTab === id);
+  }});
+  setStatus('已切换频道分组');
+}}
 function selectAllVisible() {{ document.querySelectorAll('.video-select').forEach(x => x.checked=true); setStatus('已选择 '+selectedIds().length+' 个视频'); }}
 function clearSelection() {{ document.querySelectorAll('.video-select').forEach(x => x.checked=false); setStatus('已清空选择'); }}
 async function postJson(url, payload) {{
