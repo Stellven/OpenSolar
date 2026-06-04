@@ -15,6 +15,10 @@ from .source_gap import write_source_gap_handoff
 from .writing_loop import run_ready_sections
 
 
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -23,6 +27,49 @@ def _read_json(path: Path) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _prepare_deepdive_entry_contract(
+    root: Path,
+    brief: str,
+    *,
+    target_chars: int,
+    audience: str,
+    domain: str,
+) -> dict[str, Any]:
+    from research.deepdive_brief_expander import expand_deepdive_brief
+    from research.deepdive_requirement_compiler import (
+        DeepDiveCompileOptions,
+        compile_deepdive_brief,
+        validate_deepdive_contract,
+    )
+
+    expansion = expand_deepdive_brief(brief, root)
+    effective_brief = str(expansion.get("expanded_brief") or brief).strip()
+    contract = compile_deepdive_brief(
+        brief,
+        options=DeepDiveCompileOptions(
+            profile="deepdive",
+            source_channel="survey_finalize",
+            target_chars=target_chars,
+        ),
+        expansion=expansion,
+    )
+    validation = validate_deepdive_contract(contract)
+    contract_path = root / "deepdive_requirement_contract.json"
+    trace_path = root / "deepdive_traceability.json"
+    _write_json(contract_path, contract)
+    _write_json(trace_path, contract.get("traceability", {}))
+    return {
+        "ok": bool(validation.get("ok")),
+        "effective_brief": effective_brief,
+        "contract_path": str(contract_path),
+        "traceability_path": str(trace_path),
+        "expansion_path": expansion.get("output_json_path", ""),
+        "validation": validation,
+        "audience": audience,
+        "domain": domain,
+    }
 
 
 def finalize_survey_run(
@@ -66,11 +113,20 @@ def finalize_survey_run(
     steps: list[dict[str, Any]] = []
 
     ast = _read_json(root / "survey_report_ast.json")
+    deepdive_entry: dict[str, Any] = {}
     if not skip_plan or not ast:
         if not brief.strip():
             return {"ok": False, "reason": "brief_required_for_plan"}
-        plan = create_survey_plan(
+        deepdive_entry = _prepare_deepdive_entry_contract(
+            root,
             brief,
+            target_chars=target_chars,
+            audience=audience,
+            domain=domain,
+        )
+        planning_brief = deepdive_entry["effective_brief"]
+        plan = create_survey_plan(
+            planning_brief,
             target_chars=target_chars,
             audience=audience,
             domain=domain,
@@ -78,6 +134,7 @@ def finalize_survey_run(
         )
         files = write_survey_plan(plan, root)
         ast = plan["report_ast"]
+        steps.append({"step": "deepdive_entry", **deepdive_entry})
         steps.append({"step": "plan", "ok": True, "files": files, "section_count": len(ast.get("sections", []))})
     else:
         steps.append({"step": "plan", "ok": True, "skipped": True, "section_count": len(ast.get("sections", []))})
@@ -87,7 +144,7 @@ def finalize_survey_run(
     effective_min_claims = max(min_claims, section_count) if require_complete else min_claims
     source_gap = write_source_gap_handoff(
         root,
-        brief=brief or ast.get("title", ""),
+        brief=(deepdive_entry.get("effective_brief") or brief or ast.get("title", "")),
         min_sources=min_sources,
         min_evidence=effective_min_evidence,
         min_claims=effective_min_claims,

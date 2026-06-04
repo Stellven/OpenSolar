@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
+from pathlib import Path
 
 _HARNESS_LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "lib")
 if _HARNESS_LIB not in sys.path:
@@ -55,3 +58,37 @@ def test_planner_keeps_general_mode_for_non_conference_briefs():
     assert plan["planner_mode"] == "general_survey"
     assert plan["report_ast"]["title"] == "Professor-Grade Survey: 隐空间推理技术架构和演进方向"
     assert plan["report_ast"]["chapters"][1]["title"] == "历史脉络与技术演进"
+
+
+def test_survey_plan_cli_prepares_deepdive_entry_before_plan(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    script = root / "lib" / "research" / "cli.py"
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(root / "lib")
+    env["SOLAR_DEEPDIVE_BRIEF_EXPANDER_CMD"] = (
+        f"{sys.executable} -c \"print('## 扩展研究 brief\\\\n\\\\n为什么 Agent runtime 会成为基础设施？')\""
+    )
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "survey-plan",
+            "--brief",
+            "DeepDive: Agent runtime",
+            "--output-dir",
+            str(tmp_path),
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+
+    assert payload["deepdive_entry"]["ok"] is True
+    assert (tmp_path / "deepdive_brief_expansion.json").exists()
+    assert (tmp_path / "deepdive_requirement_contract.json").exists()
+    assert (tmp_path / "deepdive_traceability.json").exists()
+    ast = json.loads((tmp_path / "survey_report_ast.json").read_text())
+    assert "扩展研究 brief" in ast["title"]

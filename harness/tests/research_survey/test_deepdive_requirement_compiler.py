@@ -10,6 +10,7 @@ if _HARNESS_LIB not in sys.path:
     sys.path.insert(0, _HARNESS_LIB)
 
 from research import deepdive_requirement_compiler as compiler
+from research import deepdive_brief_expander as expander
 
 
 def test_generic_research_words_do_not_trigger_deepdive():
@@ -49,6 +50,35 @@ def test_compile_deepdive_brief_uses_separate_schema_and_nodes():
     assert all(item["mapped_nodes"] for item in contract["traceability"]["items"])
 
 
+def test_deepdive_brief_expander_writes_separate_artifacts(tmp_path):
+    payload = expander.expand_deepdive_brief("DeepDive: agent runtime 趋势是什么？", tmp_path)
+
+    assert payload["schema_version"] == expander.SCHEMA_VERSION
+    assert payload["operator"] == "DeepDiveBriefExpander"
+    assert payload["normal_requirement_pipeline_import_allowed"] is False
+    assert (tmp_path / "deepdive_brief_expansion.json").exists()
+    assert (tmp_path / "deepdive_brief_expansion.md").exists()
+    assert not (tmp_path / "raw_intent.json").exists()
+    assert not (tmp_path / "requirement_ir.json").exists()
+
+
+def test_deepdive_contract_records_expansion_without_normal_schema(tmp_path, monkeypatch):
+    monkeypatch.setenv(
+        "SOLAR_DEEPDIVE_BRIEF_EXPANDER_CMD",
+        f"{sys.executable} -c \"print('## 扩展研究 brief\\\\n\\\\n为什么 Agent runtime 会成为基础设施？')\"",
+    )
+    expansion = expander.expand_deepdive_brief("DeepDive: Agent runtime", tmp_path)
+    contract = compiler.compile_deepdive_brief("DeepDive: Agent runtime", expansion=expansion)
+    validation = compiler.validate_deepdive_contract(contract)
+
+    assert validation["ok"], validation
+    assert contract["brief"].startswith("## 扩展研究 brief")
+    assert contract["raw_brief"] == "DeepDive: Agent runtime"
+    assert contract["brief_expansion"]["operator"] == "DeepDiveBriefExpander"
+    assert contract["brief_expansion"]["normal_requirement_pipeline_import_allowed"] is False
+    assert contract["schema_version"] != "solar.requirement_ir.v1"
+
+
 def test_deepdive_compiler_has_no_runtime_import_from_pm_router():
     source = inspect.getsource(compiler)
 
@@ -73,4 +103,3 @@ def test_operator_mapping_documents_copy_policy():
     }
     assert all(item["copy_policy"] for item in mapping)
     assert all("boundary" in item for item in mapping)
-

@@ -25,6 +25,16 @@ HARNESS_DIR = Path(os.environ.get("SOLAR_HARNESS_DIR", Path(__file__).resolve().
 SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", Path.home() / ".solar" / "harness" / "sprints"))
 INTENTS_DIR = Path(os.environ.get("SOLAR_INTENT_GATEWAY_DIR", Path.home() / ".solar" / "harness" / "intents"))
 
+GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES = (
+    "先研究再实现",
+    "研究并落地",
+    "调研并实现",
+    "分析论文并实现",
+    "研究实现",
+    "需求改写",
+    "需求展开",
+)
+
 
 def now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -69,6 +79,84 @@ def extract_research_artifact(args: argparse.Namespace) -> dict[str, Any] | None
         "conversation_id": conversation_id,
         "source_url": source_url,
     }
+
+
+def requirement_writer_trigger(raw_text: str) -> dict[str, Any]:
+    text = raw_text.strip()
+    matched = [phrase for phrase in GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES if phrase in text]
+    explicit = bool(matched)
+    forced = os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_FORCE", "").strip().lower() in {"1", "true", "yes"}
+    disabled = os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_DISABLED", "").strip().lower() in {"1", "true", "yes"}
+    return {
+        "enabled": bool((explicit or forced) and not disabled),
+        "explicit": explicit,
+        "forced": forced,
+        "disabled": disabled,
+        "matched_phrases": matched,
+    }
+
+
+def _requirement_writer_cmd() -> list[str]:
+    raw = os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_CMD", "").strip()
+    if raw:
+        return ["bash", "-lc", raw]
+    return [sys.executable, str(HARNESS_DIR / "tools" / "chatgpt_requirement_writer_operator.py")]
+
+
+def invoke_requirement_writer(raw_intent: dict[str, Any], base: Path, *, trigger: dict[str, Any]) -> dict[str, Any]:
+    base.mkdir(parents=True, exist_ok=True)
+    prompt_path = base / "gpt_requirement_writer_prompt.json"
+    output_json_path = base / "gpt_requirement_writer_output.json"
+    output_md_path = base / "gpt_requirement_writer_output.md"
+    payload = {
+        "schema_version": "solar.gpt_requirement_writer.request.v1",
+        "intent_id": raw_intent.get("intent_id"),
+        "trigger": trigger,
+        "raw_intent": raw_intent,
+    }
+    write_json(prompt_path, payload)
+    env = dict(os.environ)
+    env["SOLAR_REQUIREMENT_WRITER_RAW_INTENT"] = str(base / "raw_intent.json")
+    env["SOLAR_REQUIREMENT_WRITER_PROMPT"] = str(prompt_path)
+    env["SOLAR_REQUIREMENT_WRITER_OUTPUT_JSON"] = str(output_json_path)
+    env["SOLAR_REQUIREMENT_WRITER_OUTPUT_MD"] = str(output_md_path)
+    try:
+        proc = subprocess.run(
+            _requirement_writer_cmd(),
+            input=json.dumps(payload, ensure_ascii=False),
+            text=True,
+            capture_output=True,
+            timeout=int(os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_TIMEOUT_SEC", "2400") or "2400"),
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        result = {
+            "schema_version": "solar.gpt_requirement_writer.result.v1",
+            "status": "timeout",
+            "attempted": True,
+            "trigger": trigger,
+            "prompt_path": str(prompt_path),
+        }
+        write_json(output_json_path, result)
+        return result
+    stdout = (proc.stdout or "").strip()
+    stderr_tail = (proc.stderr or "")[-2000:]
+    status = "ok" if proc.returncode == 0 and stdout else "failed"
+    result = {
+        "schema_version": "solar.gpt_requirement_writer.result.v1",
+        "status": status,
+        "attempted": True,
+        "exit_code": proc.returncode,
+        "trigger": trigger,
+        "prompt_path": str(prompt_path),
+        "output_md_path": str(output_md_path),
+        "stderr_tail": stderr_tail,
+    }
+    if stdout:
+        output_md_path.write_text(stdout.rstrip() + "\n", encoding="utf-8")
+        result["content"] = stdout
+    write_json(output_json_path, result)
+    return result
 
 
 def infer_mode(text: str) -> str:
@@ -176,7 +264,23 @@ def model_rewrite(raw_intent: dict[str, Any], prompt_path: Path) -> tuple[dict[s
     return fallback, meta
 
 
-def build_requirement_ir(intent_id: str, raw_intent: dict[str, Any], rewritten: dict[str, Any]) -> dict[str, Any]:
+def rewrite_from_requirement_writer(raw_text: str, enhancement: dict[str, Any]) -> dict[str, Any]:
+    content = str(enhancement.get("content") or "").strip()
+    rewritten = deterministic_rewrite(content or raw_text)
+    rewritten["rewrite_method"] = "gpt_requirement_writer"
+    rewritten["problem"] = raw_text.strip()
+    rewritten["objective"] = rewritten.get("objective") or rewritten.get("title") or "GPT-expanded requirement"
+    rewritten["outcome"] = "A requirement package compiled from GPTRequirementWriter-expanded design input."
+    return rewritten
+
+
+def build_requirement_ir(
+    intent_id: str,
+    raw_intent: dict[str, Any],
+    rewritten: dict[str, Any],
+    *,
+    enhancement: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     context = raw_intent.get("context", {}) if isinstance(raw_intent.get("context"), dict) else {}
     raw_block = raw_intent.get("raw", {}) if isinstance(raw_intent.get("raw"), dict) else {}
     research = raw_intent.get("research") if isinstance(raw_intent.get("research"), dict) else None
@@ -190,6 +294,13 @@ def build_requirement_ir(intent_id: str, raw_intent: dict[str, Any], rewritten: 
             "project_name": research.get("project_name", ""),
             "conversation_id": research.get("conversation_id", ""),
             "source_url": research.get("source_url", ""),
+        }
+    if enhancement and enhancement.get("status") == "ok":
+        source_inputs["enhanced_requirement"] = {
+            "schema_version": "solar.gpt_requirement_writer.enhanced_requirement.v1",
+            "operator": "GPTRequirementWriter",
+            "content": str(enhancement.get("content") or "").strip(),
+            "output_md_path": enhancement.get("output_md_path", ""),
         }
     return {
         "schema_version": "solar.requirement_ir.v1",
@@ -206,6 +317,11 @@ def build_requirement_ir(intent_id: str, raw_intent: dict[str, Any], rewritten: 
         "lane": rewritten.get("suggested_lane", "delivery"),
         "logical_operators": rewritten.get("suggested_logical_operators", []),
         "compiler_next": "pm_planner_task_graph",
+        "requirement_enhancement": {
+            "operator": "GPTRequirementWriter",
+            "status": enhancement.get("status") if enhancement else "not_triggered",
+            "attempted": bool(enhancement and enhancement.get("attempted")),
+        },
     }
 
 
@@ -253,11 +369,23 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
     if research:
         raw_intent["research"] = research
     base = INTENTS_DIR / intent_id
+    enhancement_trigger = requirement_writer_trigger(raw_text)
+    raw_intent["routing_hints"]["requirement_enhancement"] = enhancement_trigger
+    write_json(base / "raw_intent.json", raw_intent)
+
+    enhancement: dict[str, Any] | None = None
+    if enhancement_trigger.get("enabled"):
+        enhancement = invoke_requirement_writer(raw_intent, base, trigger=enhancement_trigger)
+        if enhancement.get("status") != "ok" and os.environ.get("SOLAR_GPT_REQUIREMENT_WRITER_REQUIRED", "").strip().lower() in {"1", "true", "yes"}:
+            raise SystemExit("GPTRequirementWriter failed and SOLAR_GPT_REQUIREMENT_WRITER_REQUIRED is enabled")
     model_result, rewrite_meta = model_rewrite(raw_intent, base / "rewrite_prompt.json")
-    rewritten = model_result or deterministic_rewrite(raw_text)
+    if enhancement and enhancement.get("status") == "ok":
+        rewritten = rewrite_from_requirement_writer(raw_text, enhancement)
+    else:
+        rewritten = model_result or deterministic_rewrite(raw_text)
     rewritten["intent_id"] = intent_id
     rewritten["model_rewrite"] = rewrite_meta
-    requirement_ir = build_requirement_ir(intent_id, raw_intent, rewritten)
+    requirement_ir = build_requirement_ir(intent_id, raw_intent, rewritten, enhancement=enhancement)
     trace = {
         "schema_version": "solar.requirement_trace.v1",
         "intent_id": intent_id,
@@ -269,11 +397,16 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
         },
         "stages": [
             {"stage": "raw_intent_capture", "status": "ok"},
+            {
+                "stage": "requirement_enhancement",
+                "status": (enhancement or {}).get("status", "not_triggered"),
+                "operator": "GPTRequirementWriter",
+                "trigger": enhancement_trigger,
+            },
             {"stage": "intent_rewrite", "status": "ok", "method": rewritten.get("rewrite_method")},
             {"stage": "requirement_ir_compile", "status": "ok"},
         ],
     }
-    write_json(base / "raw_intent.json", raw_intent)
     write_json(base / "rewritten_intent.json", rewritten)
     write_json(base / "requirement_ir.json", requirement_ir)
     write_json(base / "requirement_trace.json", trace)
@@ -289,6 +422,7 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
         "rewritten_intent": str(base / "rewritten_intent.json"),
         "requirement_ir": str(base / "requirement_ir.json"),
         "requirement_trace": str(base / "requirement_trace.json"),
+        "requirement_enhancement": requirement_ir.get("requirement_enhancement"),
     }
 
 
@@ -302,11 +436,22 @@ def bind_intent_artifacts(intent_id: str, sprint_id: str) -> dict[str, Any]:
         "requirement_ir.json": SPRINTS_DIR / f"{sprint_id}.requirement_ir.json",
         "requirement_trace.json": SPRINTS_DIR / f"{sprint_id}.requirement_trace.json",
     }
+    optional_files = {
+        "gpt_requirement_writer_output.json": SPRINTS_DIR / f"{sprint_id}.gpt_requirement_writer_output.json",
+        "gpt_requirement_writer_output.md": SPRINTS_DIR / f"{sprint_id}.gpt_requirement_writer_output.md",
+    }
     for name, dst in mapping.items():
         payload = json.loads((base / name).read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             payload["sprint_id"] = sprint_id
         write_json(dst, payload)
+    for name, dst in optional_files.items():
+        src = base / name
+        if not src.exists():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        mapping[name] = dst
     manifest = {"ok": True, "intent_id": intent_id, "sprint_id": sprint_id, "artifacts": {k: str(v) for k, v in mapping.items()}}
     write_json(base / "binding.json", manifest)
     return manifest

@@ -3110,12 +3110,67 @@ def _ensure_blueprint_and_contracts(output_dir: str | Path) -> None:
         contract_path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _prepare_deepdive_entry_contract(
+    output_dir: str | Path,
+    brief: str,
+    *,
+    target_chars: int,
+    audience: str,
+    domain: str,
+    run_id: str | None = None,
+) -> dict[str, Any]:
+    from research.deepdive_brief_expander import expand_deepdive_brief
+    from research.deepdive_requirement_compiler import (
+        DeepDiveCompileOptions,
+        compile_deepdive_brief,
+        validate_deepdive_contract,
+    )
+
+    root = Path(output_dir).expanduser()
+    root.mkdir(parents=True, exist_ok=True)
+    expansion = expand_deepdive_brief(brief, root)
+    effective_brief = str(expansion.get("expanded_brief") or brief).strip()
+    contract = compile_deepdive_brief(
+        brief,
+        options=DeepDiveCompileOptions(
+            profile="deepdive",
+            source_channel="survey",
+            target_chars=target_chars,
+        ),
+        expansion=expansion,
+    )
+    validation = validate_deepdive_contract(contract)
+    contract_path = root / "deepdive_requirement_contract.json"
+    trace_path = root / "deepdive_traceability.json"
+    contract_path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    trace_path.write_text(json.dumps(contract.get("traceability", {}), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {
+        "ok": bool(validation.get("ok")),
+        "effective_brief": effective_brief,
+        "contract_path": str(contract_path),
+        "traceability_path": str(trace_path),
+        "expansion_path": expansion.get("output_json_path", ""),
+        "validation": validation,
+        "run_id": run_id or "",
+        "audience": audience,
+        "domain": domain,
+    }
+
+
 def cmd_survey_plan(args: argparse.Namespace) -> int:
     """Plan a professor-grade survey without embedding survey logic in cli.py."""
     from research.survey.planner import create_survey_plan, write_survey_plan
 
-    plan = create_survey_plan(
+    deepdive_entry = _prepare_deepdive_entry_contract(
+        args.output_dir,
         args.brief,
+        target_chars=args.target_chars,
+        audience=args.audience,
+        domain=args.domain,
+        run_id=args.run_id or None,
+    )
+    plan = create_survey_plan(
+        deepdive_entry["effective_brief"],
         target_chars=args.target_chars,
         audience=args.audience,
         domain=args.domain,
@@ -3129,6 +3184,7 @@ def cmd_survey_plan(args: argparse.Namespace) -> int:
         "chapter_count": len(plan["report_ast"]["chapters"]),
         "section_count": len(plan["report_ast"]["sections"]),
         "files": files,
+        "deepdive_entry": deepdive_entry,
     }
     if emit_json(args, payload):
         return 0

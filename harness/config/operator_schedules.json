@@ -44,6 +44,13 @@
       "type": "manual",
       "cron": null
     },
+    "chatgpt_requirement_writer": {
+      "line": "chatgpt_requirement_writer",
+      "primary": "tools/chatgpt_requirement_writer_operator.py",
+      "source_schedule": "on_demand",
+      "type": "manual",
+      "cron": null
+    },
     "technology_diagram": {
       "line": "technology_diagram",
       "primary": "tools/technology_diagram_painter_operator.py",
