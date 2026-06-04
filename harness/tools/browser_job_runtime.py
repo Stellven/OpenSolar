@@ -438,6 +438,7 @@ async def main() -> None:
         allowed_domains=payload["allowed_domains"] or None,
         user_data_dir=payload["user_data_dir"] or None,
         profile_directory=payload["profile_directory"],
+        channel="chrome",
     )
     browser = BrowserSession(browser_profile=profile)
     await browser.start()

@@ -173,6 +173,13 @@ def test_chatgpt_wrapper_defaults_to_chrome_channel(monkeypatch):
     assert ns["_browser_channel"]() == "chrome"
 
 
+def test_chatgpt_wrapper_ignores_non_chrome_channel_override(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_BROWSER_CHANNEL", "firefox")
+    monkeypatch.setenv("BROWSER_AGENT_BROWSER_CHANNEL", "webkit")
+    assert ns["_browser_channel"]() == "chrome"
+
+
 def test_cloudflare_challenge_grace_defaults_and_expires(monkeypatch):
     ns = _load_namespace()
     monkeypatch.delenv("BROWSER_AGENT_CHATGPT_CHALLENGE_GRACE_SECONDS", raising=False)

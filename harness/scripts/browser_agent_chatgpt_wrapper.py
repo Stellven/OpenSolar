@@ -107,12 +107,7 @@ def _headed_run_allowed() -> bool:
 
 
 def _browser_channel() -> str:
-    value = str(
-        os.environ.get("BROWSER_AGENT_CHATGPT_BROWSER_CHANNEL")
-        or os.environ.get("BROWSER_AGENT_BROWSER_CHANNEL")
-        or DEFAULT_BROWSER_CHANNEL
-    ).strip().lower()
-    return value or DEFAULT_BROWSER_CHANNEL
+    return DEFAULT_BROWSER_CHANNEL
 
 
 def _system_chrome_version() -> str:

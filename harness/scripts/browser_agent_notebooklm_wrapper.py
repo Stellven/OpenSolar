@@ -717,6 +717,7 @@ async def _run(payload: dict) -> int:
             user_data_dir=staged_dir,
             profile_directory=profile_directory,
             allowed_domains=DEFAULT_ALLOWED_DOMAINS,
+            channel="chrome",
         )
     )
     try:
