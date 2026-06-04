@@ -84,3 +84,44 @@ def test_submit_chatgpt_operator_request_writes_stdout(tmp_path):
     payload = json.loads(result["output"])
     assert len(payload["body"]) == 1200
     assert (tmp_path / "request" / "stdout.txt").exists()
+
+
+def test_submit_chatgpt_operator_request_uses_explicit_submit_poll_collect(monkeypatch, tmp_path):
+    operator = tmp_path / "fake_operator.py"
+    operator.write_text(
+        "import json, os\n"
+        "from pathlib import Path\n"
+        "request_dir = Path(os.environ['BROWSER_AGENT_REQUEST_DIR'])\n"
+        "request_dir.mkdir(parents=True, exist_ok=True)\n"
+        "action = os.environ.get('CHATGPT_REPORT_ACTION', 'run')\n"
+        "if action == 'submit':\n"
+        "    (request_dir / 'submitted-run.json').write_text(json.dumps({'task_id': 'task-123'}, ensure_ascii=False), encoding='utf-8')\n"
+        "    print(json.dumps({'status': 'submitted', 'task_id': 'task-123'}, ensure_ascii=False))\n"
+        "elif action == 'collect':\n"
+        "    print(json.dumps({'body': 'y' * 1200}, ensure_ascii=False))\n"
+        "else:\n"
+        "    print(json.dumps({'status': action}, ensure_ascii=False))\n",
+        encoding="utf-8",
+    )
+    statuses = iter(
+        [
+            {"status": "running", "latest_result": {}},
+            {"status": "completed", "latest_result": {}},
+        ]
+    )
+    monkeypatch.setattr("browser_operator_submit.poll_request", lambda task_id: next(statuses))
+    result = submit_chatgpt_operator_request(
+        cmd=[sys.executable, str(operator)],
+        prompt="demo prompt",
+        timeout=30,
+        env={"BROWSER_AGENT_REQUEST_DIR": str(tmp_path / "request")},
+        request_dir=tmp_path / "request",
+        expected="markdown",
+        use_session_control=True,
+        poll_interval_seconds=0.01,
+    )
+    assert result["task_id"] == "task-123"
+    payload = json.loads(result["output"])
+    assert len(payload["body"]) == 1200
+    assert (tmp_path / "request" / "submit-stdout.txt").exists()
+    assert (tmp_path / "request" / "poll-status.json").exists()

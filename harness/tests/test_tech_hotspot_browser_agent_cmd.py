@@ -61,6 +61,7 @@ def test_call_browser_agent_chatgpt_text_prefers_process_env_over_config(monkeyp
     monkeypatch.setenv("BROWSER_AGENT_PROFILE_DIRECTORY", "Default")
     monkeypatch.setenv("BROWSER_AGENT_HEADLESS", "true")
     monkeypatch.setenv("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL", "browser-agent@example.com")
+    monkeypatch.setenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", "1")
     ns = _load_namespace()
     result = ns["call_browser_agent_chatgpt_text"](
         "验证 env override",
@@ -97,6 +98,7 @@ def test_call_browser_agent_chatgpt_text_derives_report_level_session_lineage(mo
         encoding="utf-8",
     )
     monkeypatch.setenv("TECH_HOTSPOT_BROWSER_CHATGPT_CMD", f"{sys.executable} {wrapper}")
+    monkeypatch.setenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", "1")
     ns = _load_namespace()
     result = ns["call_browser_agent_chatgpt_text"](
         "验证章节级 lineage 归并到 report 级",

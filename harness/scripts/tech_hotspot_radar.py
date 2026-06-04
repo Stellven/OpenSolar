@@ -14078,12 +14078,19 @@ def call_browser_agent_chatgpt_text(prompt: str, config: dict[str, Any], *,
         env=env,
         request_dir=req_dir,
         expected=expected,
+        use_session_control=not bool(
+            _env_override_bool(
+                "BROWSER_AGENT_SESSION_CONTROL_DISABLED",
+                "TECH_HOTSPOT_BROWSER_SESSION_CONTROL_DISABLED",
+            )
+        ),
     )
     output = str(submitted["output"] or "")
     meta.update({
         "status": "completed",
         "latency_ms": int(submitted["latency_ms"]),
         "output_chars": len(output),
+        "session_task_id": str(submitted.get("task_id") or ""),
     })
     (req_dir / "request.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {

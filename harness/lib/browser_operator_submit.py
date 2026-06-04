@@ -6,12 +6,17 @@ import shlex
 import subprocess
 import sys
 import time
+import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CHATGPT_OPERATOR = ROOT / "tools" / "chatgpt_report_operator.py"
+if str(ROOT / "tools") not in sys.path:
+    sys.path.append(str(ROOT / "tools"))
+
+from browser_agent_session_control import poll_request  # type: ignore  # noqa: E402
 
 
 def strip_browser_agent_noise(text: str) -> str:
@@ -179,27 +184,109 @@ def submit_chatgpt_operator_request(
     env: Mapping[str, str],
     request_dir: str | Path,
     expected: str,
+    use_session_control: bool = False,
+    poll_interval_seconds: float = 1.0,
 ) -> dict[str, Any]:
     request_path = Path(request_dir).expanduser()
     request_path.mkdir(parents=True, exist_ok=True)
     started = time.time()
-    run = subprocess.run(
+    if not use_session_control:
+        run = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            env=dict(env),
+        )
+        output = strip_browser_agent_noise(run.stdout or "")
+        (request_path / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
+        if run.returncode != 0:
+            raise RuntimeError(f"browser_agent_chatgpt failed rc={run.returncode}: {output[-2000:]}")
+        min_chars = 500 if expected == "json" else 1000
+        if len(output) < min_chars:
+            raise ValueError(f"browser_agent_chatgpt output too short: {len(output)} chars")
+        return {
+            "output": output,
+            "latency_ms": int((time.time() - started) * 1000),
+        }
+
+    submit_env = dict(env)
+    submit_env["CHATGPT_REPORT_ACTION"] = "submit"
+    submit_run = subprocess.run(
         cmd,
         input=prompt,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        timeout=timeout,
-        env=dict(env),
+        timeout=min(timeout, 120),
+        env=submit_env,
     )
-    output = strip_browser_agent_noise(run.stdout or "")
+    submit_output = strip_browser_agent_noise(submit_run.stdout or "")
+    (request_path / "submit-stdout.txt").write_text(submit_output + ("\n" if submit_output else ""), encoding="utf-8")
+    if submit_run.returncode != 0:
+        raise RuntimeError(f"browser_agent_chatgpt submit failed rc={submit_run.returncode}: {submit_output[-2000:]}")
+
+    submitted_path = request_path / "submitted-run.json"
+    task_id = ""
+    if submitted_path.exists():
+        try:
+            submitted_payload = json.loads(submitted_path.read_text(encoding="utf-8"))
+            if isinstance(submitted_payload, dict):
+                task_id = str(submitted_payload.get("task_id") or "").strip()
+        except Exception:
+            task_id = ""
+    if not task_id:
+        try:
+            parsed_submit = json.loads(submit_output)
+            if isinstance(parsed_submit, dict):
+                task_id = str(parsed_submit.get("task_id") or "").strip()
+        except Exception:
+            task_id = ""
+    if not task_id:
+        raise RuntimeError("browser_agent_chatgpt submit did not provide task_id")
+
+    poll_deadline = time.time() + max(1, timeout)
+    while time.time() <= poll_deadline:
+        status_payload = poll_request(task_id)
+        status = str(status_payload.get("status") or "").strip().lower()
+        (request_path / "poll-status.json").write_text(
+            json.dumps(status_payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        if status == "failed":
+            latest = status_payload.get("latest_result") if isinstance(status_payload.get("latest_result"), dict) else {}
+            raise RuntimeError(
+                "browser_agent_chatgpt session task failed: "
+                + str((latest or {}).get("error") or status_payload)
+            )
+        if status == "completed":
+            break
+        time.sleep(max(0.2, float(poll_interval_seconds)))
+    else:
+        raise TimeoutError(f"browser_agent_chatgpt session task timed out waiting for completion: task_id={task_id}")
+
+    collect_env = dict(env)
+    collect_env["CHATGPT_REPORT_ACTION"] = "collect"
+    collect_run = subprocess.run(
+        cmd,
+        input="",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=min(timeout, 300),
+        env=collect_env,
+    )
+    output = strip_browser_agent_noise(collect_run.stdout or "")
     (request_path / "stdout.txt").write_text(output + ("\n" if output else ""), encoding="utf-8")
-    if run.returncode != 0:
-        raise RuntimeError(f"browser_agent_chatgpt failed rc={run.returncode}: {output[-2000:]}")
+    if collect_run.returncode != 0:
+        raise RuntimeError(f"browser_agent_chatgpt collect failed rc={collect_run.returncode}: {output[-2000:]}")
     min_chars = 500 if expected == "json" else 1000
     if len(output) < min_chars:
         raise ValueError(f"browser_agent_chatgpt output too short: {len(output)} chars")
     return {
         "output": output,
         "latency_ms": int((time.time() - started) * 1000),
+        "task_id": task_id,
     }
