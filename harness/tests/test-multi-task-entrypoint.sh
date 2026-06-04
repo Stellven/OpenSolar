@@ -102,6 +102,13 @@ exit 0
 EOF
 chmod +x "$TMP/bin/gemini"
 
+cat > "$TMP/bin/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "$@" >> "$HARNESS_DIR/claude-calls.log"
+exit 0
+EOF
+chmod +x "$TMP/bin/claude"
+
 graph="$TMP/sprints/sprint-20260520-multi-task.task_graph.json"
 cat > "$graph" <<'JSON'
 {

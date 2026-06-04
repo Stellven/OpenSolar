@@ -33,9 +33,13 @@ def test_browser_agent_chatgpt_cmd_prefers_explicit_env(monkeypatch):
     assert cmd == ["python3", "/tmp/custom-wrapper.py"]
 
 
-def test_browser_agent_notebooklm_cmd_falls_back_to_bundled_wrapper(monkeypatch):
+def test_browser_agent_notebooklm_cmd_falls_back_to_bundled_wrapper(monkeypatch, tmp_path):
     monkeypatch.delenv("TECH_HOTSPOT_BROWSER_NOTEBOOKLM_CMD", raising=False)
     monkeypatch.delenv("BROWSER_AGENT_NOTEBOOKLM_CMD", raising=False)
+    fake_python = tmp_path / ".claude/mcp-servers/browser-use/.venv/bin/python"
+    fake_python.parent.mkdir(parents=True)
+    fake_python.write_text("#!/usr/bin/env python\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(tmp_path))
     ns = _load_namespace()
     cmd = ns["browser_agent_notebooklm_cmd"]({})
     assert cmd, "expected bundled wrapper fallback command"
