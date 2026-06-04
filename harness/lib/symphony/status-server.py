@@ -1891,6 +1891,56 @@ def _youtube_video_summary(row: dict) -> str:
     return "暂无摘要；可先打开字幕或执行深度分析生成。"
 
 
+def _contains_cjk(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text or ""))
+
+
+def _clip_public_text(value: str, limit: int = 180) -> str:
+    value = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not value:
+        return ""
+    return value[:limit] + ("…" if len(value) > limit else "")
+
+
+def _youtube_video_summary_zh(raw_summary: str, *, title: str, channel: str, tags: list[str]) -> str:
+    summary = re.sub(r"\s+", " ", str(raw_summary or "")).strip()
+    summary = re.sub(r"\[semantic_summary_missing\]", "", summary, flags=re.I).strip()
+    if summary and _contains_cjk(summary):
+        return _clip_public_text(summary, 260)
+    title_text = _clip_public_text(title, 90)
+    tag_text = "、".join(str(tag) for tag in tags[:4]) or "AI 技术动态"
+    lower = summary.lower()
+    focus_bits: list[str] = []
+    phrase_map = [
+        ("search infrastructure", "AI 时代的搜索基础设施"),
+        ("search engine", "搜索引擎"),
+        ("ai agents", "AI Agent"),
+        ("agent workflows", "Agent 工作流"),
+        ("coding agents", "代码 Agent"),
+        ("data infrastructure", "数据基础设施"),
+        ("enterprise software", "企业软件"),
+        ("voice ai", "语音 AI"),
+        ("enterprise workflows", "企业工作流"),
+        ("robotics", "机器人"),
+        ("data center", "数据中心"),
+        ("open source", "开源生态"),
+        ("model", "模型能力"),
+        ("benchmark", "评测基准"),
+        ("context", "上下文组织"),
+        ("retrieval", "检索增强"),
+        ("automation", "自动化"),
+    ]
+    for needle, label in phrase_map:
+        if needle in lower and label not in focus_bits:
+            focus_bits.append(label)
+    if not focus_bits:
+        focus_bits = [tag_text]
+    people = "片中以访谈或演讲形式展开，" if re.search(r"\b(speaks with|talks with|interviews|conversation)\b", summary, re.I) else ""
+    if summary:
+        return f"本视频来自 {channel}，主题是「{title_text}」。{people}内容主要围绕{'、'.join(focus_bits[:4])}展开，适合用来观察相关技术路线、产品叙事和产业采用节奏。"
+    return f"本视频来自 {channel}，主题是「{title_text}」。当前可用材料显示，它主要关联{tag_text}，适合进入视频库观察；如需完整观点归纳，可选中后执行深度分析。"
+
+
 def _youtube_video_date_parts(published_at: str) -> tuple[str, str, str]:
     value = str(published_at or "").strip()
     date_part = value[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", value) else "N/A"
@@ -1962,6 +2012,9 @@ def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, incl
         channel = str(row.get("channel_name") or "N/A").strip()
         url = str(row.get("video_url") or "").strip() or f"https://www.youtube.com/watch?v={urllib.parse.quote(video_id)}"
         duration_sec = float(row.get("duration_seconds") or 0.0)
+        tags = _youtube_video_tags(str(row.get("tags") or ""), title, description)
+        raw_summary = _youtube_video_summary(row)
+        summary_zh = _youtube_video_summary_zh(raw_summary, title=title, channel=channel, tags=tags)
         items.append({
             "video_id": video_id,
             "title": title,
@@ -1972,8 +2025,10 @@ def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, incl
             "month": month,
             "duration_min": round(duration_sec / 60.0, 1) if duration_sec else 0.0,
             "thumbnail": _youtube_video_thumbnail(video_id, str(row.get("thumbnail_url") or "")),
-            "tags": _youtube_video_tags(str(row.get("tags") or ""), title, description),
-            "summary": _youtube_video_summary(row),
+            "tags": tags,
+            "summary": summary_zh,
+            "summary_zh": summary_zh,
+            "summary_raw": raw_summary,
             "quality_tier": str(row.get("quality_tier") or "N/A"),
             "transcript_source": str(row.get("transcript_source") or "N/A"),
             "transcript_status": str(row.get("transcript_status") or "N/A"),
@@ -2253,8 +2308,8 @@ def _ai_influence_youtube_videos_html(period: str = "all") -> str:
             </details>
             """)
         cards_html.append(f"""
-        <details class="channel" open>
-          <summary>{html.escape(str(group.get("channel") or "N/A"))} <span>{int(group.get("count") or 0)} 个视频</span></summary>
+        <details class="channel">
+          <summary><span class="summary-left"><span class="chevron">›</span>{html.escape(str(group.get("channel") or "N/A"))}</span><span class="summary-right">{int(group.get("count") or 0)} 个视频 · 点击展开/收起</span></summary>
           {''.join(month_blocks)}
         </details>
         """)
@@ -2283,7 +2338,12 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
 .pill.active{{background:#e6efe5;border-color:#bfd7c7;}}
 .status{{min-height:22px;color:var(--muted);font-size:13px;}}
 .channel,.month{{margin:16px 0;border:1px solid var(--line);border-radius:24px;background:rgba(255,253,248,.82);overflow:hidden;}}
-.channel>summary,.month>summary{{cursor:pointer;list-style:none;padding:18px 20px;font-size:20px;font-weight:900;color:var(--green);display:flex;justify-content:space-between;gap:12px;}}
+.channel>summary,.month>summary{{cursor:pointer;list-style:none;padding:18px 20px;font-size:20px;font-weight:900;color:var(--green);display:flex;justify-content:space-between;gap:12px;align-items:center;user-select:none;}}
+.channel>summary::-webkit-details-marker,.month>summary::-webkit-details-marker{{display:none;}}
+.summary-left{{display:inline-flex;align-items:center;gap:10px;min-width:0;}}
+.summary-right{{color:var(--muted);font-size:13px;font-weight:800;white-space:nowrap;}}
+.chevron{{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:999px;background:#e9f1e4;color:var(--green);font-size:22px;line-height:1;transition:transform .16s ease;}}
+.channel[open] .chevron{{transform:rotate(90deg);}}
 .month>summary{{font-size:16px;background:#fbf7ef;}}
 .date-block{{padding:0 18px 18px;}}
 .date-block h4{{margin:16px 0 10px;color:#5c674f;font-size:15px;}}
@@ -2295,7 +2355,7 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
 .video-meta{{font-size:12px;color:var(--gold);font-weight:800;margin-bottom:4px;}}
 .video-body h3{{margin:0 0 7px;font-size:17px;line-height:1.32;color:var(--green);}}
 .video-body h3 a{{color:inherit;text-decoration:none;}}
-.video-body p{{margin:8px 0 0;color:#4f5b50;line-height:1.65;font-size:13px;}}
+.video-body p{{margin:8px 0 0;color:#4f5b50;line-height:1.78;font-size:15px;}}
 .tag{{display:inline-block;margin:0 6px 6px 0;padding:4px 9px;border-radius:999px;background:#eaf2e5;color:#275545;font-size:12px;font-weight:800;}}
 .tag.muted{{background:#f4efe5;color:#887b68;}}
 .empty{{padding:28px;border:1px dashed var(--line);border-radius:22px;background:#fffdf8;color:var(--muted);}}
