@@ -41,6 +41,7 @@ def test_run_request_writes_result(monkeypatch, tmp_path, capsys):
         (request_dir / "stdout.txt").write_text("final research report\n", encoding="utf-8")
         return {"output": "final research report", "latency_ms": 1}
 
+    monkeypatch.setenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", "1")
     monkeypatch.setattr(gdro, "_wrapper_cmd", lambda: ["fake-wrapper"])
     monkeypatch.setattr(gdro, "submit_gemini_operator_request", _fake_submit)
     
@@ -78,6 +79,7 @@ def test_run_request_retries_on_failure(monkeypatch, tmp_path):
         (request_dir / "stdout.txt").write_text("report\n", encoding="utf-8")
         return {"output": "report", "latency_ms": 1}
 
+    monkeypatch.setenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", "1")
     monkeypatch.setattr(gdro, "_wrapper_cmd", lambda: ["fake-wrapper"])
     monkeypatch.setattr(gdro, "submit_gemini_operator_request", _fake_submit)
     monkeypatch.setattr(gdro.time, "sleep", lambda sec: None)
@@ -152,3 +154,92 @@ def test_main_applies_failure_flow_control(monkeypatch, tmp_path):
     assert len(failure_calls) == 1
     assert failure_calls[0][0] == "mini-gemini-deep-research"
     assert "Something went wrong" in failure_calls[0][1]
+
+
+def test_run_request_via_session_control(monkeypatch, tmp_path, capsys):
+    request_dir = tmp_path / "gemini-deep-research-request"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    result_file = tmp_path / "gemini-deep-research-result.json"
+    result_file.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "project_name": "杂项",
+                "expected_output": "markdown",
+                "request_dir": str(request_dir),
+                "text": "session control research text",
+                "title": "Gemini Deep Research",
+                "url": "https://gemini.google.com/app/123",
+                "conversation_id": "123",
+                "citations": [{"title": "Paper 1", "url": "https://example.com"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (request_dir / "assistant-response.txt").write_text("session control research text", encoding="utf-8")
+    (request_dir / "page.json").write_text(
+        json.dumps(
+            {
+                "title": "Gemini Deep Research",
+                "url": "https://gemini.google.com/app/123",
+                "conversation_id": "123",
+                "citations": [{"title": "Paper 1", "url": "https://example.com"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    submit_calls = []
+    collect_calls = []
+
+    monkeypatch.delenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", raising=False)
+    monkeypatch.setattr(gdro, "_wrapper_cmd", lambda: ["fake-wrapper"])
+
+    def _fake_submit(request, *, logical_operator, objective, task_id, request_field):
+        submit_calls.append(
+            {
+                "request": request,
+                "logical_operator": logical_operator,
+                "objective": objective,
+                "task_id": task_id,
+                "request_field": request_field,
+            }
+        )
+        return {"success": True}
+
+    def _fake_collect(task_id, *, timeout_seconds, poll_interval_seconds, terminal_statuses):
+        collect_calls.append(
+            {
+                "task_id": task_id,
+                "timeout_seconds": timeout_seconds,
+                "terminal_statuses": terminal_statuses,
+            }
+        )
+        return 0, {
+            "status": "completed",
+            "latest_result": {
+                "result_file": str(result_file),
+            },
+        }
+
+    monkeypatch.setattr(gdro, "submit_request", _fake_submit)
+    monkeypatch.setattr(gdro, "collect_request", _fake_collect)
+
+    result = gdro.run_request(
+        {
+            "prompt": "hello",
+            "project_name": "杂项",
+            "request_dir": str(request_dir),
+        },
+        task_dir=tmp_path,
+    )
+
+    assert result["ok"] is True
+    assert result["text"] == "session control research text"
+    assert len(submit_calls) == 1
+    assert submit_calls[0]["logical_operator"] == "DeepResearchGemini"
+    assert submit_calls[0]["request_field"] == "gemini_deep_research_request"
+    assert len(collect_calls) == 1
+
+    out = capsys.readouterr().out
+    assert "Gemini Deep Research Result" in out

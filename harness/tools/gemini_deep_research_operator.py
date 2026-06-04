@@ -17,6 +17,7 @@ if str(ROOT / "lib") not in sys.path:
 
 import operator_flow_control as ofc  # noqa: E402
 from browser_operator_submit import submit_gemini_operator_request  # noqa: E402
+from browser_agent_session_control import collect_request, submit_request  # noqa: E402
 
 DEFAULT_OPERATOR_ID = "mini-gemini-deep-research"
 DEFAULT_PROJECT_NAME = "杂项"
@@ -168,6 +169,95 @@ def _summary_markdown(response: dict[str, Any]) -> str:
     )
 
 
+def _session_control_enabled() -> bool:
+    disabled = str(os.environ.get("BROWSER_AGENT_SESSION_CONTROL_DISABLED") or "").strip().lower()
+    return disabled not in {"1", "true", "yes", "on"}
+
+
+def _submitted_run_path(request_dir: str) -> Path:
+    return Path(request_dir).expanduser() / "submitted-run.json"
+
+
+def _write_submitted_run(
+    request_dir: str,
+    *,
+    task_id: str,
+    status_payload: dict[str, Any],
+) -> None:
+    latest_result = status_payload.get("latest_result") if isinstance(status_payload.get("latest_result"), dict) else {}
+    payload = {
+        "task_id": task_id,
+        "status": str(status_payload.get("status") or ""),
+        "result_file": str(latest_result.get("result_file") or ""),
+    }
+    _submitted_run_path(request_dir).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _load_submitted_task_id(request_dir: str) -> str:
+    path = _submitted_run_path(request_dir)
+    if not path.exists():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if isinstance(data, dict):
+        return str(data.get("task_id") or "").strip()
+    return ""
+
+
+def _extract_text_from_status_payload(status_payload: dict[str, Any]) -> str:
+    latest_result = status_payload.get("latest_result") if isinstance(status_payload.get("latest_result"), dict) else {}
+    result_file = Path(str(latest_result.get("result_file") or "")).expanduser()
+    if not result_file.exists():
+        return ""
+    try:
+        result_json = json.loads(result_file.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if isinstance(result_json, dict):
+        return str(result_json.get("text") or "").strip()
+    return ""
+
+
+def _run_via_session_control(
+    *,
+    prompt: str,
+    request: dict[str, Any],
+    timeout: int,
+) -> str:
+    request_dir = str(request.get("request_dir") or "").strip()
+    task_id = str(os.environ.get("BROWSER_AGENT_SESSION_TASK_ID") or "").strip() or _load_submitted_task_id(request_dir)
+    if not task_id:
+        task_id = f"gemini-deep-research-{int(time.time())}"
+    submit_payload = submit_request(
+        request,
+        logical_operator="DeepResearchGemini",
+        objective=str(prompt[:120] or "gemini-deep-research"),
+        task_id=task_id,
+        request_field="gemini_deep_research_request",
+    )
+    if not submit_payload.get("success"):
+        raise RuntimeError(str(submit_payload.get("error") or "gemini_deep_research_operator: submit failed"))
+    rc, status_payload = collect_request(
+        task_id,
+        timeout_seconds=timeout,
+        poll_interval_seconds=1.0,
+        terminal_statuses={"completed", "failed"},
+    )
+    if request_dir:
+        _write_submitted_run(request_dir, task_id=task_id, status_payload=status_payload)
+    output = _extract_text_from_status_payload(status_payload)
+    if rc != 0:
+        raise RuntimeError(output or str((status_payload.get("latest_result") or {}).get("error") or "gemini_deep_research_operator: collect failed"))
+    if not output:
+        raise RuntimeError("gemini_deep_research_operator: empty session control output")
+    return output
+
+
 def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
     prompt = str(request.get("prompt") or "").strip()
     if not prompt:
@@ -201,15 +291,34 @@ def run_request(request: dict[str, Any], *, task_dir: Path) -> dict[str, Any]:
     for attempt in range(1, max_retries + 1):
         print(f"[Gemini Deep Research Operator] Starting execution attempt {attempt} of {max_retries}...", flush=True)
         try:
-            submit_gemini_operator_request(
-                cmd=cmd,
-                prompt=prompt,
-                timeout=timeout,
-                env=env,
-                request_dir=request_dir,
-            )
-            stdout_path = request_dir / "stdout.txt"
-            combined = stdout_path.read_text(encoding="utf-8").strip() if stdout_path.exists() else ""
+            if _session_control_enabled():
+                combined = _run_via_session_control(
+                    prompt=prompt,
+                    request={
+                        "prompt": prompt,
+                        "expected_output": str(request.get("expected_output") or "markdown"),
+                        "project_name": str(request.get("project_name") or DEFAULT_PROJECT_NAME),
+                        "request_dir": str(request_dir),
+                        "headless": str(env.get("BROWSER_AGENT_HEADLESS") or "true").strip().lower() != "false",
+                        "session_reuse": str(env.get("BROWSER_AGENT_SESSION_REUSE") or "true").strip().lower() != "false",
+                        "session_lineage": str(
+                            os.environ.get("BROWSER_AGENT_SESSION_LINEAGE")
+                            or os.environ.get("SOLAR_BROWSER_SESSION_LINEAGE")
+                            or f"gemini-deep-research:{request_dir.name}"
+                        ).strip(),
+                    },
+                    timeout=timeout,
+                )
+            else:
+                submit_gemini_operator_request(
+                    cmd=cmd,
+                    prompt=prompt,
+                    timeout=timeout,
+                    env=env,
+                    request_dir=request_dir,
+                )
+                stdout_path = request_dir / "stdout.txt"
+                combined = stdout_path.read_text(encoding="utf-8").strip() if stdout_path.exists() else ""
             (task_dir / f"gemini-deep-research-output-attempt{attempt}.txt").write_text(
                 combined + ("\n" if combined else ""),
                 encoding="utf-8",

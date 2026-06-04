@@ -156,6 +156,50 @@ def test_browser_agent_session_actor_submit_then_collect(monkeypatch):
         assert any(item["status"] == "completed" for item in final_results)
 
 
+def test_browser_agent_session_actor_processes_gemini_task(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "actors"
+        lease_dir = Path(td) / "run" / "actor-leases"
+        mailbox = ActorMailbox("browser_agent_session", base)
+        envelope = {
+            "task_id": "task-gemini",
+            "logical_operator": "DeepResearchGemini",
+            "gemini_deep_research_request": {
+                "prompt": "研究 gemini task",
+                "expected_output": "markdown",
+                "project_name": "杂项",
+            },
+        }
+        mailbox.submit_task(envelope)
+        operator = Path(td) / "fake_gemini_operator.py"
+        operator.write_text(
+            "import json, os\n"
+            "from pathlib import Path\n"
+            "task_dir = Path(os.environ['TASK_DIR'])\n"
+            "request_dir = task_dir / 'gemini-deep-research-request'\n"
+            "request_dir.mkdir(parents=True, exist_ok=True)\n"
+            "(request_dir / 'assistant-response.txt').write_text('gemini actor ok', encoding='utf-8')\n"
+            "(request_dir / 'page.json').write_text(json.dumps({'title': 'Gemini', 'url': 'https://gemini.google.com/app/1', 'conversation_id': '1', 'citations': []}), encoding='utf-8')\n"
+            "(task_dir / 'gemini-deep-research-result.json').write_text(json.dumps({'ok': True, 'text': 'gemini actor ok', 'request_dir': str(request_dir), 'project_name': '杂项', 'expected_output': 'markdown'}, ensure_ascii=False), encoding='utf-8')\n"
+            "print('gemini actor ok')\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("HARNESS_DIR", str(Path(td)))
+        monkeypatch.setattr("browser_agent_session_actor.resolve_command", lambda envelope: [sys.executable, str(operator)])
+
+        rc = drain_once(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert rc == 0
+        results = mailbox.read_results("task-gemini")
+        assert len(results) == 1
+        assert results[0]["status"] == "completed"
+        assert results[0]["result_file"].endswith("gemini-deep-research-result.json")
+        assert Path(results[0]["result_file"]).exists()
+
+
 def test_supervise_loop_writes_state_and_prewarms_slots(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         base = Path(td) / "actors"

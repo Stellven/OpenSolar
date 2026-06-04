@@ -69,6 +69,7 @@ def submit_request(
     logical_operator: str = "DeepResearchBrowser",
     objective: str = "",
     task_id: str = "",
+    request_field: str = "chatgpt_browser_agent_request",
 ) -> dict[str, Any]:
     runtime = _runtime()
     resolved_task_id = str(task_id or _task_id())
@@ -77,7 +78,7 @@ def submit_request(
         "task_id": resolved_task_id,
         "objective": str(objective or prompt[:120] or logical_operator),
         "logical_operator": str(logical_operator or "DeepResearchBrowser"),
-        "chatgpt_browser_agent_request": dict(request or {}),
+        str(request_field or "chatgpt_browser_agent_request"): dict(request or {}),
     }
     result = runtime.submit(envelope, logical_operator=str(logical_operator or "DeepResearchBrowser"))
     payload = result.to_dict()

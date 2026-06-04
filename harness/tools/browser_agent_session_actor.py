@@ -22,6 +22,7 @@ from browser_agent_session_pool import BrowserAgentSessionPool
 DEFAULT_ACTOR_ID = "browser_agent_session"
 CHATGPT_TASK_OPERATOR = ROOT / "tools" / "chatgpt_browser_agent_task_operator.py"
 CHATGPT_REQUIREMENT_WRITER = ROOT / "tools" / "chatgpt_requirement_writer_operator.py"
+GEMINI_DEEP_RESEARCH_OPERATOR = ROOT / "tools" / "gemini_deep_research_operator.py"
 
 
 def _now_iso() -> str:
@@ -220,8 +221,20 @@ def _iter_active_runs() -> list[dict[str, Any]]:
     return items
 
 
-def _load_operator_result(task_dir: Path) -> dict[str, Any]:
-    path = task_dir / "chatgpt-browser-agent-result.json"
+def _request_field(logical_operator: str) -> str:
+    if logical_operator == "DeepResearchGemini":
+        return "gemini_deep_research_request"
+    return "chatgpt_browser_agent_request"
+
+
+def _result_file_name(logical_operator: str) -> str:
+    if logical_operator == "DeepResearchGemini":
+        return "gemini-deep-research-result.json"
+    return "chatgpt-browser-agent-result.json"
+
+
+def _load_operator_result(task_dir: Path, logical_operator: str) -> dict[str, Any]:
+    path = task_dir / _result_file_name(logical_operator)
     if not path.exists():
         return {}
     try:
@@ -251,6 +264,8 @@ def resolve_command(envelope: dict[str, Any]) -> list[str]:
         return [sys.executable, str(CHATGPT_TASK_OPERATOR)]
     if logical_operator == "GPTRequirementWriter":
         return [sys.executable, str(CHATGPT_REQUIREMENT_WRITER)]
+    if logical_operator == "DeepResearchGemini":
+        return [sys.executable, str(GEMINI_DEEP_RESEARCH_OPERATOR)]
     raise RuntimeError(f"unsupported_browser_agent_session_logical_operator:{logical_operator or 'N/A'}")
 
 
@@ -279,7 +294,8 @@ def _result_payload(
     if slot:
         payload["pool_slot_id"] = str(slot.get("slot_id") or "")
         payload["pool_session_lineage"] = str(slot.get("session_lineage") or "")
-    result_file = task_dir / "chatgpt-browser-agent-result.json"
+    logical_operator = str(envelope.get("logical_operator") or "")
+    result_file = task_dir / _result_file_name(logical_operator)
     if result_file.exists():
         payload["result_file"] = str(result_file)
         try:
@@ -303,7 +319,7 @@ def _active_run_manifest(
     request_dir: str,
     submit_status: dict[str, Any],
 ) -> dict[str, Any]:
-    request = dict(envelope.get("chatgpt_browser_agent_request") or {})
+    request = dict(envelope.get(_request_field(str(envelope.get("logical_operator") or ""))) or {})
     request["request_dir"] = request_dir
     request["action"] = "submit"
     return {
@@ -337,9 +353,11 @@ def process_task_file(
     broker.transition(actor_id, RUNNING)
     mailbox.write_heartbeat("running", {"task_id": envelope.get("task_id"), "logical_operator": envelope.get("logical_operator")})
     pool = BrowserAgentSessionPool(_current_harness_dir() / "run" / "browser-agent-session-pool", pool_size=_pool_size())
+    logical_operator = str(envelope.get("logical_operator") or "")
+    request_field = _request_field(logical_operator)
     request_lineage = str(
         envelope.get("session_lineage")
-        or envelope.get("chatgpt_browser_agent_request", {}).get("session_lineage")
+        or envelope.get(request_field, {}).get("session_lineage")
         or envelope.get("purpose")
         or envelope.get("objective")
         or ""
@@ -353,7 +371,7 @@ def process_task_file(
         json.dumps(slot, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    request = dict(envelope.get("chatgpt_browser_agent_request") or {})
+    request = dict(envelope.get(request_field) or {})
     action = str(request.get("action") or "run").strip().lower()
     try:
         command = resolve_command(envelope)
@@ -366,6 +384,7 @@ def process_task_file(
         env["BROWSER_AGENT_SESSION_LINEAGE"] = str(slot.get("session_lineage") or "")
         env["SOLAR_BROWSER_SESSION_LINEAGE"] = str(slot.get("session_lineage") or "")
         env["BROWSER_AGENT_POOL_SLOT_ID"] = str(slot.get("slot_id") or "")
+        env["BROWSER_AGENT_SESSION_CONTROL_DISABLED"] = "1"
         proc = subprocess.run(
             command,
             text=True,
@@ -377,7 +396,7 @@ def process_task_file(
         (task_dir / "output.log").write_text(combined, encoding="utf-8")
         broker.transition(actor_id, FINALIZING)
 
-        operator_result = _load_operator_result(task_dir)
+        operator_result = _load_operator_result(task_dir, logical_operator)
         operator_text = str(operator_result.get("text") or "").strip()
 
         if proc.returncode == 0:
@@ -477,12 +496,14 @@ def process_active_runs_once(
         if not envelope_path.exists():
             continue
         envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+        logical_operator = str(envelope.get("logical_operator") or "")
+        request_field = _request_field(logical_operator)
         request = dict(manifest.get("request") or {})
         request["action"] = "collect"
         request["conversation_url"] = str(manifest.get("conversation_url") or "")
         request["request_dir"] = str(manifest.get("request_dir") or request.get("request_dir") or "")
         request.setdefault("prompt", "")
-        envelope["chatgpt_browser_agent_request"] = request
+        envelope[request_field] = request
         envelope_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         broker.transition(actor_id, RUNNING)
@@ -498,6 +519,7 @@ def process_active_runs_once(
         env["BROWSER_AGENT_SESSION_LINEAGE"] = str(slot.get("session_lineage") or "")
         env["SOLAR_BROWSER_SESSION_LINEAGE"] = str(slot.get("session_lineage") or "")
         env["BROWSER_AGENT_POOL_SLOT_ID"] = str(slot.get("slot_id") or "")
+        env["BROWSER_AGENT_SESSION_CONTROL_DISABLED"] = "1"
         proc = subprocess.run(
             command,
             text=True,
@@ -508,7 +530,7 @@ def process_active_runs_once(
         combined = str(proc.stdout or "")
         (task_dir / "collect-output.log").write_text(combined, encoding="utf-8")
         broker.transition(actor_id, FINALIZING)
-        operator_result = _load_operator_result(task_dir)
+        operator_result = _load_operator_result(task_dir, logical_operator)
         operator_text = str(operator_result.get("text") or "").strip()
         status_json = _parse_json_text(operator_text)
         if proc.returncode == 0 and status_json and str(status_json.get("status") or "").strip().lower() in {"running", "submitted"}:
