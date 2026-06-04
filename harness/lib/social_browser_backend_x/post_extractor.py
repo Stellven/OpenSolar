@@ -71,6 +71,7 @@ _HANDLE_RX = re.compile(r"@?([A-Za-z0-9_]{1,15})")
 _WHITESPACE_RX = re.compile(r"\s+")
 _URL_RX = re.compile(r"https?://[^\s<>\"')]+", re.IGNORECASE)
 _INT_RX = re.compile(r"-?\d[\d,]*")
+_MAX_REASONABLE_SOCIAL_COUNT = 1_000_000_000
 
 
 def _normalise_text(value: str) -> str:
@@ -85,9 +86,12 @@ def _parse_count(value: Optional[str]) -> Optional[int]:
     if not match:
         return None
     try:
-        return int(match.group(0).replace(",", ""))
+        parsed = int(match.group(0).replace(",", ""))
     except ValueError:
         return None
+    if abs(parsed) > _MAX_REASONABLE_SOCIAL_COUNT:
+        return None
+    return parsed
 
 
 class _ArticleHTMLParser(HTMLParser):

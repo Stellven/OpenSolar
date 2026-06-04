@@ -30,27 +30,31 @@ def test_l0_standard_caption():
     assert result.subtitle_track is not None
 
 
-def test_l1_asr_caption():
-    tracks = [_make_track("asr", "en")]
+def test_l1_auto_caption():
+    tracks = [_make_track("auto", "en")]
     result = decide_ladder_path("test_vid", tracks)
     assert result.resolved_level == LadderLevel.L1.value
     assert result.caption_available is True
+    assert result.asr_route_needed is False
+    assert result.metadata["track_count"] == 1
 
 
-def test_asr_route_when_no_tracks():
+def test_browser_capture_when_no_tracks():
     result = decide_ladder_path("test_vid", [])
-    assert result.resolved_level == LadderLevel.ASR_ROUTE.value
+    assert result.resolved_level == LadderLevel.L2.value
     assert result.caption_available is False
-    assert result.asr_route_needed is True
+    assert result.asr_route_needed is False
+    assert result.ladder_state == "browser_capture_needed"
 
 
-def test_asr_route_when_no_tracks_p2():
+def test_browser_capture_when_no_tracks_p2():
     result = decide_ladder_path("test_vid", [], priority="P2")
-    assert result.resolved_level == LadderLevel.ASR_ROUTE.value
+    assert result.resolved_level == LadderLevel.L2.value
+    assert result.asr_route_needed is False
 
 
-def test_standard_preferred_over_asr():
-    tracks = [_make_track("asr", "en"), _make_track("standard", "en")]
+def test_standard_preferred_over_auto_caption():
+    tracks = [_make_track("auto", "en"), _make_track("standard", "en")]
     result = decide_ladder_path("test_vid", tracks)
     assert result.resolved_level == LadderLevel.L0.value
 
@@ -61,21 +65,16 @@ def test_advance_ladder_l0_to_l1():
     assert advanced.resolved_level == LadderLevel.L1.value
 
 
-def test_advance_ladder_l1_to_asr_route():
-    initial = decide_ladder_path("test_vid", [_make_track("asr", "en")])
+def test_advance_ladder_l1_to_browser_capture():
+    initial = decide_ladder_path("test_vid", [_make_track("auto", "en")])
     advanced = advance_ladder("test_vid", initial, failure_reason="bad_content")
-    assert advanced.resolved_level == LadderLevel.ASR_ROUTE.value
+    assert advanced.resolved_level == LadderLevel.L2.value
+    assert advanced.asr_route_needed is False
 
 
-def test_advance_ladder_asr_route_to_l3():
+def test_advance_ladder_l2_to_metadata_only():
     initial = decide_ladder_path("test_vid", [])
     advanced = advance_ladder("test_vid", initial)
-    assert advanced.resolved_level == LadderLevel.L3.value
-
-
-def test_advance_ladder_l4_to_l5():
-    l4 = LadderDecision("vid", LadderLevel.L4.value, False, True, "state")
-    advanced = advance_ladder("vid", l4, failure_reason="budget_exhausted")
     assert advanced.resolved_level == LadderLevel.L5.value
 
 

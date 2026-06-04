@@ -65,16 +65,28 @@ run_step "github-analysis" \
   "${RADAR[@]}" analyze-github-projects --limit-repos "${GITHUB_ANALYZE_LIMIT_REPOS:-80}" --force "$@"
 
 run_step "social" \
-  env SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE="${SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE:-1}" \
+  env SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE="${SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE:-0}" \
   "${RADAR[@]}" collect-social \
-  --backend rss \
+  --backend "${SOCIAL_BACKEND:-rss}" \
   --limit-accounts "${SOCIAL_LIMIT_ACCOUNTS:-200}" \
   --per-account-limit "${SOCIAL_PER_ACCOUNT_LIMIT:-10}" \
   --force "$@"
 
+if [[ "${RUN_SOCIAL_BROWSER_FALLBACK:-0}" == "1" ]]; then
+  run_step "social-browser-fallback" \
+    env SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE="${SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE:-0}" \
+    "${RADAR[@]}" collect-social \
+    --backend browser \
+    --limit-accounts "${SOCIAL_BROWSER_FALLBACK_LIMIT:-10}" \
+    --per-account-limit "${SOCIAL_BROWSER_FALLBACK_PER_ACCOUNT_LIMIT:-3}" \
+    --force "$@"
+else
+  echo "[social-browser-fallback] skipped RUN_SOCIAL_BROWSER_FALLBACK=0"
+fi
+
 if [[ "${RUN_SOCIAL_REPORT:-0}" == "1" ]]; then
   run_step "social-materialize" \
-    env SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE="${SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE:-1}" \
+    env SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE="${SOLAR_SOCIAL_BROWSER_BACKEND_DISABLE:-0}" \
     "${RADAR[@]}" social-trend-report \
     --date "$TODAY_UTC" \
     --limit-posts "${SOCIAL_REPORT_LIMIT_POSTS:-80}" \

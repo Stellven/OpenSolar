@@ -471,6 +471,16 @@ social:
       - "https://rsshub.app/twitter/user/{handle}"
     duckduckgo_enabled: true
     duckduckgo_limit_per_account: 2
+  rss_failure_policy:
+    # These high-value accounts have repeatedly broken public RSS mirrors.
+    # Do not mark the whole social run partial for them; enqueue browser fallback
+    # so the expensive/profile-dependent path can recover them separately.
+    browser_fallback_handles:
+      - clemens_
+      - jimkellerpa
+      - mustafasuleyman
+    browser_fallback_after_failures: 8
+    browser_fallback_retry_hours: 6
   category_weights:
     core_leader: 1.50
     paper_research: 1.30

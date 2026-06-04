@@ -100,6 +100,22 @@ class TestPostExtractorFullExtraction(unittest.TestCase):
         self.assertEqual(rec.view_count, 521004)
         self.assertEqual(rec.urls, "")
 
+    def test_unreasonable_metric_noise_is_ignored(self):
+        html = """
+        <article data-testid="tweet" data-tweet-id="1770123596121432351">
+          <div data-testid="User-Name"><a href="/mustafasuleyman">@mustafasuleyman</a></div>
+          <time datetime="2024-03-19T16:22:07.000Z"></time>
+          <div data-testid="tweetText">Joining Microsoft AI.</div>
+          <div data-testid="reply">9661736813914265</div>
+          <div data-testid="retweet">2</div>
+          <div data-testid="like">14</div>
+        </article>
+        """
+        rec = self.extractor.extract(html, author_handle_hint="mustafasuleyman").record
+        self.assertEqual(rec.reply_count, 0)
+        self.assertEqual(rec.repost_count, 2)
+        self.assertEqual(rec.like_count, 14)
+
     def test_links_extracted_from_tweet_text(self):
         sample = next(f for f in PROFILE_FIXTURES if f.handle == "jxmnop")
         rec = self.extractor.extract(sample.html).record

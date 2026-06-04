@@ -14,13 +14,10 @@ from .subtitle_discovery import SubtitleTrack
 
 class LadderLevel(str, Enum):
     L0 = "L0_standard_caption"
-    L1 = "L1_asr_caption"
+    L1 = "L1_auto_caption"
     L2 = "L2_browser_capture"
-    L3 = "L3_local_asr"
-    L4 = "L4_premium_asr"
     L5 = "L5_metadata_only"
     ACCEPTED = "ACCEPTED"
-    ASR_ROUTE = "ASR_ROUTE"
 
 
 @dataclass
@@ -66,30 +63,27 @@ def decide_ladder_path(
             metadata={"track_count": len(standard_tracks)},
         )
 
-    # L1: YouTube ASR caption available?
-    asr_tracks = [t for t in available_tracks if t.track_kind == "asr"]
-    if asr_tracks:
-        best = _pick_best_track(asr_tracks)
+    # L1: YouTube automatic caption available?
+    auto_tracks = [t for t in available_tracks if t.track_kind in {"auto", "asr"}]
+    if auto_tracks:
+        best = _pick_best_track(auto_tracks)
         return LadderDecision(
             video_id=video_id,
             resolved_level=LadderLevel.L1.value,
             caption_available=True,
             asr_route_needed=False,
-            ladder_state="L1_asr_caption",
+            ladder_state="L1_auto_caption",
             subtitle_track=best,
-            metadata={"track_count": len(asr_tracks)},
+            metadata={"track_count": len(auto_tracks)},
         )
 
-    # L2: browser capture — not yet implemented (S03+)
-    # Fall through to ASR routing
-
-    # No caption available — route to ASR
+    # No caption available — route to Browser Agent capture, never local ASR.
     return LadderDecision(
         video_id=video_id,
-        resolved_level=LadderLevel.ASR_ROUTE.value,
+        resolved_level=LadderLevel.L2.value,
         caption_available=False,
-        asr_route_needed=True,
-        ladder_state="caption_unavailable",
+        asr_route_needed=False,
+        ladder_state="browser_capture_needed",
         metadata={"track_count": 0},
     )
 
@@ -105,11 +99,8 @@ def advance_ladder(
     """
     _LEVEL_ADVANCE = {
         LadderLevel.L0.value: LadderLevel.L1.value,
-        LadderLevel.L1.value: LadderLevel.ASR_ROUTE.value,
-        LadderLevel.L2.value: LadderLevel.ASR_ROUTE.value,
-        LadderLevel.L3.value: LadderLevel.L4.value,
-        LadderLevel.L4.value: LadderLevel.L5.value,
-        LadderLevel.ASR_ROUTE.value: LadderLevel.L3.value,
+        LadderLevel.L1.value: LadderLevel.L2.value,
+        LadderLevel.L2.value: LadderLevel.L5.value,
     }
 
     current = current_decision.resolved_level
@@ -119,11 +110,7 @@ def advance_ladder(
         video_id=video_id,
         resolved_level=next_level,
         caption_available=False,
-        asr_route_needed=next_level in (
-            LadderLevel.ASR_ROUTE.value,
-            LadderLevel.L3.value,
-            LadderLevel.L4.value,
-        ),
+        asr_route_needed=False,
         ladder_state=f"{current}_failed",
         metadata={
             "previous_level": current,

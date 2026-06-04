@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sqlite3
 from pathlib import Path
 
 
@@ -46,14 +47,16 @@ def test_ai_influence_payload_discovers_all_report_kinds(tmp_path, monkeypatch):
     (phase_run / "phase-report.json").write_text(json.dumps({"headline": "Phase 2 报告", "_input_video_count": 5, "_model": "chatgpt-5.5"}, ensure_ascii=False), encoding="utf-8")
 
     monkeypatch.setattr(mod, "AI_INFLUENCE_RAW_DIR", legacy_root)
+    monkeypatch.setattr(mod, "HUGGINGFACE_PAPERS_RAW_DIR", tmp_path / "huggingface-papers")
+    monkeypatch.setattr(mod, "REPORTS_DIR", tmp_path / "reports")
     monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
 
     payload = mod._ai_influence_payload(limit=20)
 
     assert payload["count"] == 4
     labels = {item["module_label"] for item in payload["items"]}
-    assert {"日度洞察", "专题洞察", "统一日报", "Phase 2"} <= labels
-    assert payload["module_counts"]["专题洞察"] == 1
+    assert {"日度洞察", "大咖访谈及大展洞察报告", "统一日报", "Phase 2"} <= labels
+    assert payload["module_counts"]["大咖访谈及大展洞察报告"] == 1
     assert "raw_dir" not in payload
     assert "legacy_raw_dir" not in payload
     assert all("report_dir" not in item for item in payload["items"])
@@ -110,6 +113,7 @@ def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypat
     )
 
     monkeypatch.setattr(mod, "AI_INFLUENCE_RAW_DIR", legacy_root)
+    monkeypatch.setattr(mod, "HUGGINGFACE_PAPERS_RAW_DIR", tmp_path / "huggingface-papers")
     monkeypatch.setattr(mod, "_tech_hotspot_raw_dir", lambda: hotspot_root)
 
     html = mod._ai_influence_html(period="30d")
@@ -132,9 +136,102 @@ def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypat
     assert "只看未发送" in html
     assert "按频道折叠" in html
     assert "全部报告" in html
-    assert "专题洞察未发送" in html
+    assert "active-chips" in html
     assert "active-chips" in html
     assert "group-send-btn" in html
+    assert "/ai-influence/youtube-videos" in html
+
+
+def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkeypatch):
+    mod = _load_module()
+    db_path = tmp_path / "tech-hotspot-radar.sqlite"
+    archive_path = tmp_path / "youtube-video-archive.json"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE youtube_videos (
+              video_id TEXT PRIMARY KEY,
+              channel_name TEXT,
+              video_url TEXT,
+              title TEXT,
+              description TEXT,
+              published_at TEXT,
+              duration_seconds REAL,
+              thumbnail_url TEXT,
+              view_count INTEGER,
+              like_count INTEGER,
+              comment_count INTEGER,
+              tags TEXT
+            );
+            CREATE TABLE youtube_transcripts (
+              video_id TEXT PRIMARY KEY,
+              quality_tier TEXT,
+              quality_score REAL,
+              source TEXT,
+              transcript_status TEXT,
+              transcript_clean TEXT,
+              transcript_raw TEXT
+            );
+            CREATE TABLE evidence_atoms (
+              evidence_id TEXT,
+              source TEXT,
+              source_id TEXT,
+              source_table TEXT,
+              atom_type TEXT,
+              content TEXT,
+              metadata_json TEXT,
+              importance_score REAL,
+              novelty_score REAL,
+              technical_depth REAL,
+              source_weight REAL,
+              created_at TEXT,
+              model_used TEXT
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO youtube_videos VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "abc123",
+                "AI Engineer",
+                "https://www.youtube.com/watch?v=abc123",
+                "Agent Runtime Talk",
+                "A detailed agent runtime discussion",
+                "2026-06-03T12:00:00Z",
+                600,
+                "",
+                100,
+                10,
+                2,
+                '["Agent","MCP"]',
+            ),
+        )
+        conn.execute(
+            "INSERT INTO youtube_transcripts VALUES (?,?,?,?,?,?,?)",
+            ("abc123", "T1", 0.86, "youtube_auto_caption", "succeeded", "transcript body", ""),
+        )
+        conn.execute(
+            "INSERT INTO evidence_atoms VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("ev1", "youtube", "abc123", "youtube_videos", "summary", "Agent runtime 摘要", "{}", 0.9, 0, 0, 1, "2026-06-03", "local"),
+        )
+
+    monkeypatch.setattr(mod, "TECH_HOTSPOT_DB", db_path)
+    monkeypatch.setattr(mod, "AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE", archive_path)
+
+    payload = mod._ai_influence_youtube_videos_payload(period="all")
+
+    assert payload["ok"] is True
+    assert payload["count"] == 1
+    assert payload["groups"][0]["channel"] == "AI Engineer"
+    item = payload["items"][0]
+    assert item["thumbnail"].endswith("/abc123/hqdefault.jpg")
+    assert item["summary"] == "Agent runtime 摘要"
+    assert item["tags"] == ["Agent", "MCP"]
+
+    result = mod._ai_influence_youtube_videos_archive({"video_ids": ["abc123"]})
+    assert result["ok"] is True
+    assert mod._ai_influence_youtube_videos_payload(period="all")["count"] == 0
+    assert mod._ai_influence_youtube_videos_payload(period="all", include_archived=True)["count"] == 1
 
 
 def test_ai_influence_transcript_view_resolves_planned_video(tmp_path, monkeypatch):

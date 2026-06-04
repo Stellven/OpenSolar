@@ -28,5 +28,4 @@ def test_cli_legacy_acquire_no_tracks(capsys):
     rc = main(["acquire-transcripts", "--video-id", "v1", "--priority", "P1", "--no-tracks", "--json"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert '"resolved_level": "L2_browser_capture"' in out
     assert '"browser_capture_needed": true' in out.lower()

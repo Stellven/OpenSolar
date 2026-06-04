@@ -50,6 +50,7 @@ except Exception:  # pragma: no cover
 
 # ── Paths ──
 HARNESS_DIR = Path(os.environ.get("HARNESS_DIR", str(Path.home() / ".solar" / "harness")))
+SOURCE_HARNESS_DIR = Path(os.environ.get("SOLAR_SOURCE_HARNESS_DIR", str(Path.home() / "Solar" / "harness")))
 if str(HARNESS_DIR / "lib") not in sys.path:
     sys.path.insert(0, str(HARNESS_DIR / "lib"))
 SPRINTS_DIR = HARNESS_DIR / "sprints"
@@ -72,8 +73,11 @@ AI_INFLUENCE_ACCOUNTS = HARNESS_DIR / "ai-influence-digest" / "references" / "ac
 GITHUB_TRENDS_CONFIG = HARNESS_DIR / "config" / "github-trends.yaml"
 GITHUB_TRENDS_DB = Path(os.environ.get("GITHUB_TRENDS_DB", str(HARNESS_DIR / "state" / "github-trends" / "github-trends.sqlite")))
 TECH_HOTSPOT_CONFIG = HARNESS_DIR / "config" / "tech-hotspot-radar.yaml"
+TECH_HOTSPOT_DB = Path(os.environ.get("TECH_HOTSPOT_DB", str(HARNESS_DIR / "state" / "tech-hotspot-radar" / "tech-hotspot-radar.sqlite")))
 AI_INFLUENCE_MAIL_CONFIG = HARNESS_DIR / "state" / "ai-influence-mail-config.json"
 AI_INFLUENCE_DELETED_REPORTS = HARNESS_DIR / "state" / "ai-influence-deleted-reports.json"
+AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE = HARNESS_DIR / "state" / "ai-influence-youtube-video-archive.json"
+AI_INFLUENCE_YOUTUBE_VIDEO_ACTION_DIR = HARNESS_DIR / "state" / "ai-influence-youtube-video-actions"
 ACCEPTED_ASSETS_DIR = KNOWLEDGE_DIR / "_raw" / "solar-harness" / "accepted"
 ACCEPTED_ASSETS_MANIFEST = KNOWLEDGE_DIR / "_raw" / "solar-harness" / ".manifest" / "accepted-artifacts.json"
 MODEL_DOCTOR_HEALTH = HARNESS_DIR / "state" / "model-registry-doctor-health.json"
@@ -619,6 +623,8 @@ def _temporary_environ(overrides: dict[str, str]):
 
 def _load_tech_hotspot_module():
     script_path = HARNESS_DIR / "scripts" / "tech_hotspot_radar.py"
+    if not script_path.exists():
+        script_path = SOURCE_HARNESS_DIR / "scripts" / "tech_hotspot_radar.py"
     if not script_path.exists():
         raise FileNotFoundError(f"tech_hotspot_radar.py missing: {script_path}")
     spec = importlib.util.spec_from_file_location("solar_status_server_tech_hotspot_radar", str(script_path))
@@ -1734,6 +1740,543 @@ def _ai_influence_send_report(data: dict) -> dict:
     return {"ok": str(result.get("status") or "").lower() == "sent", "status": result.get("status", "warn"), "result": result}
 
 
+def _youtube_video_archive_payload() -> dict:
+    data = _read_json_file(AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE)
+    if not isinstance(data, dict):
+        return {"items": {}}
+    items = data.get("items")
+    if not isinstance(items, dict):
+        data["items"] = {}
+    return data
+
+
+def _youtube_video_archived_ids() -> set[str]:
+    payload = _youtube_video_archive_payload()
+    return {str(video_id) for video_id in (payload.get("items") or {}).keys()}
+
+
+def _write_youtube_video_archive(payload: dict) -> None:
+    AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, AI_INFLUENCE_YOUTUBE_VIDEO_ARCHIVE)
+
+
+def _youtube_video_thumbnail(video_id: str, thumbnail_url: str) -> str:
+    thumb = str(thumbnail_url or "").strip()
+    if thumb:
+        return thumb
+    safe_id = urllib.parse.quote(str(video_id or "").strip())
+    return f"https://i.ytimg.com/vi/{safe_id}/hqdefault.jpg"
+
+
+def _youtube_video_tags(raw_tags: str, title: str = "", description: str = "") -> list[str]:
+    text = str(raw_tags or "").strip()
+    values: list[str] = []
+    if text:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                values = [str(x).strip() for x in parsed if str(x).strip()]
+        except Exception:
+            values = [part.strip() for part in re.split(r"[,;|#\n]", text) if part.strip()]
+    if values:
+        return values[:8]
+    haystack = f"{title} {description}".lower()
+    heuristics = [
+        ("Agent", ("agent", "agents", "mcp", "tool use")),
+        ("模型", ("model", "llm", "gemini", "gpt", "claude")),
+        ("机器人", ("robot", "robotics", "vla")),
+        ("算力", ("gpu", "inference", "training", "data center")),
+        ("开源", ("open source", "github", "repo")),
+        ("多模态", ("video", "audio", "multimodal", "vision")),
+    ]
+    return [label for label, needles in heuristics if any(needle in haystack for needle in needles)][:6]
+
+
+def _youtube_video_summary(row: dict) -> str:
+    for key in ("semantic_summary", "description", "transcript_text"):
+        value = str(row.get(key) or "").strip()
+        if not value:
+            continue
+        value = re.sub(r"\s+", " ", value)
+        value = re.sub(r"\[semantic_summary_missing\]", "", value, flags=re.I).strip()
+        if value:
+            return value[:360] + ("…" if len(value) > 360 else "")
+    return "暂无摘要；可先打开字幕或执行深度分析生成。"
+
+
+def _youtube_video_date_parts(published_at: str) -> tuple[str, str, str]:
+    value = str(published_at or "").strip()
+    date_part = value[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", value) else "N/A"
+    month = date_part[:7] if date_part != "N/A" else "N/A"
+    return date_part, month, value
+
+
+def _connect_tech_hotspot_db():
+    if not TECH_HOTSPOT_DB.exists():
+        raise FileNotFoundError(f"tech-hotspot-radar sqlite missing: {TECH_HOTSPOT_DB}")
+    conn = sqlite3.connect(str(TECH_HOTSPOT_DB))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _ai_influence_youtube_video_rows(video_ids: list[str] | None = None, *, include_archived: bool = False, limit: int = 2000) -> list[dict]:
+    archived = _youtube_video_archived_ids()
+    where = []
+    params: list[str] = []
+    if video_ids:
+        clean_ids = [str(video_id).strip() for video_id in video_ids if str(video_id).strip()]
+        if not clean_ids:
+            return []
+        where.append("y.video_id IN (%s)" % ",".join(["?"] * len(clean_ids)))
+        params.extend(clean_ids)
+    query = f"""
+        SELECT
+          y.video_id,
+          y.channel_name,
+          y.video_url,
+          y.title,
+          y.description,
+          y.published_at,
+          y.duration_seconds,
+          y.thumbnail_url,
+          y.view_count,
+          y.like_count,
+          y.comment_count,
+          y.tags,
+          yt.quality_tier,
+          yt.quality_score,
+          yt.source AS transcript_source,
+          yt.transcript_status,
+          COALESCE(yt.transcript_clean, yt.transcript_raw, '') AS transcript_text,
+          (
+            SELECT ea.content
+            FROM evidence_atoms ea
+            WHERE ea.source = 'youtube' AND ea.source_id = y.video_id
+            ORDER BY ea.importance_score DESC, ea.created_at DESC
+            LIMIT 1
+          ) AS semantic_summary
+        FROM youtube_videos y
+        LEFT JOIN youtube_transcripts yt ON yt.video_id = y.video_id
+        {"WHERE " + " AND ".join(where) if where else ""}
+        ORDER BY lower(COALESCE(y.channel_name, '')), COALESCE(y.published_at, '') DESC
+        LIMIT ?
+    """
+    params.append(str(max(1, min(int(limit or 2000), 5000))))
+    with _connect_tech_hotspot_db() as conn:
+        rows = [dict(row) for row in conn.execute(query, params).fetchall()]
+    items: list[dict] = []
+    for row in rows:
+        video_id = str(row.get("video_id") or "").strip()
+        if not include_archived and video_id in archived:
+            continue
+        date_part, month, published_raw = _youtube_video_date_parts(str(row.get("published_at") or ""))
+        title = str(row.get("title") or "Untitled").strip()
+        description = str(row.get("description") or "").strip()
+        channel = str(row.get("channel_name") or "N/A").strip()
+        url = str(row.get("video_url") or "").strip() or f"https://www.youtube.com/watch?v={urllib.parse.quote(video_id)}"
+        duration_sec = float(row.get("duration_seconds") or 0.0)
+        items.append({
+            "video_id": video_id,
+            "title": title,
+            "channel": channel,
+            "url": url,
+            "published_at": published_raw,
+            "date": date_part,
+            "month": month,
+            "duration_min": round(duration_sec / 60.0, 1) if duration_sec else 0.0,
+            "thumbnail": _youtube_video_thumbnail(video_id, str(row.get("thumbnail_url") or "")),
+            "tags": _youtube_video_tags(str(row.get("tags") or ""), title, description),
+            "summary": _youtube_video_summary(row),
+            "quality_tier": str(row.get("quality_tier") or "N/A"),
+            "transcript_source": str(row.get("transcript_source") or "N/A"),
+            "transcript_status": str(row.get("transcript_status") or "N/A"),
+            "quality_score": row.get("quality_score"),
+            "views": int(row.get("view_count") or 0),
+            "likes": int(row.get("like_count") or 0),
+            "comments": int(row.get("comment_count") or 0),
+            "archived": video_id in archived,
+        })
+    return items
+
+
+def _ai_influence_youtube_videos_payload(period: str = "all", *, include_archived: bool = False, limit: int = 2000) -> dict:
+    try:
+        items = _ai_influence_youtube_video_rows(include_archived=include_archived, limit=limit)
+    except Exception as exc:
+        return {"ok": False, "status": "error", "error": f"{type(exc).__name__}: {exc}", "items": [], "groups": []}
+    period = str(period or "all").lower()
+    if period in ("7d", "30d"):
+        days = 7 if period == "7d" else 30
+        cutoff = datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=days)
+        filtered = []
+        for item in items:
+            try:
+                item_date = datetime.date.fromisoformat(str(item.get("date") or ""))
+            except Exception:
+                continue
+            if item_date >= cutoff:
+                filtered.append(item)
+        items = filtered
+    groups: dict[str, dict] = {}
+    for item in items:
+        channel = str(item.get("channel") or "N/A")
+        month = str(item.get("month") or "N/A")
+        date = str(item.get("date") or "N/A")
+        channel_group = groups.setdefault(channel, {"channel": channel, "count": 0, "months": {}})
+        channel_group["count"] += 1
+        month_group = channel_group["months"].setdefault(month, {"month": month, "count": 0, "dates": {}})
+        month_group["count"] += 1
+        date_group = month_group["dates"].setdefault(date, {"date": date, "count": 0, "videos": []})
+        date_group["count"] += 1
+        date_group["videos"].append(item)
+    group_list = []
+    for channel in sorted(groups):
+        channel_group = groups[channel]
+        months = []
+        for month in sorted(channel_group["months"], reverse=True):
+            month_group = channel_group["months"][month]
+            dates = []
+            for date in sorted(month_group["dates"], reverse=True):
+                dates.append(month_group["dates"][date])
+            month_group["dates"] = dates
+            months.append(month_group)
+        channel_group["months"] = months
+        group_list.append(channel_group)
+    return {
+        "ok": True,
+        "status": "ok",
+        "period": period,
+        "count": len(items),
+        "archived_count": len(_youtube_video_archived_ids()),
+        "db": str(TECH_HOTSPOT_DB),
+        "items": items,
+        "groups": group_list,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
+def _ai_influence_youtube_videos_archive(data: dict) -> dict:
+    video_ids = [str(video_id).strip() for video_id in data.get("video_ids") or [] if str(video_id).strip()]
+    if not video_ids:
+        return {"ok": False, "status": "error", "error": "missing_video_ids"}
+    rows = {item["video_id"]: item for item in _ai_influence_youtube_video_rows(video_ids, include_archived=True, limit=max(len(video_ids), 1))}
+    payload = _youtube_video_archive_payload()
+    items = payload.setdefault("items", {})
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for video_id in video_ids:
+        row = rows.get(video_id, {})
+        items[video_id] = {
+            "archived_at": now,
+            "title": row.get("title") or video_id,
+            "channel": row.get("channel") or "N/A",
+            "reason": str(data.get("reason") or "status_page_action"),
+        }
+    payload["updated_at"] = now
+    _write_youtube_video_archive(payload)
+    return {"ok": True, "status": "ok", "archived": video_ids, "count": len(video_ids)}
+
+
+def _youtube_video_email_html(videos: list[dict]) -> str:
+    cards = []
+    for item in videos:
+        tags = " ".join(f"<span class='tag'>{html.escape(str(tag))}</span>" for tag in item.get("tags") or [])
+        cards.append(f"""
+          <tr>
+            <td style="width:180px;padding:14px 14px 14px 0;vertical-align:top;">
+              <a href="{html.escape(str(item.get("url") or "#"))}"><img src="{html.escape(str(item.get("thumbnail") or ""))}" alt="" style="width:170px;border-radius:14px;border:1px solid #e7dbc8;"></a>
+            </td>
+            <td style="padding:14px 0;vertical-align:top;border-bottom:1px solid #efe6d6;">
+              <div style="font-size:13px;color:#9b7c43;margin-bottom:5px;">{html.escape(str(item.get("channel") or "N/A"))} · {html.escape(str(item.get("date") or "N/A"))} · {html.escape(str(item.get("quality_tier") or "N/A"))}</div>
+              <div style="font-size:18px;font-weight:800;line-height:1.35;margin-bottom:8px;"><a style="color:#173f36;text-decoration:none;" href="{html.escape(str(item.get("url") or "#"))}">{html.escape(str(item.get("title") or "Untitled"))}</a></div>
+              <div style="margin:6px 0 10px;">{tags}</div>
+              <div style="font-size:14px;line-height:1.72;color:#4d594d;">{html.escape(str(item.get("summary") or ""))}</div>
+            </td>
+          </tr>
+        """)
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><style>
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fffaf0;color:#24342e;margin:0;padding:24px;}}
+.tag{{display:inline-block;background:#e9f1e4;color:#255243;border-radius:999px;padding:4px 9px;margin:0 5px 5px 0;font-size:12px;}}
+</style></head><body>
+<h1 style="font-size:26px;margin:0 0 8px;color:#173f36;">AI Influence YouTube 视频精选</h1>
+<p style="color:#6f6b5c;margin:0 0 18px;">本邮件由 status 页面选中视频汇总生成，包含封面、频道、主题标签和摘要。</p>
+<table style="width:100%;border-collapse:collapse;">{''.join(cards)}</table>
+</body></html>"""
+
+
+def _ai_influence_youtube_videos_send(data: dict) -> dict:
+    video_ids = [str(video_id).strip() for video_id in data.get("video_ids") or [] if str(video_id).strip()]
+    if not video_ids:
+        return {"ok": False, "status": "error", "error": "missing_video_ids"}
+    videos = _ai_influence_youtube_video_rows(video_ids, include_archived=True, limit=max(len(video_ids), 1))
+    if not videos:
+        return {"ok": False, "status": "error", "error": "videos_not_found"}
+    config = _ai_influence_mail_config_payload()
+    to_value = str(data.get("to") or config.get("to") or "").strip()
+    if not to_value:
+        return {"ok": False, "status": "error", "error": "missing_mail_to"}
+    subject = str(data.get("subject") or f"AI Influence YouTube 视频精选 · {time.strftime('%Y-%m-%d', time.localtime())}")
+    html_content = _youtube_video_email_html(videos)
+    from_value = str(config.get("from") or "").strip()
+    if not from_value:
+        recipients_for_account = [addr.strip() for addr in re.split(r"[,;]", to_value) if addr.strip()]
+        from_value = next((addr for addr in recipients_for_account if addr.lower().endswith("@gmail.com")), "")
+    env_overrides = {"AI_INFLUENCE_MAIL_TO": to_value}
+    if from_value:
+        env_overrides["AI_INFLUENCE_GMAIL_USER"] = from_value
+        env_overrides["GMAIL_USER"] = from_value
+        env_overrides["GMAIL_APP_PASSWORD_KEYCHAIN_ACCOUNT"] = from_value
+    module = _load_tech_hotspot_module()
+    with _temporary_environ(env_overrides):
+        result = module.send_html_email(html_content, subject, [])
+    result = dict(result or {})
+    AI_INFLUENCE_YOUTUBE_VIDEO_ACTION_DIR.mkdir(parents=True, exist_ok=True)
+    result_path = AI_INFLUENCE_YOUTUBE_VIDEO_ACTION_DIR / f"mail-{int(time.time())}.json"
+    result_path.write_text(json.dumps({"video_ids": video_ids, "subject": subject, "result": result}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"ok": str(result.get("status") or "").lower() == "sent", "status": result.get("status", "warn"), "result": result, "result_path": str(result_path)}
+
+
+def _youtube_video_deep_analysis_prompt(videos: list[dict]) -> str:
+    blocks = []
+    for index, item in enumerate(videos, 1):
+        transcript = str(item.get("transcript_text") or "")
+        transcript = re.sub(r"\s+", " ", transcript).strip()[:9000]
+        blocks.append(f"""
+视频 {index}
+频道：{item.get('channel') or 'N/A'}
+标题：{item.get('title') or 'Untitled'}
+链接：{item.get('url') or ''}
+发布时间：{item.get('date') or 'N/A'}
+标签：{', '.join(item.get('tags') or []) or 'N/A'}
+摘要：{item.get('summary') or 'N/A'}
+字幕片段：{transcript or '无可用字幕正文；只能基于标题/摘要做弱判断。'}
+""".strip())
+    return f"""你是 AI Influence 的 YouTube 单视频/多视频深度分析主笔。
+
+请基于下面选中的视频素材，输出 Markdown 深度分析。使用 ChatGPT Thinking high 模式。
+
+硬要求：
+1. 不要暴露 video_id、internal id、transcript_status、JSON key 或调度信息。
+2. 每个判断必须能从输入素材推出；证据不足时写成“待验证”。
+3. 如果是访谈/演讲，先给“访谈原意摘要与观点归纳”，尽量还原主讲人的原始表达。
+4. 输出结构：一页结论、视频原意摘要、核心洞察、技术/产品影响、风险与边界、后续观察。
+5. 不要使用“**判断：**”这类 AI 味格式，用自然小标题表达。
+
+选中视频素材：
+
+{chr(10).join(blocks)}
+"""
+
+
+def _ai_influence_youtube_videos_deep_analysis(data: dict) -> dict:
+    video_ids = [str(video_id).strip() for video_id in data.get("video_ids") or [] if str(video_id).strip()]
+    if not video_ids:
+        return {"ok": False, "status": "error", "error": "missing_video_ids"}
+    videos = _ai_influence_youtube_video_rows(video_ids, include_archived=True, limit=max(len(video_ids), 1))
+    if not videos:
+        return {"ok": False, "status": "error", "error": "videos_not_found"}
+    request_id = hashlib.sha1(("youtube-deep-" + ",".join(sorted(video_ids)) + str(time.time())).encode("utf-8")).hexdigest()[:16]
+    request_dir = AI_INFLUENCE_YOUTUBE_VIDEO_ACTION_DIR / "deep-analysis" / request_id
+    request_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = request_dir / "prompt.md"
+    output_path = request_dir / "analysis.md"
+    err_path = request_dir / "operator.err.log"
+    exit_path = request_dir / "exit-code.txt"
+    prompt_path.write_text(_youtube_video_deep_analysis_prompt(videos), encoding="utf-8")
+    operator = Path(os.environ.get("CHATGPT_REPORT_OPERATOR", str(SOURCE_HARNESS_DIR / "tools" / "chatgpt_report_operator.py")))
+    if not operator.exists():
+        return {"ok": False, "status": "error", "error": f"operator_missing: {operator}"}
+    env = os.environ.copy()
+    env.update({
+        "BROWSER_AGENT_HEADLESS": "true",
+        "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS": "true",
+        "BROWSER_AGENT_EXPECTED_OUTPUT": "markdown",
+        "BROWSER_AGENT_PURPOSE": f"youtube-video-deep-analysis-{request_id}",
+        "CHATGPT_REPORT_OPERATOR_KIND": "chapter_writer",
+        "BROWSER_AGENT_REQUEST_DIR": str(request_dir),
+        "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE": str(HARNESS_DIR / "browser-agent-chatgpt-local.json"),
+        "BROWSER_AGENT_CHATGPT_PROFILE_POLICY_KEY": "ai_influence_report",
+    })
+    cmd = f"set -o pipefail; python3 {shlex_quote(str(operator))} < {shlex_quote(str(prompt_path))} > {shlex_quote(str(output_path))} 2> {shlex_quote(str(err_path))}; echo $? > {shlex_quote(str(exit_path))}"
+    subprocess.Popen(["/bin/bash", "-lc", cmd], cwd=str(SOURCE_HARNESS_DIR), env=env)
+    (request_dir / "request.json").write_text(json.dumps({"video_ids": video_ids, "videos": videos, "status": "queued"}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"ok": True, "status": "queued", "request_id": request_id, "request_dir": str(request_dir), "output_path": str(output_path)}
+
+
+def _ai_influence_youtube_videos_regenerate_daily(data: dict) -> dict:
+    script = SOURCE_HARNESS_DIR / "scripts" / "run_youtube_weekly_ai_influence_report.sh"
+    if not script.exists():
+        return {"ok": False, "status": "error", "error": f"script_missing: {script}"}
+    request_id = hashlib.sha1(("youtube-daily-regenerate-" + str(time.time())).encode("utf-8")).hexdigest()[:16]
+    request_dir = AI_INFLUENCE_YOUTUBE_VIDEO_ACTION_DIR / "regenerate-daily" / request_id
+    request_dir.mkdir(parents=True, exist_ok=True)
+    out_path = request_dir / "run.out.log"
+    err_path = request_dir / "run.err.log"
+    env = os.environ.copy()
+    env.update({
+        "YOUTUBE_DAILY_REPORT_SKIP_IF_VALID": "false",
+        "YOUTUBE_DAILY_REPORT_FORCE_REGENERATE": "1",
+        "YOUTUBE_DAILY_REPORT_DISABLE_ASR": "1",
+    })
+    if data.get("date"):
+        env["YOUTUBE_REPORT_DATE"] = str(data.get("date"))
+    with out_path.open("w", encoding="utf-8") as out_f, err_path.open("w", encoding="utf-8") as err_f:
+        subprocess.Popen([str(script)], cwd=str(SOURCE_HARNESS_DIR), env=env, stdout=out_f, stderr=err_f)
+    return {"ok": True, "status": "queued", "request_id": request_id, "request_dir": str(request_dir), "out": str(out_path), "err": str(err_path)}
+
+
+def shlex_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def _ai_influence_youtube_videos_html(period: str = "all") -> str:
+    payload = _ai_influence_youtube_videos_payload(period=period)
+    groups = payload.get("groups") or []
+    cards_html = []
+    for group in groups:
+        month_blocks = []
+        for month in group.get("months") or []:
+            date_blocks = []
+            for date_group in month.get("dates") or []:
+                video_cards = []
+                for item in date_group.get("videos") or []:
+                    tags = "".join(f"<span class='tag'>{html.escape(str(tag))}</span>" for tag in item.get("tags") or [])
+                    video_cards.append(f"""
+                    <article class="video-card" data-video-id="{html.escape(str(item.get("video_id") or ""))}">
+                      <label class="check"><input type="checkbox" class="video-select" value="{html.escape(str(item.get("video_id") or ""))}"><span></span></label>
+                      <a href="{html.escape(str(item.get("url") or "#"))}" target="_blank" rel="noreferrer"><img class="thumb" src="{html.escape(str(item.get("thumbnail") or ""))}" alt=""></a>
+                      <div class="video-body">
+                        <div class="video-meta">{html.escape(str(item.get("date") or "N/A"))} · {html.escape(str(item.get("quality_tier") or "N/A"))} · {html.escape(str(item.get("duration_min") or "0"))} 分钟</div>
+                        <h3><a href="{html.escape(str(item.get("url") or "#"))}" target="_blank" rel="noreferrer">{html.escape(str(item.get("title") or "Untitled"))}</a></h3>
+                        <div class="tags">{tags or "<span class='tag muted'>暂无标签</span>"}</div>
+                        <p>{html.escape(str(item.get("summary") or ""))}</p>
+                      </div>
+                    </article>
+                    """)
+                date_blocks.append(f"""
+                <section class="date-block">
+                  <h4>{html.escape(str(date_group.get("date") or "N/A"))} · {int(date_group.get("count") or 0)} 个视频</h4>
+                  <div class="video-grid">{''.join(video_cards)}</div>
+                </section>
+                """)
+            month_blocks.append(f"""
+            <details class="month" open>
+              <summary>{html.escape(str(month.get("month") or "N/A"))} · {int(month.get("count") or 0)} 个视频</summary>
+              {''.join(date_blocks)}
+            </details>
+            """)
+        cards_html.append(f"""
+        <details class="channel" open>
+          <summary>{html.escape(str(group.get("channel") or "N/A"))} <span>{int(group.get("count") or 0)} 个视频</span></summary>
+          {''.join(month_blocks)}
+        </details>
+        """)
+    body = "".join(cards_html) if cards_html else "<div class='empty'>当前没有可展示的 YouTube 视频。</div>"
+    current_to = str(_ai_influence_mail_config_payload().get("to") or "")
+    period_links = " ".join(
+        f"<a class='pill {'active' if period == value else ''}' href='/ai-influence/youtube-videos?period={value}'>{label}</a>"
+        for value, label in (("all", "全部"), ("30d", "近 30 天"), ("7d", "近 7 天"))
+    )
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Influence YouTube 视频库</title>
+<style>
+:root{{--ink:#1f302a;--muted:#756f62;--line:#eadfcd;--paper:#fffaf0;--card:#fffdf8;--green:#173f36;--gold:#9b7c43;--red:#a33d2d;}}
+body{{margin:0;background:radial-gradient(circle at 12% 0,#fff7dd 0,#fffaf0 28%,#f7efe0 100%);font-family:ui-serif,Georgia,'Songti SC',serif;color:var(--ink);}}
+.wrap{{max-width:1260px;margin:0 auto;padding:28px 22px 60px;}}
+.hero{{border:1px solid var(--line);border-radius:30px;padding:28px;background:linear-gradient(135deg,#fffdf8,#edf4e9);box-shadow:0 18px 50px rgba(41,36,24,.08);}}
+.kicker{{color:var(--gold);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;}}
+h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
+.hero p{{max-width:850px;color:var(--muted);line-height:1.75;margin:0;}}
+.toolbar{{position:sticky;top:0;z-index:5;margin:18px 0;padding:12px;border:1px solid var(--line);border-radius:24px;background:rgba(255,253,248,.94);backdrop-filter:blur(12px);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}}
+.btn,.pill{{border:1px solid var(--line);border-radius:999px;background:#fffdf8;padding:9px 13px;color:var(--green);text-decoration:none;font-weight:800;font-size:13px;cursor:pointer;}}
+.btn.primary{{background:var(--green);color:#fff;}}
+.btn.warn{{background:#fff2d6;color:#8b5d00;}}
+.btn.danger{{background:#fff0ed;color:var(--red);}}
+.pill.active{{background:#e6efe5;border-color:#bfd7c7;}}
+.status{{min-height:22px;color:var(--muted);font-size:13px;}}
+.channel,.month{{margin:16px 0;border:1px solid var(--line);border-radius:24px;background:rgba(255,253,248,.82);overflow:hidden;}}
+.channel>summary,.month>summary{{cursor:pointer;list-style:none;padding:18px 20px;font-size:20px;font-weight:900;color:var(--green);display:flex;justify-content:space-between;gap:12px;}}
+.month>summary{{font-size:16px;background:#fbf7ef;}}
+.date-block{{padding:0 18px 18px;}}
+.date-block h4{{margin:16px 0 10px;color:#5c674f;font-size:15px;}}
+.video-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;}}
+.video-card{{position:relative;display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;border:1px solid #eee1ce;border-radius:22px;background:#fff;padding:12px 12px 12px 42px;box-shadow:0 10px 26px rgba(49,42,31,.05);}}
+.check{{position:absolute;left:13px;top:13px;}}
+.check input{{width:18px;height:18px;accent-color:var(--green);}}
+.thumb{{width:150px;aspect-ratio:16/9;object-fit:cover;border-radius:16px;border:1px solid #eadfcd;background:#eee;}}
+.video-meta{{font-size:12px;color:var(--gold);font-weight:800;margin-bottom:4px;}}
+.video-body h3{{margin:0 0 7px;font-size:17px;line-height:1.32;color:var(--green);}}
+.video-body h3 a{{color:inherit;text-decoration:none;}}
+.video-body p{{margin:8px 0 0;color:#4f5b50;line-height:1.65;font-size:13px;}}
+.tag{{display:inline-block;margin:0 6px 6px 0;padding:4px 9px;border-radius:999px;background:#eaf2e5;color:#275545;font-size:12px;font-weight:800;}}
+.tag.muted{{background:#f4efe5;color:#887b68;}}
+.empty{{padding:28px;border:1px dashed var(--line);border-radius:22px;background:#fffdf8;color:var(--muted);}}
+@media(max-width:760px){{h1{{font-size:32px}}.video-grid{{grid-template-columns:1fr}}.video-card{{grid-template-columns:1fr;padding-left:42px}}.thumb{{width:100%}}}}
+</style></head>
+<body><div class="wrap">
+  <section class="hero">
+    <div class="kicker">Solar Harness · AI Influence</div>
+    <h1>YouTube 视频库</h1>
+    <p>按频道、月份和日期整理已经采集的视频。这里不会删除字幕数据；归档只是在列表中隐藏。深度分析会把选中视频合并为一次 ChatGPT Thinking high 章节写作任务，减少弹窗和限流。</p>
+  </section>
+  <div class="toolbar">
+    <a class="btn" href="/ai-influence">返回报告中心</a>
+    <button class="btn" onclick="selectAllVisible()">全选当前页</button>
+    <button class="btn" onclick="clearSelection()">取消选择</button>
+    <button class="btn primary" onclick="sendSelected()">发送邮件</button>
+    <button class="btn warn" onclick="deepAnalyzeSelected()">深度分析</button>
+    <button class="btn danger" onclick="archiveSelected()">归档</button>
+    <button class="btn primary" onclick="regenerateDaily()">重新生成日报</button>
+    {period_links}
+    <span class="pill">视频：{int(payload.get("count") or 0)}</span>
+    <span class="pill">已归档：{int(payload.get("archived_count") or 0)}</span>
+    <span class="pill">收件人：{html.escape(current_to or 'N/A')}</span>
+    <span id="status" class="status"></span>
+  </div>
+  {body}
+</div>
+<script>
+function selectedIds() {{ return Array.from(document.querySelectorAll('.video-select:checked')).map(x => x.value).filter(Boolean); }}
+function setStatus(text, ok=true) {{ const el=document.getElementById('status'); el.textContent=text; el.style.color=ok?'#43614e':'#a33d2d'; }}
+function selectAllVisible() {{ document.querySelectorAll('.video-select').forEach(x => x.checked=true); setStatus('已选择 '+selectedIds().length+' 个视频'); }}
+function clearSelection() {{ document.querySelectorAll('.video-select').forEach(x => x.checked=false); setStatus('已清空选择'); }}
+async function postJson(url, payload) {{
+  const res = await fetch(url, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(payload)}});
+  const data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error(data.error || data.status || 'request failed');
+  return data;
+}}
+async function sendSelected() {{
+  const ids=selectedIds(); if(!ids.length) return setStatus('请先选择视频', false);
+  setStatus('正在发送邮件...');
+  try {{ const data=await postJson('/ai-influence/youtube-videos/send', {{video_ids:ids}}); setStatus('邮件任务完成：'+(data.status||'ok')); }}
+  catch(e) {{ setStatus('发送失败：'+e.message, false); }}
+}}
+async function deepAnalyzeSelected() {{
+  const ids=selectedIds(); if(!ids.length) return setStatus('请先选择视频', false);
+  setStatus('已提交深度分析...');
+  try {{ const data=await postJson('/ai-influence/youtube-videos/deep-analysis', {{video_ids:ids}}); setStatus('深度分析已排队：'+data.request_id); }}
+  catch(e) {{ setStatus('深度分析失败：'+e.message, false); }}
+}}
+async function archiveSelected() {{
+  const ids=selectedIds(); if(!ids.length) return setStatus('请先选择视频', false);
+  if(!confirm('归档后这些视频不会在列表显示，但不会删除字幕数据。继续？')) return;
+  setStatus('正在归档...');
+  try {{ await postJson('/ai-influence/youtube-videos/archive', {{video_ids:ids}}); setStatus('已归档 '+ids.length+' 个视频'); setTimeout(()=>location.reload(), 600); }}
+  catch(e) {{ setStatus('归档失败：'+e.message, false); }}
+}}
+async function regenerateDaily() {{
+  setStatus('正在提交日报重生成...');
+  try {{ const data=await postJson('/ai-influence/youtube-videos/regenerate-daily', {{}}); setStatus('日报重生成已排队：'+data.request_id); }}
+  catch(e) {{ setStatus('日报重生成失败：'+e.message, false); }}
+}}
+</script>
+</body></html>"""
+
+
 
 def _ai_influence_collectors_section() -> str:
     import subprocess
@@ -1973,8 +2516,9 @@ def _ai_influence_html(period: str = "30d") -> str:
     .hero p {{ margin:0; max-width:820px; opacity:.92; }}
     .toolbar {{ display:flex; gap:12px; align-items:center; margin:18px 0; flex-wrap:wrap; }}
     .tabs {{ display:flex; gap:10px; margin:18px 0 10px; flex-wrap:wrap; }}
-    .tab-btn {{ border:1px solid var(--line); background:#fff; color:var(--green); border-radius:999px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer; }}
+    .tab-btn {{ border:1px solid var(--line); background:#fff; color:var(--green); border-radius:999px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; }}
     .tab-btn.active {{ background:var(--green); color:#fff; border-color:var(--green); }}
+    .tab-btn.library {{ background:#ecf4e8; border-color:#bfd7c7; }}
     .tab-panel {{ display:none; }}
     .tab-panel.active {{ display:block; }}
     .pill {{ border:1px solid var(--line); background:rgba(255,253,248,.78); border-radius:999px; padding:7px 12px; color:var(--muted); font-size:13px; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }}
@@ -2070,11 +2614,13 @@ def _ai_influence_html(period: str = "30d") -> str:
       {module_pills}
       {period_links}
       <a class="btn" href="/">回到 Solar Status</a>
+      <a class="btn primary" href="/ai-influence/youtube-videos">YouTube 视频库</a>
       <button class="btn accent" onclick="showMailConfig()">配置发送邮箱</button>
     </div>
     <div class="tabs">
       <button class="tab-btn active" data-tab="reports" onclick="switchTab('reports', this)">报告汇总</button>
       <button class="tab-btn" data-tab="resources" onclick="switchTab('resources', this)">素材资源</button>
+      <a class="tab-btn library" href="/ai-influence/youtube-videos">YouTube 视频库</a>
       <button class="tab-btn" data-tab="collectors" onclick="switchTab('collectors', this)">采集调度中心</button>
     </div>
     <section id="mail-config" class="mail-config">
@@ -10670,6 +11216,14 @@ class StatusHandler(BaseHTTPRequestHandler):
                 self._send_json(_ai_influence_send_report(data))
             elif path == "/ai-influence/delete":
                 self._send_json(_ai_influence_delete_report(data))
+            elif path == "/ai-influence/youtube-videos/send":
+                self._send_json(_ai_influence_youtube_videos_send(data))
+            elif path == "/ai-influence/youtube-videos/archive":
+                self._send_json(_ai_influence_youtube_videos_archive(data))
+            elif path == "/ai-influence/youtube-videos/deep-analysis":
+                self._send_json(_ai_influence_youtube_videos_deep_analysis(data))
+            elif path == "/ai-influence/youtube-videos/regenerate-daily":
+                self._send_json(_ai_influence_youtube_videos_regenerate_daily(data))
             elif path == "/api/thunderomlx/start":
                 self._send_json(_start_thunderomlx_from_status())
             elif path == "/api/collector-schedules":
@@ -10766,6 +11320,20 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/ai-influence":
             period = params.get("period", ["30d"])[0]
             self._send_text(_ai_influence_html(period=period), content_type="text/html; charset=utf-8")
+
+        elif path == "/ai-influence/youtube-videos":
+            period = params.get("period", ["all"])[0]
+            self._send_text(_ai_influence_youtube_videos_html(period=period), content_type="text/html; charset=utf-8")
+
+        elif path == "/ai-influence/youtube-videos/list":
+            try:
+                limit = int(params.get("limit", ["2000"])[0])
+                limit = max(1, min(limit, 5000))
+            except ValueError:
+                limit = 2000
+            period = params.get("period", ["all"])[0]
+            include_archived = params.get("include_archived", ["0"])[0].lower() in ("1", "true", "yes")
+            self._send_json(_ai_influence_youtube_videos_payload(period=period, include_archived=include_archived, limit=limit))
 
         elif path == "/ai-influence/list":
             try:

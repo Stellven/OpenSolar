@@ -65,19 +65,17 @@ class _BrowserBackend(Protocol):
 
 
 def _default_real_backend_factory() -> _BrowserBackend:
-    """Default real-backend factory — raises until hard_blocker passes.
-
-    The real client will be wired into this seam in S05 after
-    `sprint-20260525-browser-agent-global-operator-cutover` passes. Until
-    then, attempting to instantiate it surfaces a clear error rather than
-    silently doing the wrong thing.
-    """
-    raise OperatorNotReady(
-        "solar.physical_operator.browser.lease not wired; "
-        "hard_blocker 'sprint-20260525-browser-agent-global-operator-cutover' "
-        "must PASS before real-mode is enabled. "
-        f"Set {MOCK_MODE_ENV_VAR}=1 for mock mode."
-    )
+    """Default real-backend factory using Solar's browser profile control plane."""
+    try:
+        from .real_browser_backend import RealBrowserBackend
+    except Exception as exc:  # noqa: BLE001
+        raise OperatorNotReady(f"real browser backend import failed: {type(exc).__name__}: {exc}") from exc
+    try:
+        return RealBrowserBackend()
+    except OperatorNotReady:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise OperatorNotReady(f"real browser backend init failed: {type(exc).__name__}: {exc}") from exc
 
 
 class BrowserLeaseClient:

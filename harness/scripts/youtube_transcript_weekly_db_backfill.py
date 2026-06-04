@@ -328,7 +328,7 @@ def enqueue_browser_capture(conn: sqlite3.Connection, video_id: str, priority: s
     conn.execute(
         """INSERT INTO youtube_transcript_jobs
            (job_id, video_id, job_type, priority, status, backend, max_attempts, error_code, error_message, created_at)
-           VALUES (?, ?, 'browser_capture', ?, 'pending', 'browser-agent', 2, 'max_attempts', ?, ?)
+           VALUES (?, ?, 'browser_capture', ?, 'pending', 'browser-agent', 2, ?, ?, ?)
            ON CONFLICT(job_id) DO UPDATE SET
              status=CASE
                WHEN youtube_transcript_jobs.status IN ('succeeded','running','metadata_only','cancelled','quarantined')
@@ -338,7 +338,7 @@ def enqueue_browser_capture(conn: sqlite3.Connection, video_id: str, priority: s
              priority=excluded.priority,
              error_code=excluded.error_code,
              error_message=excluded.error_message""",
-        (job_id, video_id, priority, message[:500], iso_z()),
+        (job_id, video_id, priority, reason[:80], message[:500], iso_z()),
     )
 
 
@@ -356,7 +356,9 @@ def reconcile_failed_jobs(conn: sqlite3.Connection, week: str, min_duration: int
            WHERE date(v.published_at) >= date(?) AND date(v.published_at) < date(?)
              AND (
                j.job_type IN ('asr','premium_asr')
+               OR (j.status='failed' AND j.job_type IN ('caption_discovery','subtitle_download'))
                OR (j.status='failed' AND (j.attempt_count >= j.max_attempts OR j.error_code='max_attempts'))
+               OR (j.job_type='browser_capture' AND j.status IN ('pending','queued') AND j.error_code='max_attempts')
              )""",
         (start, end),
     ).fetchall()
