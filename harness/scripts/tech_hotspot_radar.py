@@ -9430,6 +9430,26 @@ def _hf_list(items: Any) -> list[str]:
     return [str(item).strip() for item in items if str(item).strip()]
 
 
+def _hf_public_paper_url(record: dict[str, Any]) -> str:
+    for key in ("hf_url", "arxiv_url"):
+        url = str((record or {}).get(key) or "").strip()
+        if url.startswith(("http://", "https://")):
+            return url
+    paper_id = str((record or {}).get("paper_id") or "").strip()
+    if paper_id:
+        return f"https://huggingface.co/papers/{paper_id}"
+    return ""
+
+
+def _hf_markdown_link(label: str, url: str) -> str:
+    clean_label = _hf_text(label)
+    clean_url = str(url or "").strip()
+    if not clean_url:
+        return clean_label
+    escaped_url = clean_url.replace(")", "%29")
+    return f"[{clean_label}]({escaped_url})"
+
+
 def _hf_missing_value(value: Any) -> bool:
     if value is None:
         return True
@@ -9821,10 +9841,54 @@ def hf_build_section_writer_prompt(
 """
 
 
+def hf_load_cached_report_json(config: dict[str, Any], *, purpose: str, required_keys: list[str]) -> dict[str, Any] | None:
+    state_dir = Path((config.get("output") or {}).get(
+        "state_dir", str(Path.home() / ".solar/harness/state/tech-hotspot-radar")
+    )).expanduser()
+    request_root = state_dir / "browser-agent-requests"
+    if not request_root.exists():
+        return None
+    slug = slugify(purpose)[:60]
+    for request_dir in sorted(request_root.glob(f"*-{slug}"), key=lambda item: item.name, reverse=True):
+        try:
+            meta = json.loads((request_dir / "request.json").read_text(encoding="utf-8"))
+        except Exception:
+            meta = {}
+        if str(meta.get("status") or "") != "completed":
+            continue
+        stdout_path = request_dir / "stdout.txt"
+        if not stdout_path.exists():
+            continue
+        try:
+            payload = extract_json_payload_lenient(stdout_path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if any(_hf_missing_value(payload.get(key)) for key in required_keys):
+            continue
+        payload["_backend"] = "browser_agent_chatgpt"
+        payload["_model"] = str(meta.get("model") or "")
+        payload["_reasoning_effort"] = str(meta.get("reasoning_effort") or "")
+        payload["_request_dir"] = str(request_dir)
+        payload["_cached_browser_agent_output"] = True
+        return payload
+    return None
+
+
 def hf_call_report_json_with_repair(prompt: str, config: dict[str, Any], *, purpose: str, model_name: str, chapter_id: str, required_keys: list[str], max_attempts: int = 2) -> dict[str, Any]:
     high_cfg, _mode = hf_paper_high_reasoning_config(config, "browser_agent")
+    timeout_seconds = int(
+        os.environ.get("HF_PAPER_BROWSER_AGENT_TIMEOUT_SECONDS")
+        or high_cfg.get("report_timeout_seconds")
+        or high_cfg.get("timeout_seconds")
+        or 420
+    )
+    timeout_seconds = max(60, min(timeout_seconds, 600))
     errors: list[str] = []
     for attempt in range(1, max_attempts + 1):
+        if attempt == 1 and not _env_override_bool("HF_PAPER_DISABLE_BROWSER_AGENT_CACHE"):
+            cached = hf_load_cached_report_json(config, purpose=purpose, required_keys=required_keys)
+            if cached:
+                return cached
         attempt_prompt = prompt
         if attempt > 1:
             attempt_prompt = "\n\n".join([
@@ -9844,7 +9908,7 @@ def hf_call_report_json_with_repair(prompt: str, config: dict[str, Any], *, purp
                 requested_model=model_name,
                 operator_kind="chapter_writer",
                 requested_reasoning_effort=str(high_cfg.get("reasoning_effort") or "high"),
-                requested_timeout_seconds=int(high_cfg.get("timeout_seconds") or 1800),
+                requested_timeout_seconds=timeout_seconds,
                 requested_max_prompt_chars=int(high_cfg.get("max_prompt_chars") or 120000),
                 target_url=str(high_cfg.get("target_url") or "") or None,
                 headless=_env_override_bool("BROWSER_AGENT_HEADLESS", "TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS")
@@ -9906,14 +9970,17 @@ def hf_call_grouped_report_flow(
         section_records = [record_map[pid] for pid in section.get("paper_ids") or [] if pid in record_map]
         if not section_records:
             continue
-        section_payload = hf_call_report_json_with_repair(
-            hf_build_section_writer_prompt(section, section_records, date_str=date_str, model_name=model_name, report_context=context),
-            config,
-            purpose=f"hf-paper-report-section-{date_str}-{section.get('section_id') or idx}",
-            model_name=model_name,
-            chapter_id=str(section.get("section_id") or f"section-{idx}"),
-            required_keys=["title", "section_summary", "trend_description", "insight_analysis", "planning_recommendations", "paper_commentary"],
-        )
+        try:
+            section_payload = hf_call_report_json_with_repair(
+                hf_build_section_writer_prompt(section, section_records, date_str=date_str, model_name=model_name, report_context=context),
+                config,
+                purpose=f"hf-paper-report-section-{date_str}-{section.get('section_id') or idx}",
+                model_name=model_name,
+                chapter_id=str(section.get("section_id") or f"section-{idx}"),
+                required_keys=["title", "section_summary", "trend_description", "insight_analysis", "planning_recommendations", "paper_commentary"],
+            )
+        except Exception:
+            continue
         section_payload["paper_ids"] = list(section.get("paper_ids") or [])
         sections.append(section_payload)
     if not sections:
@@ -14702,8 +14769,11 @@ def validate_ai_influence_markdown_report(markdown: str) -> None:
     if missing:
         raise ValueError(f"incomplete_ai_influence_report_missing={missing}")
     tail = text[-120:].strip()
+    last_line = next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "")
+    provenance_field_tail = "## Provenance" in text and bool(re.match(r"^-\s+[A-Za-z_][A-Za-z0-9_ -]*:\s*\S.*$", last_line))
     if re.search(r"[\u4e00-\u9fffA-Za-z0-9，,：:；;、（(]$", tail) and not re.search(r"[。！？.!?）)]$", tail):
-        raise ValueError(f"incomplete_ai_influence_report_suspicious_tail={tail[-60:]!r}")
+        if not provenance_field_tail:
+            raise ValueError(f"incomplete_ai_influence_report_suspicious_tail={tail[-60:]!r}")
 
 
 def ai_influence_chatgpt_project_name(config: dict[str, Any]) -> str:

@@ -205,7 +205,8 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
         env["BROWSER_AGENT_CHATGPT_PROFILE_STRATEGY"] = profile_strategy
     if user_data_dir and not env.get("BROWSER_AGENT_USER_DATA_DIR"):
         env["BROWSER_AGENT_USER_DATA_DIR"] = user_data_dir
-    if _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless")):
+    force_headed = bool(policy.get("force_headed") or policy.get("require_headed"))
+    if _is_protected_scoped_chatgpt(key) and force_headed:
         env["BROWSER_AGENT_HEADLESS"] = "false"
         env["TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS"] = "false"
         env["BROWSER_AGENT_CHATGPT_ALLOW_HEADED"] = "true"
@@ -223,7 +224,7 @@ def apply_profile_policy(env: dict[str, str], *, purpose: str) -> dict[str, Any]
         "selection": selection,
         "profile_strategy": profile_strategy,
         "user_data_dir_set": bool(env.get("BROWSER_AGENT_USER_DATA_DIR")),
-        "headless_forced": _is_protected_scoped_chatgpt(key) and not bool(policy.get("allow_headless")),
+        "headless_forced": _is_protected_scoped_chatgpt(key) and force_headed,
     }
 
 
