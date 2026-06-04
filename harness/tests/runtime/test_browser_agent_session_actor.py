@@ -47,7 +47,11 @@ def test_browser_agent_session_actor_processes_deepresearch_task(monkeypatch):
         results = mailbox.read_results("task-1")
         assert len(results) == 1
         assert results[0]["status"] == "completed"
+        assert results[0]["pool_slot_id"].startswith("slot-")
+        assert results[0]["pool_session_lineage"].startswith("browser-agent-session:chatgpt:slot-")
         assert Path(results[0]["task_dir"]).exists()
+        slot_file = Path(results[0]["task_dir"]) / "browser-agent-session-slot.json"
+        assert slot_file.exists()
         assert mailbox.read_inbox() == []
         lease = LeaseBroker(lease_dir).get("browser_agent_session")
         assert lease is None or lease.state == "READY"
