@@ -207,12 +207,37 @@ def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkey
             ),
         )
         conn.execute(
+            "INSERT INTO youtube_videos VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "stan123",
+                "Stanford Online",
+                "https://www.youtube.com/watch?v=stan123",
+                "Research Seminar on Agents",
+                "A university seminar about agent evaluation",
+                "2026-06-02T12:00:00Z",
+                1800,
+                "",
+                80,
+                8,
+                1,
+                '["Agent","Eval"]',
+            ),
+        )
+        conn.execute(
             "INSERT INTO youtube_transcripts VALUES (?,?,?,?,?,?,?)",
             ("abc123", "T1", 0.86, "youtube_auto_caption", "succeeded", "transcript body", ""),
         )
         conn.execute(
+            "INSERT INTO youtube_transcripts VALUES (?,?,?,?,?,?,?)",
+            ("stan123", "T1", 0.82, "standard_caption", "succeeded", "stanford transcript", ""),
+        )
+        conn.execute(
             "INSERT INTO evidence_atoms VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             ("ev1", "youtube", "abc123", "youtube_videos", "summary", "Agent runtime 摘要", "{}", 0.9, 0, 0, 1, "2026-06-03", "local"),
+        )
+        conn.execute(
+            "INSERT INTO evidence_atoms VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("ev2", "youtube", "stan123", "youtube_videos", "summary", "学术研讨摘要", "{}", 0.9, 0, 0, 1, "2026-06-02", "local"),
         )
 
     monkeypatch.setattr(mod, "TECH_HOTSPOT_DB", db_path)
@@ -221,17 +246,29 @@ def test_ai_influence_youtube_video_library_payload_and_archive(tmp_path, monkey
     payload = mod._ai_influence_youtube_videos_payload(period="all")
 
     assert payload["ok"] is True
-    assert payload["count"] == 1
+    assert payload["count"] == 2
     assert payload["groups"][0]["channel"] == "AI Engineer"
+    assert payload["channel_sections"][0]["label"] == "大V/访谈频道"
+    assert payload["channel_sections"][0]["channels"][0]["channel"] == "AI Engineer"
+    assert payload["channel_sections"][1]["label"] == "学术/机构频道"
+    assert payload["channel_sections"][1]["channels"][0]["channel"] == "Stanford Online"
     item = payload["items"][0]
+    assert item["channel_type"] == "influencer"
+    assert item["channel_type_label"] == "大V/访谈频道"
     assert item["thumbnail"].endswith("/abc123/hqdefault.jpg")
     assert item["summary"] == "Agent runtime 摘要"
     assert item["tags"] == ["Agent", "MCP"]
 
+    html = mod._ai_influence_youtube_videos_html(period="all")
+    assert "大V/访谈频道" in html
+    assert "学术/机构频道" in html
+    assert "type-influencer" in html
+    assert "type-academic" in html
+
     result = mod._ai_influence_youtube_videos_archive({"video_ids": ["abc123"]})
     assert result["ok"] is True
-    assert mod._ai_influence_youtube_videos_payload(period="all")["count"] == 0
-    assert mod._ai_influence_youtube_videos_payload(period="all", include_archived=True)["count"] == 1
+    assert mod._ai_influence_youtube_videos_payload(period="all")["count"] == 1
+    assert mod._ai_influence_youtube_videos_payload(period="all", include_archived=True)["count"] == 2
 
 
 def test_ai_influence_transcript_view_resolves_planned_video(tmp_path, monkeypatch):

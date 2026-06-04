@@ -1960,6 +1960,7 @@ def _youtube_video_channel_type(channel: str) -> tuple[str, str]:
         "a16z deep dives",
         "all-in podcast",
         "no priors",
+        "ai engineer",
         "bg2 pod",
         "beyond the prompt",
         "hannah fry",
