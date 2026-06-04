@@ -3651,6 +3651,30 @@ def reconcile_pm_inbox() -> dict:
         return {"action": "pm_inbox_reconcile", "ok": False, "error": str(exc)}
 
 
+def drain_builder_ready_backlog() -> dict:
+    """Submit latent builder-ready DAG nodes into the PM builder pool."""
+    cmd = [
+        sys.executable,
+        str(HARNESS / "tools" / "pm_dispatch.py"),
+        "drain-builder-ready",
+        "--json",
+    ]
+    env = os.environ.copy()
+    env["HARNESS_DIR"] = str(HARNESS)
+    env["SOLAR_PM_DISPATCH_ALLOW_DIRECT"] = "1"
+    env["SOLAR_PM_DISPATCH_BACKPRESSURE_NO_RECORD"] = "1"
+    timeout = int(os.environ.get("SOLAR_BUILDER_READY_DRAIN_TIMEOUT_SEC", "120"))
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+        payload = json.loads(proc.stdout) if proc.stdout.strip().startswith("{") else {"stdout": proc.stdout[-2000:]}
+        ok = proc.returncode == 0 or bool(payload.get("backpressure"))
+        return {"action": "builder_ready_drain", "ok": ok, "returncode": proc.returncode, **payload}
+    except subprocess.TimeoutExpired:
+        return {"action": "builder_ready_drain", "ok": False, "reason": "timeout", "timeout_sec": timeout}
+    except Exception as exc:
+        return {"action": "builder_ready_drain", "ok": False, "error": str(exc)}
+
+
 def scan_once(args: argparse.Namespace, state: dict) -> dict:
     epic_filter = str(getattr(args, "epic", "") or "")
     reconcile_action = reconcile_pm_inbox() if args.apply else {}
@@ -3676,7 +3700,13 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
     if epic_filter:
         findings = filter_findings_by_epic(findings, epic_filter)
     actions = apply_findings(findings, args.dispatch, state, args.cooldown) if args.apply else []
+    builder_ready_drain = drain_builder_ready_backlog() if args.apply and args.dispatch else {}
     idle_title_actions = update_idle_pane_titles(state) if args.apply else []
+    action_log = ([reconcile_action] if reconcile_action else []) + queue_actions + actions
+    if builder_ready_drain:
+        action_log.append(builder_ready_drain)
+    if idle_title_actions:
+        action_log.append({"action": "idle_titles_updated", "panes": idle_title_actions, "dispatched": False})
     payload = {
         "ok": True,
         "apply": args.apply,
@@ -3685,9 +3715,7 @@ def scan_once(args: argparse.Namespace, state: dict) -> dict:
         "epic_filter": epic_filter,
         "findings_before_epic_filter": findings_before_epic_filter,
         "findings": findings,
-        "actions": ([reconcile_action] if reconcile_action else []) + queue_actions + actions + [
-            {"action": "idle_titles_updated", "panes": idle_title_actions, "dispatched": False}
-        ] if idle_title_actions else ([reconcile_action] if reconcile_action else []) + queue_actions + actions,
+        "actions": action_log,
         "queue_actions": queue_actions,
         "queue_depth": len(load_queue()),
         "state_path": str(STATE),
