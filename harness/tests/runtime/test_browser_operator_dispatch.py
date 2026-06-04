@@ -151,6 +151,31 @@ def test_custom_routing():
         assert res6.lease.actor_id == "op.browser.browser_use_mcp.quick.01"
 
 
+def test_browser_agent_session_submit_kicks_worker(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        bp, ap = _make_mock_configs(td)
+        runtime = ActorRuntime(
+            harness_dir=Path(td),
+            lease_broker=DummyLeaseBroker(),
+            mailbox_base=Path(td),
+            evidence_ledger=DummyEvidenceLedger(),
+            context_store=DummyContextStore(),
+            profiles_path=ap,
+            bindings_path=bp,
+        )
+        kicked: list[int] = []
+
+        def _fake_kick():
+            kicked.append(1)
+            return 12345
+
+        monkeypatch.setattr(runtime, "_kick_browser_agent_session_once", _fake_kick)
+        res = runtime.submit({"objective": "Read browser page"}, logical_operator="DeepResearchBrowser")
+        assert res.success is True
+        assert res.lease.actor_id == "browser_agent_session"
+        assert kicked == [1]
+
+
 def test_security_gates():
     with tempfile.TemporaryDirectory() as td:
         bp, ap = _make_mock_configs(td)
