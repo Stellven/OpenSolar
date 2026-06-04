@@ -2921,6 +2921,9 @@ print(json.dumps({
           exit 1
           ;;
       esac
+    elif [[ "$_browser_scope" == "session" ]]; then
+      shift || true
+      python3 "$HARNESS_DIR/tools/browser_agent_session_control.py" "$@"
     else
       err "unknown browser command: ${_browser_scope:-N/A}"
       exit 1

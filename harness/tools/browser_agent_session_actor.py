@@ -63,6 +63,14 @@ def _supervisor_state_path(actor_id: str) -> Path:
     return _supervisor_dir() / f"{actor_id}.json"
 
 
+def _supervisor_stop_flag(actor_id: str) -> Path:
+    return _supervisor_dir() / f"{actor_id}.stop"
+
+
+def _supervisor_drain_flag(actor_id: str) -> Path:
+    return _supervisor_dir() / f"{actor_id}.drain"
+
+
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -132,6 +140,50 @@ def ensure_supervisor_running(
         },
     )
     return {"ok": True, "pid": int(proc.pid), "reused": False}
+
+
+def request_supervisor_drain(actor_id: str) -> Path:
+    path = _supervisor_drain_flag(actor_id)
+    path.write_text(_now_iso() + "\n", encoding="utf-8")
+    return path
+
+
+def request_supervisor_stop(actor_id: str) -> Path:
+    path = _supervisor_stop_flag(actor_id)
+    path.write_text(_now_iso() + "\n", encoding="utf-8")
+    return path
+
+
+def supervisor_status(actor_id: str, *, mailbox_base: Path) -> dict[str, Any]:
+    mailbox = ActorMailbox(actor_id, mailbox_base)
+    slots = BrowserAgentSessionPool(
+        _current_harness_dir() / "run" / "browser-agent-session-pool",
+        pool_size=_pool_size(),
+    ).list_slots()
+    state_path = _supervisor_state_path(actor_id)
+    state = {}
+    if state_path.exists():
+        try:
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                state = data
+        except Exception:
+            state = {}
+    pid = _read_supervisor_pid(actor_id)
+    return {
+        "ok": True,
+        "actor_id": actor_id,
+        "pid": pid,
+        "pid_alive": _pid_alive(pid or 0),
+        "state_file": str(state_path),
+        "state": state,
+        "heartbeat": mailbox.read_heartbeat() or {},
+        "active_runs": _iter_active_runs(),
+        "slot_count": len(slots),
+        "slots": slots,
+        "drain_requested": _supervisor_drain_flag(actor_id).exists(),
+        "stop_requested": _supervisor_stop_flag(actor_id).exists(),
+    }
 
 
 def _active_runs_dir() -> Path:
@@ -542,8 +594,12 @@ def supervise_loop(
     mailbox.ensure_dirs()
     BrowserAgentSessionPool(_current_harness_dir() / "run" / "browser-agent-session-pool", pool_size=_pool_size()).ensure_slots()
     _supervisor_pid_path(actor_id).write_text(str(os.getpid()), encoding="utf-8")
+    _supervisor_stop_flag(actor_id).unlink(missing_ok=True)
+    _supervisor_drain_flag(actor_id).unlink(missing_ok=True)
     loops = 0
     while True:
+        if _supervisor_stop_flag(actor_id).exists():
+            break
         processed = drain_once(actor_id=actor_id, mailbox_base=mailbox_base, lease_dir=lease_dir)
         slots = BrowserAgentSessionPool(
             _current_harness_dir() / "run" / "browser-agent-session-pool",
@@ -575,9 +631,15 @@ def supervise_loop(
             },
         )
         loops += 1
+        inbox_count = len(list(mailbox.inbox.glob("task-*.json")))
+        if _supervisor_drain_flag(actor_id).exists() and inbox_count == 0 and active_runs == 0:
+            break
         if max_loops > 0 and loops >= max_loops:
             break
         time.sleep(max(0.2, float(poll_interval_seconds)))
+    _supervisor_pid_path(actor_id).unlink(missing_ok=True)
+    _supervisor_stop_flag(actor_id).unlink(missing_ok=True)
+    _supervisor_drain_flag(actor_id).unlink(missing_ok=True)
     _write_supervisor_state(
         actor_id,
         {
