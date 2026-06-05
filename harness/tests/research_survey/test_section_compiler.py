@@ -34,6 +34,21 @@ def _strong_fixture(root):
     return plan
 
 
+def _strong_insight_fixture(root):
+    plan = create_survey_plan("DeepDive: Agent runtime 为什么会成为基础设施？", target_chars=50000, planner_mode_hint="insight")
+    write_survey_plan(plan, root)
+    sources = [{"id": f"src_{i}", "source_type": t, "title": f"{t} source", "url": f"https://example.com/{t}"} for i, t in enumerate(["paper", "official_doc", "code", "benchmark"])]
+    evidence = [{"id": f"ev_{i}", "source_id": sources[i % len(sources)]["id"], "content": "agent runtime evidence supports thesis action roadmap and risk indicators"} for i in range(16)]
+    claims = [{"id": f"cl_{i}", "claim_text": "agent runtime requires stateful execution and quality gates"} for i in range(12)]
+    links = [{"claim_id": f"cl_{i % 12}", "evidence_id": f"ev_{i}"} for i in range(16)]
+    _append_jsonl(root / "sources.jsonl", sources)
+    _append_jsonl(root / "evidence.jsonl", evidence)
+    _append_jsonl(root / "claims.jsonl", claims)
+    _append_jsonl(root / "claim_evidence.jsonl", links)
+    build_evidence_packs(root, plan["report_ast"])
+    return plan
+
+
 def test_compile_section_refuses_blocked_pack(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
@@ -108,6 +123,32 @@ def test_compile_section_and_survey(tmp_path):
     assert human_summary["template_heading_count"] == 0
     assert human_summary["char_count"] < len(final_text)
     assert human_summary["execution_metrics"]["document_word_count"] > 0
+
+
+def test_compile_insight_survey_emits_section_render_cards(tmp_path):
+    _strong_insight_fixture(tmp_path)
+    result = compile_section(tmp_path, "ch01/sec01")
+    assert result["ok"] is True
+
+    compiled = compile_survey(tmp_path)
+
+    assert compiled["ok"] is True
+    assert compiled["section_render_cards"].endswith("section_render_cards.json")
+    assert (tmp_path / "section_render_cards.json").exists()
+    assert (tmp_path / "section_render_cards" / "ch01__sec01.json").exists()
+    assert (tmp_path / "figures.json").exists()
+    payload = json.loads((tmp_path / "section_render_cards.json").read_text(encoding="utf-8"))
+    assert payload["card_count"] >= 1
+    first_card = payload["cards"][0]
+    assert first_card["schema_version"] == "solar.deepdive.section_render_card.v1"
+    assert first_card["thesis"]
+    assert first_card["evidence_callouts"]
+    assert first_card["figure_spec"]["type"] == "section_render_card"
+    human_text = (tmp_path / "human_final.md").read_text(encoding="utf-8")
+    assert "## 信号地图与证据强度" in human_text
+    assert "#### 本节判断" in human_text
+    assert "#### 影响与行动" in human_text
+    assert "2026 年的 Agentic Runtime" not in human_text
 
 
 def test_deterministic_writer_outputs_professor_survey_scaffolds(tmp_path):

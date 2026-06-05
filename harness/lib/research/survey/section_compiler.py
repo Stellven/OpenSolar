@@ -78,6 +78,13 @@ def _evidence_lookup(root: Path) -> dict[str, dict[str, Any]]:
     return {str(row.get("id") or row.get("evidence_id") or ""): row for row in _read_jsonl(root / "evidence.jsonl")}
 
 
+def _is_insight_ast(root: Path, ast: dict) -> bool:
+    plan = _read_json(root / "survey_plan.json")
+    planner_mode = str(plan.get("planner_mode") or ast.get("planner_mode") or "").lower()
+    title = str(ast.get("title") or "").lower()
+    return planner_mode in {"insight", "conference_insight"} or "deepdive 洞察报告" in title or "insight" in title
+
+
 def _section_final(root: Path, section_id: str) -> str:
     path = root / "sections" / section_id / "final.md"
     return path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
@@ -328,6 +335,16 @@ def _first_units(text: str, limit: int = 2, max_chars: int = 700) -> list[str]:
     return units
 
 
+def _fallback_units(text: str, *, limit: int = 2) -> list[str]:
+    units = _first_units(text, limit=limit)
+    if units:
+        return units
+    compact = re.sub(r"\s+", " ", text or "").strip()
+    if not compact:
+        return []
+    return [compact[:260]]
+
+
 def _append_unique(items: list[str], candidates: list[str], *, max_items: int) -> None:
     seen = {re.sub(r"\s+", " ", item).strip() for item in items}
     for candidate in candidates:
@@ -338,6 +355,97 @@ def _append_unique(items: list[str], candidates: list[str], *, max_items: int) -
         seen.add(key)
         if len(items) >= max_items:
             break
+
+
+def _evidence_callouts(root: Path, evidence_ids: list[str], *, max_items: int = 4) -> list[dict[str, str]]:
+    evidence_rows = _evidence_lookup(root)
+    source_rows = _source_lookup(root)
+    callouts: list[dict[str, str]] = []
+    for evidence_id in evidence_ids[:max_items]:
+        evidence = evidence_rows.get(evidence_id, {})
+        source = source_rows.get(str(evidence.get("source_id") or ""), {})
+        title = str(source.get("title") or evidence.get("title") or evidence_id)
+        source_type = str(source.get("source_type") or "unknown")
+        content = str(evidence.get("content") or evidence.get("summary") or "").strip()
+        callouts.append({
+            "evidence_id": evidence_id,
+            "source_title": title,
+            "source_type": source_type,
+            "summary": content[:360] if content else title,
+            "url": str(source.get("url") or ""),
+        })
+    return callouts
+
+
+def _build_section_render_card(root: Path, section: dict, row: dict) -> dict[str, Any]:
+    section_id = str(section.get("section_id") or row.get("section_id") or "")
+    text = _section_final(root, section_id)
+    blocks = _split_markdown_sections(text)
+    evidence_ids = list(row.get("evidence_ids") or [])
+    claim_ids = list(row.get("claim_ids") or [])
+
+    thesis_candidates: list[str] = []
+    for heading in ("position", "architecture synthesis", "comparative positioning"):
+        thesis_candidates.extend(_fallback_units(_clean_human_text(blocks.get(heading, ""), {}), limit=2))
+    if not thesis_candidates:
+        thesis_candidates = _fallback_units(_clean_human_text(text, {}), limit=2)
+
+    takeaways: list[str] = []
+    for heading in (
+        "architecture synthesis",
+        "comparative positioning",
+        "evaluation and risk boundary",
+        "limitations and failure modes",
+        "open problems",
+    ):
+        _append_unique(takeaways, _fallback_units(_clean_human_text(blocks.get(heading, ""), {}), limit=1), max_items=5)
+
+    evidence_callouts = _evidence_callouts(root, evidence_ids, max_items=4)
+    title = str(section.get("title") or row.get("title") or section_id)
+    figure_spec = {
+        "figure_id": re.sub(r"[^a-zA-Z0-9_-]+", "_", section_id).strip("_"),
+        "type": "section_render_card",
+        "title": title,
+        "claim_ids": claim_ids[:5],
+        "evidence_ids": evidence_ids[:5],
+    }
+    return {
+        "schema_version": "solar.deepdive.section_render_card.v1",
+        "section_id": section_id,
+        "chapter_id": str(section.get("chapter_id") or row.get("chapter_id") or ""),
+        "title": title,
+        "status": row.get("status") or "pending",
+        "thesis": thesis_candidates[:3],
+        "evidence_callouts": evidence_callouts,
+        "takeaways": takeaways[:5],
+        "figure_spec": figure_spec,
+        "claim_ids": claim_ids,
+        "evidence_ids": evidence_ids,
+    }
+
+
+def _build_section_render_cards(root: Path, ast: dict, contribution: dict) -> dict[str, Any]:
+    rows_by_section = {str(row.get("section_id") or ""): row for row in contribution.get("rows", []) if isinstance(row, dict)}
+    cards: list[dict[str, Any]] = []
+    card_dir = root / "section_render_cards"
+    card_dir.mkdir(parents=True, exist_ok=True)
+    for section in ast.get("sections", []) if isinstance(ast.get("sections"), list) else []:
+        section_id = str(section.get("section_id") or "")
+        row = rows_by_section.get(section_id, {"section_id": section_id, "status": "pending"})
+        card = _build_section_render_card(root, section, row)
+        cards.append(card)
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "__", section_id).strip("_") or "section"
+        (card_dir / f"{safe_name}.json").write_text(json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload = {
+        "ok": True,
+        "schema_version": "solar.deepdive.section_render_cards.v1",
+        "card_count": len(cards),
+        "cards": cards,
+    }
+    (root / "section_render_cards.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    figures = {"figures": [card["figure_spec"] for card in cards if card.get("figure_spec")]}
+    (root / "figures.json").write_text(json.dumps(figures, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return payload
 
 
 def _human_chapter_block(root: Path, chapter: dict, sections: list[dict], evidence_numbers: dict[str, int]) -> tuple[str, dict[str, int]]:
@@ -387,6 +495,90 @@ def _human_chapter_block(root: Path, chapter: dict, sections: list[dict], eviden
     if open_problems:
         lines.extend(["### 未解问题", "", *[f"- {item}" for item in open_problems[:3]], ""])
     return "\n".join(lines).strip() + "\n", metrics
+
+
+def _build_insight_human_final(root: Path, ast: dict, contribution: dict, section_render: dict[str, Any]) -> dict:
+    cards = section_render.get("cards", []) if isinstance(section_render.get("cards"), list) else []
+    cards_by_chapter: dict[str, list[dict[str, Any]]] = {}
+    for card in cards:
+        cards_by_chapter.setdefault(str(card.get("chapter_id") or ""), []).append(card)
+
+    chapters = ast.get("chapters", []) if isinstance(ast.get("chapters"), list) else []
+    source_counts = contribution.get("source_type_counts") if isinstance(contribution.get("source_type_counts"), dict) else {}
+    source_summary = "、".join(f"{key} {value}" for key, value in sorted(source_counts.items())) or "N/A"
+    title = str(ast.get("title") or "DeepDive 洞察报告")
+
+    thesis_lines: list[str] = []
+    for card in cards[:4]:
+        _append_unique(thesis_lines, [str(item) for item in card.get("thesis", [])], max_items=5)
+    if not thesis_lines:
+        thesis_lines.append(f"本报告围绕“{title}”建立中心论点、证据链、行动映射和后续观察指标。")
+
+    evidence_lines: list[str] = []
+    for card in cards:
+        for callout in card.get("evidence_callouts", [])[:2]:
+            summary = str(callout.get("summary") or callout.get("source_title") or "").strip()
+            if summary:
+                _append_unique(evidence_lines, [summary], max_items=8)
+
+    lines = [
+        f"# {title}",
+        "",
+        "## 核心判断",
+        "",
+        *[f"- {item}" for item in thesis_lines[:5]],
+        "",
+        "## 信号地图与证据强度",
+        "",
+        f"本报告基于 {int(contribution.get('finalized_sections') or 0)}/{int(contribution.get('section_count') or 0)} 个已审阅 section，来源类型覆盖：{source_summary}。",
+        "",
+    ]
+    if evidence_lines:
+        lines.extend([*[f"- {item}" for item in evidence_lines[:8]], ""])
+
+    for chapter in chapters:
+        chapter_id = str(chapter.get("chapter_id") or "")
+        chapter_cards = cards_by_chapter.get(chapter_id, [])
+        lines.extend([f"## {chapter.get('title')}", ""])
+        if not chapter_cards:
+            lines.extend(["该章尚无可发布的 SectionRender 卡片。", ""])
+            continue
+        for card in chapter_cards:
+            lines.extend([f"### {card.get('title')}", ""])
+            thesis = [str(item) for item in card.get("thesis", []) if str(item).strip()]
+            if thesis:
+                lines.extend(["#### 本节判断", "", *[f"- {item}" for item in thesis[:2]], ""])
+            callouts = card.get("evidence_callouts", []) if isinstance(card.get("evidence_callouts"), list) else []
+            if callouts:
+                lines.extend(["#### 证据链", ""])
+                for callout in callouts[:3]:
+                    source = str(callout.get("source_title") or "N/A")
+                    summary = str(callout.get("summary") or "").strip()
+                    lines.append(f"- {source}: {summary}")
+                lines.append("")
+            takeaways = [str(item) for item in card.get("takeaways", []) if str(item).strip()]
+            if takeaways:
+                lines.extend(["#### 影响与行动", "", *[f"- {item}" for item in takeaways[:3]], ""])
+            lines.extend(["#### 反证和观察", "", "- 保留反向证据、风险边界和后续领先指标；若证据不足，应降级为 watchlist，而不是强推结论。", ""])
+
+    text = "\n".join(lines).strip() + "\n"
+    text, execution_metrics = append_execution_metrics_section(text, root)
+    human_path = root / "human_final.md"
+    human_path.write_text(text, encoding="utf-8")
+    metrics_path = root / "survey_human_execution_metrics.json"
+    write_execution_metrics(metrics_path, execution_metrics)
+    summary = {
+        "ok": True,
+        "human_final_md": str(human_path),
+        "char_count": len(text),
+        "chapter_count": len(chapters),
+        "section_render_card_count": len(cards),
+        "template_heading_count": sum(text.count(f"## {heading}") for heading in _HUMAN_SECTION_HEADINGS),
+        "execution_metrics": execution_metrics,
+        "execution_metrics_path": str(metrics_path),
+    }
+    (root / "survey_human_final_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return summary
 
 
 def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> dict:
@@ -463,6 +655,8 @@ def compile_survey(output_dir: str | Path) -> dict:
     root = Path(output_dir).expanduser()
     ast = _read_json(root / "survey_report_ast.json")
     contribution = _build_contribution_matrix(root, ast)
+    insight_mode = _is_insight_ast(root, ast)
+    section_render = _build_section_render_cards(root, ast, contribution) if insight_mode else {}
     matrix_rows = contribution.get("rows", []) if isinstance(contribution.get("rows"), list) else []
     chapter_reviews: list[dict] = []
     chapter_blocks: list[str] = []
@@ -539,11 +733,16 @@ def compile_survey(output_dir: str | Path) -> dict:
     final_path.write_text(final_text, encoding="utf-8")
     metrics_path = root / "survey_execution_metrics.json"
     write_execution_metrics(metrics_path, execution_metrics)
-    human_summary = _build_human_readable_final(root, ast, contribution)
+    human_summary = (
+        _build_insight_human_final(root, ast, contribution, section_render)
+        if insight_mode
+        else _build_human_readable_final(root, ast, contribution)
+    )
     return {
         "ok": True,
         "final_md": str(final_path),
         "human_final_md": human_summary.get("human_final_md"),
+        "section_render_cards": str(root / "section_render_cards.json") if insight_mode else "",
         "finalized_sections": finalized,
         "total_sections": len(ast.get("sections", [])),
         "contribution_matrix": str(root / "survey_contribution_matrix.json"),
