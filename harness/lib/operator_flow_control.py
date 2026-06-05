@@ -24,7 +24,12 @@ ANTIGRAVITY_PROBE_PROMPT = "Reply with exactly: SOLAR_AGY_OK"
 RATE_LIMIT_RE = re.compile(
     r"RESOURCE_EXHAUSTED|\bquota(?:\s+exhausted)?\b|monthly usage limit|"
     r"rate[- ]?limit|\b429\b|too many requests|resets?\s+in|"
-    r"Upgrade your plan|You've hit .*limit|Individual quota reached|\bcapacity\b",
+    r"Upgrade your plan|You've hit .*limit|Individual quota reached|\bcapacity\b|"
+    r"请求过于频繁|暂时限制你访问对话记录|请稍等几分钟后再重试",
+    re.I,
+)
+BROWSER_HISTORY_THROTTLE_RE = re.compile(
+    r"请求过于频繁|暂时限制你访问对话记录|请稍等几分钟后再重试",
     re.I,
 )
 # NOTE: \bquota\b requires a word boundary after "quota", so "quotaProject=" is
@@ -358,6 +363,22 @@ def classify_failure_state(text: str) -> str:
     if NO_ACTIVE_CONVERSATION_RE.search(text or ""):
         return "bootstrap_failed"
     return ""
+
+
+def browser_history_throttle_cooldown_seconds(text: str, fallback: int) -> int:
+    """Return the cooldown for ChatGPT/browser history temporary throttles.
+
+    ChatGPT sometimes shows a recoverable page-level throttle in Chinese:
+    "你的请求过于频繁...暂时限制你访问对话记录...请稍等几分钟后再重试".
+    This is not a full quota exhaustion, so the scheduler should defer briefly
+    instead of hammering the web app or blocking the operator for an hour.
+    """
+    if not BROWSER_HISTORY_THROTTLE_RE.search(text or ""):
+        return max(0, int(fallback or 0))
+    return int_value(
+        os.environ.get("SOLAR_BROWSER_AGENT_HISTORY_THROTTLE_COOLDOWN_SECONDS"),
+        600,
+    )
 
 
 def format_auth_blocker_message(
@@ -819,8 +840,13 @@ def apply_failure_flow_control(
     result = {"runtime_state": runtime_state, "task_control": None, "expires_at": "", "config_block": None}
     if runtime_state == "cooldown":
         reset_at = parse_rate_limit_reset_at(failure_text)
-        cooldown = _seconds_until(reset_at, int(rate_limit_cooldown_seconds or 0))
+        fallback_cooldown = browser_history_throttle_cooldown_seconds(
+            failure_text,
+            int(rate_limit_cooldown_seconds or 0),
+        )
+        cooldown = _seconds_until(reset_at, fallback_cooldown)
         expires_iso = _iso_z(reset_at) if reset_at else ""
+        reason = "browser_history_throttle" if BROWSER_HISTORY_THROTTLE_RE.search(failure_text or "") else "rate_limit"
         if cooldown > 0:
             set_operator_state(operator_id, "cooldown", ttl_seconds=cooldown)
             result["expires_at"] = expires_iso or _iso_z(_now() + dt.timedelta(seconds=cooldown))
@@ -828,7 +854,7 @@ def apply_failure_flow_control(
                 operator_id,
                 "cooldown",
                 expires_at=str(result["expires_at"]),
-                reason="rate_limit",
+                reason=reason,
                 source="failure_flow_control",
                 evidence_text=failure_text,
             )
@@ -838,7 +864,7 @@ def apply_failure_flow_control(
                 operator_id=operator_id,
                 action="defer",
                 runtime_state="cooldown",
-                reason="rate_limit",
+                reason=reason,
                 delay_seconds=cooldown,
             )
         return result
