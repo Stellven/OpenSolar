@@ -84,6 +84,9 @@
         "allowed_source_roles": [
           "builder"
         ],
+        "allowed_groups": [
+          "codex-gpt-5.5-medium"
+        ],
         "preferred_groups": [
           "codex-gpt-5.5-medium"
         ],

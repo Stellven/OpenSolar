@@ -1917,8 +1917,8 @@
       "owner_host": "lisihao@100.122.223.55",
       "pane": "solar-harness-multi-task:*",
       "profile": "deepseek-advisory",
-      "role": "evaluator",
-      "persona": "evaluator",
+      "role": "advisor",
+      "persona": "advisor",
       "provider": "deepseek",
       "vendor": "DeepSeek",
       "backend": "command",
@@ -1939,7 +1939,7 @@
       "available": true,
       "health_status": "ok",
       "roles": [
-        "evaluator"
+        "advisor"
       ],
       "task_classes": [
         "analysis",
@@ -1973,7 +1973,7 @@
       "latency_tier": "low",
       "context_tier": "high",
       "max_concurrency": 2,
-      "fallback_profile": "evaluator",
+      "fallback_profile": "advisor",
       "operator_class": "AdvisoryReview",
       "model_binding": {
         "provider": "deepseek",
@@ -2657,7 +2657,8 @@
       "available": true,
       "health_status": "ok",
       "roles": [
-        "builder"
+        "builder",
+        "evaluator"
       ],
       "task_classes": [
         "implementation",
@@ -2665,7 +2666,9 @@
         "tests",
         "refactor",
         "fast-patch",
-        "code-edit"
+        "code-edit",
+        "review",
+        "verification"
       ],
       "strengths": [
         "code-edit",
@@ -2677,6 +2680,9 @@
         "code-edit",
         "tests",
         "refactor",
+        "evaluator",
+        "review",
+        "verification",
         "codex",
         "gpt"
       ],
@@ -2746,7 +2752,8 @@
       "available": true,
       "health_status": "ok",
       "roles": [
-        "builder"
+        "builder",
+        "evaluator"
       ],
       "task_classes": [
         "implementation",
@@ -2754,7 +2761,9 @@
         "tests",
         "refactor",
         "fast-patch",
-        "code-edit"
+        "code-edit",
+        "review",
+        "verification"
       ],
       "strengths": [
         "code-edit",
@@ -2766,6 +2775,9 @@
         "code-edit",
         "tests",
         "refactor",
+        "evaluator",
+        "review",
+        "verification",
         "codex",
         "gpt"
       ],
