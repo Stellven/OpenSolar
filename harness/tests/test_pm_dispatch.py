@@ -439,3 +439,70 @@ def test_drain_builder_ready_submits_and_marks_graph(monkeypatch, tmp_path):
     assert graph["nodes"][0]["status"] == "dispatched"
     assert graph["nodes"][0]["dispatched_via"] == "pm_dispatch"
     assert graph["nodes"][0]["pm_task_id"] == "pm-sprint-drain-B1-test"
+
+
+def test_cmd_fail_requeues_transient_operator_failure_graph_node(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    task_id = "pm-sprint-requeue-B1-test"
+    graph_path = sprints / "sprint-requeue.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-requeue",
+                "nodes": [
+                    {
+                        "id": "B1",
+                        "status": "dispatched",
+                        "assigned_to": "mini-codex-gpt53-spark-builder-1",
+                        "dispatch_id": task_id,
+                        "pm_task_id": task_id,
+                        "operator_id": "mini-codex-gpt53-spark-builder-1",
+                    }
+                ],
+                "node_results": {
+                    "B1": {
+                        "status": "dispatched",
+                        "dispatch_id": task_id,
+                        "pm_task_id": task_id,
+                        "operator_id": "mini-codex-gpt53-spark-builder-1",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    pm_dispatch.write_pm_task_record(
+        task_id,
+        {
+            "task_id": task_id,
+            "status": "submitted",
+            "sprint_id": "sprint-requeue",
+            "node_id": "B1",
+            "operator_id": "mini-codex-gpt53-spark-builder-1",
+        },
+    )
+
+    rc = pm_dispatch.cmd_fail(
+        argparse.Namespace(
+            task_id=task_id,
+            status="failed",
+            reason="ERROR: You've hit your usage limit. [flow-control] runtime_state=cooldown",
+        )
+    )
+
+    assert rc == 0
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert node["status"] == "pending"
+    assert node["requeue_reason"] == "transient_operator_failure"
+    assert "dispatch_id" not in node
+    assert node["dispatch_requeue_history"][0]["previous_dispatch"]["dispatch_id"] == task_id
+    record = json.loads((inbox / f"{task_id}.json").read_text(encoding="utf-8"))
+    assert record["graph_requeue"]["released"] is True

@@ -72,6 +72,12 @@ ROLE_ALIASES: dict[str, str] = {
 }
 
 NON_DISPATCHABLE_STATES = {"leased", "running", "draining", "cooldown", "quota_exhausted", "auth_expired", "disabled"}
+TRANSIENT_OPERATOR_FAILURE_RE = re.compile(
+    r"runtime_state=(?:cooldown|quota_exhausted|auth_expired)|"
+    r"you(?:'|’)ve hit .*limit|usage limit|rate[- ]?limit|quota(?:\s+exhausted)?|"
+    r"auth_expired|not logged in|not authenticated",
+    re.I,
+)
 RATE_LIMIT_PRUNER_LABEL = os.environ.get("SOLAR_RATE_LIMIT_PRUNER_LABEL", "com.solar.harness-rate-limit-pruner")
 CODE_EXEC_TASK_TYPES = {
     "implementation",
@@ -2281,6 +2287,89 @@ def _mark_graph_node_pm_dispatched(item: dict[str, Any], submitted: dict[str, An
     return {"ok": True, "sprint_id": sprint_id, "node_id": node_id, "task_id": task_id, "operator_id": operator_id}
 
 
+def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) -> dict[str, Any]:
+    reason = str(record.get("failure_reason") or "").strip()
+    if not TRANSIENT_OPERATOR_FAILURE_RE.search(reason):
+        return {"ok": False, "released": False, "reason": "not_transient_operator_failure"}
+    sprint_id = str(record.get("sprint_id") or "").strip()
+    node_id = str(record.get("node_id") or "").strip()
+    task_id = str(record.get("task_id") or "").strip()
+    if not sprint_id or not node_id or not task_id:
+        return {"ok": False, "released": False, "reason": "missing_graph_identity"}
+    graph_path = SPRINTS_DIR / f"{sprint_id}.task_graph.json"
+    if not graph_path.exists():
+        return {"ok": False, "released": False, "reason": "graph_missing", "graph": str(graph_path)}
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"ok": False, "released": False, "reason": f"graph_read_failed:{type(exc).__name__}", "graph": str(graph_path)}
+
+    nodes = graph.get("nodes") or []
+    if isinstance(nodes, dict):
+        iterable = nodes.items()
+    else:
+        iterable = [(str(node.get("id") or node.get("node_id") or ""), node) for node in nodes if isinstance(node, dict)]
+
+    target: dict[str, Any] | None = None
+    for candidate_id, node in iterable:
+        if str(candidate_id) == node_id:
+            target = node
+            break
+    if target is None:
+        return {"ok": False, "released": False, "reason": "node_missing", "graph": str(graph_path), "node_id": node_id}
+    if str(target.get("status") or "") != "dispatched":
+        return {"ok": False, "released": False, "reason": "node_not_dispatched", "status": str(target.get("status") or "")}
+
+    dispatch_ids = {
+        str(target.get("dispatch_id") or ""),
+        str(target.get("pm_task_id") or ""),
+    }
+    node_results = graph.get("node_results") if isinstance(graph.get("node_results"), dict) else {}
+    result_entry = node_results.get(node_id) if isinstance(node_results.get(node_id), dict) else {}
+    dispatch_ids.add(str(result_entry.get("dispatch_id") or ""))
+    dispatch_ids.add(str(result_entry.get("pm_task_id") or ""))
+    if task_id not in dispatch_ids:
+        return {"ok": False, "released": False, "reason": "dispatch_mismatch", "node_id": node_id}
+
+    now = _now()
+    previous = {
+        key: target.get(key)
+        for key in ("status", "assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id")
+        if target.get(key) is not None
+    }
+    target.setdefault("dispatch_requeue_history", []).append(
+        {
+            "ts": now,
+            "reason": "transient_operator_failure",
+            "failure_reason": reason[:500],
+            "previous_dispatch": previous,
+        }
+    )
+    target["status"] = "pending"
+    target["updated_at"] = now
+    target["requeue_reason"] = "transient_operator_failure"
+    for key in ("assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id"):
+        target.pop(key, None)
+
+    if isinstance(result_entry, dict):
+        result_entry.setdefault("dispatch_requeue_history", []).append(
+            {
+                "ts": now,
+                "reason": "transient_operator_failure",
+                "task_id": task_id,
+                "operator_id": str(record.get("operator_id") or ""),
+            }
+        )
+        result_entry["status"] = "pending"
+        result_entry["updated_at"] = now
+        result_entry["requeue_reason"] = "transient_operator_failure"
+        for key in ("assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id"):
+            result_entry.pop(key, None)
+
+    graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
+
+
 def cmd_drain_builder_ready(args: argparse.Namespace) -> int:
     max_items = max(0, int(getattr(args, "max_items", 0) or 0))
     dry_run = bool(getattr(args, "dry_run", False))
@@ -2566,6 +2655,12 @@ def cmd_fail(args: argparse.Namespace) -> int:
     record["status"] = status
     record["failed_at"] = _now()
     record["failure_reason"] = str(args.reason or status).strip()[:2000]
+    graph_requeue = _release_graph_node_on_transient_operator_failure(record)
+    if graph_requeue.get("released"):
+        record["graph_requeue"] = graph_requeue
+        record.setdefault("reconcile_history", []).append(
+            {"ts": record["failed_at"], "action": "graph_requeue", **graph_requeue}
+        )
     write_pm_task_record(task_id, record)
     print(f"❌ 任务 {task_id} 已标记为 {status}")
     return 0
