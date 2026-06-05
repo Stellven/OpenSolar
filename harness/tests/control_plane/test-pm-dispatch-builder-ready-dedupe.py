@@ -61,6 +61,9 @@ def test_builder_namespace_logical_operator_is_builder_ready(tmp_path: Path, mon
     assert pm_dispatch._node_is_builder_ready({"logical_operator": "builder.fix"})
     assert pm_dispatch._node_is_builder_ready({"logical_operator": "builder.implementation"})
     assert not pm_dispatch._node_is_builder_ready({"logical_operator": "eval.review"})
+    assert not pm_dispatch._node_is_builder_ready({"role": "evaluator"})
+    assert not pm_dispatch._node_is_builder_ready({"target_role": "planner"})
+    assert not pm_dispatch._node_is_builder_ready({"handoff_to": "pm"})
 
 
 def test_node_builder_objective_requires_canonical_handoff(tmp_path: Path, monkeypatch):

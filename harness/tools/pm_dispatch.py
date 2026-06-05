@@ -150,6 +150,15 @@ NON_BUILDER_READY_LOGICAL_OPERATORS = {
     "SecurityGate",
     "QuotaBroker",
 }
+NON_BUILDER_NODE_ROLES = {
+    "coordinator",
+    "evaluator",
+    "knowledge",
+    "planner",
+    "pm",
+    "reviewer",
+    "verifier",
+}
 
 
 def _load_concurrency_policy_module() -> Any | None:
@@ -1344,6 +1353,9 @@ def _active_pm_record_for_node(sprint_id: str, node_id: str) -> dict[str, Any] |
 
 
 def _node_is_builder_ready(node: dict[str, Any]) -> bool:
+    role = str(node.get("role") or node.get("target_role") or node.get("handoff_to") or "").strip().lower()
+    if role in NON_BUILDER_NODE_ROLES:
+        return False
     logical_operator = str(node.get("logical_operator") or "").strip()
     if logical_operator.startswith("builder."):
         return True
