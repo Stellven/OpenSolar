@@ -10,6 +10,9 @@ SSD_CACHE_DIR="${THUNDEROMLX_SSD_CACHE_DIR:-/Volumes/RAID0-Main/omlx-cache/ssd-q
 SSD_CACHE_MAX_SIZE="${THUNDEROMLX_SSD_CACHE_MAX_SIZE:-460GB}"
 HOT_CACHE_MAX_SIZE="${THUNDEROMLX_HOT_CACHE_MAX_SIZE:-8GB}"
 INITIAL_CACHE_BLOCKS="${THUNDEROMLX_INITIAL_CACHE_BLOCKS:-256}"
+ENABLE_SSD_CACHE="${THUNDEROMLX_ENABLE_SSD_CACHE:-0}"
+MAX_NUM_SEQS="${THUNDEROMLX_MAX_NUM_SEQS:-2}"
+COMPLETION_BATCH_SIZE="${THUNDEROMLX_COMPLETION_BATCH_SIZE:-2}"
 HOST="${THUNDEROMLX_HOST:-127.0.0.1}"
 PORT="${THUNDEROMLX_PORT:-8002}"
 SESSION="${THUNDEROMLX_TMUX_SESSION:-thunderomlx-qwen36}"
@@ -18,7 +21,13 @@ AUTO_PREWARM="${THUNDEROMLX_AUTO_PREWARM:-0}"
 PREWARM_IDLE_MINUTES="${THUNDEROMLX_PREWARM_IDLE_MINUTES:-5}"
 TARGET_MODEL="${THUNDEROMLX_TARGET_MODEL:-Qwen3.6-35b-a3b}"
 
-mkdir -p "$SSD_CACHE_DIR" "$HARNESS_DIR/logs" "$MODEL_DIR"
+mkdir -p "$HARNESS_DIR/logs" "$MODEL_DIR"
+if [[ "$ENABLE_SSD_CACHE" == "1" || "$ENABLE_SSD_CACHE" == "true" ]]; then
+  mkdir -p "$SSD_CACHE_DIR"
+  CACHE_ARGS="--paged-ssd-cache-dir '$SSD_CACHE_DIR' --paged-ssd-cache-max-size '$SSD_CACHE_MAX_SIZE'"
+else
+  CACHE_ARGS="--no-cache"
+fi
 
 ln -sfn "$SOURCE_MODEL_DIR/Qwen3.6-35b-a3b" "$MODEL_DIR/Qwen3.6-35b-a3b"
 ln -sfn "$SOURCE_MODEL_DIR/Qwen3.6-35B-A3B-DFlash" "$MODEL_DIR/Qwen3.6-35B-A3B-DFlash"
@@ -63,7 +72,7 @@ fi
 if ! lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   tmux kill-session -t "$SESSION" 2>/dev/null || true
   tmux new-session -d -s "$SESSION" \
-    "cd '$THUNDER_DIR' && exec ./venv/bin/omlx serve --serve-profile knowledge-batch --model-dir '$MODEL_DIR' --host '$HOST' --port '$PORT' --max-model-memory 35GB --max-process-memory disabled --max-num-seqs 1 --completion-batch-size 1 --paged-ssd-cache-dir '$SSD_CACHE_DIR' --paged-ssd-cache-max-size '$SSD_CACHE_MAX_SIZE' --hot-cache-max-size '$HOT_CACHE_MAX_SIZE' --initial-cache-blocks '$INITIAL_CACHE_BLOCKS' 2>&1 | tee -a '$LOG_FILE'"
+    "cd '$THUNDER_DIR' && THUNDEROMLX_FORCE_BATCHED_ENGINE=1 exec ./venv/bin/omlx serve --serve-profile knowledge-batch --model-dir '$MODEL_DIR' --host '$HOST' --port '$PORT' --max-model-memory 35GB --max-process-memory disabled --max-num-seqs '$MAX_NUM_SEQS' --completion-batch-size '$COMPLETION_BATCH_SIZE' $CACHE_ARGS --hot-cache-max-size '$HOT_CACHE_MAX_SIZE' --initial-cache-blocks '$INITIAL_CACHE_BLOCKS' 2>&1 | tee -a '$LOG_FILE'"
 fi
 
 for _ in $(seq 1 90); do
