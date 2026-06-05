@@ -57,6 +57,43 @@ RESET_AT_RE = re.compile(
     r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?",
     re.I,
 )
+RESET_DATE_AT_RE = re.compile(
+    r"(?:resets?|try again)(?:\s+(?:at|on))?\s+"
+    r"(?P<month>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+    r"\.?\s+"
+    r"(?P<day>\d{1,2})(?:st|nd|rd|th)?"
+    r"(?:,\s*(?P<year>\d{4}))?"
+    r"(?:\s+at)?\s+"
+    r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?",
+    re.I,
+)
+MONTH_NUMBERS = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
 
 
 class FlowControlBlocked(RuntimeError):
@@ -144,6 +181,28 @@ def parse_rate_limit_reset_at(text: str, *, now: dt.datetime | None = None) -> d
         )
         if delta.total_seconds() > 0:
             return (base + delta).astimezone(dt.timezone.utc)
+
+    match = RESET_DATE_AT_RE.search(raw)
+    if match:
+        month = MONTH_NUMBERS.get(str(match.group("month") or "").lower().rstrip("."))
+        day = int(match.group("day") or 0)
+        year = int(match.group("year") or base.year)
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute") or 0)
+        ampm = str(match.group("ampm") or "").lower()
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        if month and 1 <= day <= 31 and 0 <= hour <= 23 and 0 <= minute <= 59:
+            try:
+                candidate = dt.datetime(year, month, day, hour, minute, tzinfo=tz)
+            except ValueError:
+                candidate = None
+            if candidate is not None:
+                if not match.group("year") and candidate <= base:
+                    candidate = candidate.replace(year=year + 1)
+                return candidate.astimezone(dt.timezone.utc)
 
     match = RESET_AT_RE.search(raw)
     if match:
