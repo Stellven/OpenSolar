@@ -28,9 +28,14 @@ def test_external_depends_on_blocks_ready_nodes(monkeypatch, tmp_path):
 
     validation = graph_scheduler.validate_graph(graph)
     blocked = graph_scheduler.blocked_external_prerequisites(graph)
+    summarized = graph_scheduler.summarize_blocked_prerequisites(blocked)
 
     assert validation["ok"] is True
     assert blocked
+    assert summarized
+    assert summarized[0]["reason"]
+    assert summarized[0]["blocked_by"] == ["sprint:sprint-browser-agent-cutover"]
+    assert summarized[0]["guidance"]
     assert blocked[0]["sprint_id"] == "sprint-browser-agent-cutover"
     assert graph_scheduler.ready_nodes(graph) == []
 

@@ -1355,6 +1355,32 @@ def blocked_external_prerequisites(graph: dict[str, Any]) -> list[dict[str, Any]
     return blocked
 
 
+def summarize_blocked_prerequisites(blocked: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return stable, user-facing prerequisite summaries without changing truth."""
+    summaries: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in blocked or []:
+        if not isinstance(item, dict):
+            continue
+        sprint_id = str(item.get("sprint_id") or item.get("dependency_sprint") or "").strip()
+        reason = str(item.get("reason") or "external_dependency_blocked").strip()
+        key = (sprint_id, reason)
+        summary = summaries.setdefault(
+            key,
+            {
+                "sprint_id": sprint_id,
+                "reason": reason,
+                "guidance": str(item.get("guidance") or "wait for dependency sprint to pass").strip(),
+                "blocked_by": [],
+                "blocked_prerequisites": [],
+            },
+        )
+        blocked_by = f"sprint:{sprint_id}" if sprint_id else "sprint:N/A"
+        if blocked_by not in summary["blocked_by"]:
+            summary["blocked_by"].append(blocked_by)
+        summary["blocked_prerequisites"].append(deepcopy(item))
+    return list(summaries.values())
+
+
 def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
     validation = validate_graph(graph)
     if not validation["ok"]:
