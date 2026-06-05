@@ -678,6 +678,58 @@ def _format_reset_eta(expires_at: str) -> str:
         return ""
 
 
+def _shared_quota_block_for_operator(op: dict[str, Any]) -> dict[str, str]:
+    """Return active quota/cooldown block inherited from the same billing pool.
+
+    Some reserve operators share the exact subscription/API quota with a primary
+    operator but have independent runtime status files. Treating them as
+    available after the primary operator hits a limit wastes dispatch attempts.
+    """
+    operator_id = str(op.get("operator_id") or "")
+    billing_pool = str(op.get("billing_pool") or "").strip()
+    key_ref = str(op.get("key_ref") or "").strip()
+    if not billing_pool and not key_ref:
+        return {}
+    try:
+        registry = load_registry()
+    except Exception:
+        registry = {"operators": {}}
+    operators = registry.get("operators") if isinstance(registry.get("operators"), dict) else {}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for peer_id, peer_spec in operators.items():
+        if str(peer_id) == operator_id or not isinstance(peer_spec, dict):
+            continue
+        same_pool = billing_pool and str(peer_spec.get("billing_pool") or "").strip() == billing_pool
+        same_key = key_ref and str(peer_spec.get("key_ref") or "").strip() == key_ref
+        if not (same_pool or same_key):
+            continue
+        status = get_operator_status_data(str(peer_id))
+        state = str(
+            status.get("runtime_state")
+            or peer_spec.get("quota_guard_state")
+            or (peer_spec.get("state") or {}).get("runtime_state")
+            or ""
+        ).strip().lower()
+        if state not in {"cooldown", "quota_exhausted", "auth_expired"}:
+            continue
+        expires_at = str(
+            status.get("expires_at")
+            or peer_spec.get("quota_refresh_at")
+            or (peer_spec.get("state") or {}).get("cooldown_until")
+            or ""
+        ).strip()
+        expires_dt = _parse_utc(expires_at)
+        if expires_dt is not None and expires_dt <= now:
+            continue
+        return {
+            "state": state,
+            "peer_operator_id": str(peer_id),
+            "expires_at": expires_at,
+            "match": "billing_pool" if same_pool else "key_ref",
+        }
+    return {}
+
+
 def is_dispatchable(op: dict[str, Any]) -> tuple[bool, str]:
     if not op.get("enabled", False):
         return False, f"disabled: {op.get('disabled_reason', 'unknown')}"
@@ -706,6 +758,21 @@ def is_dispatchable(op: dict[str, Any]) -> tuple[bool, str]:
             if expires_at:
                 reason += f" (until {expires_at})"
             return False, reason
+    shared_block = _shared_quota_block_for_operator(op)
+    if shared_block:
+        state = shared_block.get("state", "cooldown")
+        expires_at = shared_block.get("expires_at", "")
+        reason = (
+            f"shared_quota_guard_state={state}"
+            f", peer={shared_block.get('peer_operator_id', 'unknown')}"
+            f", match={shared_block.get('match', 'unknown')}"
+        )
+        eta = _format_reset_eta(expires_at)
+        if eta:
+            reason += f", resets {eta}"
+        if expires_at:
+            reason += f" (until {expires_at})"
+        return False, reason
     state = get_operator_runtime_state(operator_id)
     state = _maybe_clear_stale_runtime(str(operator_id), state)
     if state in NON_DISPATCHABLE_STATES:
