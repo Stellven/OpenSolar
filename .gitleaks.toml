@@ -1,0 +1,14 @@
+title = "Solar release secret scan"
+
+[allowlist]
+description = "Solar false-positive and fixture allowlist"
+paths = [
+  '''^harness/tests/''',
+]
+regexes = [
+  '''key:\s*"(queueSize|failureRate24h|failureRate1h|retryingNodes|repairTasksActive|repairTasks24h|repairBranchTasks24h|handoffFailed)"''',
+  '''api_key=sk-abcdef12345678901234567890123456789012345678''',
+  '''token=ghp_test_redacted_value_only''',
+  '''Authorization:\s*Bearer\s+<[^>]+>''',
+  '''Authorization:\s*Bearer\s+\$[A-Z0-9_]+''',
+]
