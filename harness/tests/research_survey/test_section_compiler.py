@@ -143,8 +143,17 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert first_card["schema_version"] == "solar.deepdive.section_render_card.v1"
     assert first_card["thesis"]
     assert first_card["evidence_callouts"]
-    assert first_card["figure_spec"]["type"] == "section_render_card"
-    assert first_card["figure_spec"]["render_rule"] == "draw_when_section_render_card_has_thesis_and_evidence"
+    assert first_card["figure_spec"]["type"] in {
+        "architecture_map",
+        "roadmap_timeline",
+        "process_flow",
+        "comparison_matrix",
+        "evidence_map",
+        "risk_map",
+        "insight_argument_map",
+    }
+    assert first_card["figure_spec"]["render_rule"].startswith("draw_")
+    assert first_card["figure_spec"]["label"]
     assert first_card["figure_spec"]["content_sources"]["thesis"]
     assert first_card["figure_spec"]["nodes"]
     assert first_card["figure_spec"]["edges"]
@@ -158,6 +167,7 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert 'class="takeaway-box"' in html
     assert 'class="figure-block"' in html
     assert "图由本节材料生成" in html
+    assert "论证图" in html or "架构图" in html or "路线图" in html
     human_text = (tmp_path / "human_final.md").read_text(encoding="utf-8")
     assert "## 信号地图与证据强度" in human_text
     assert "#### 本节判断" in human_text
@@ -174,6 +184,8 @@ def test_insight_writer_uses_section_render_policy(tmp_path):
     assert packet["writing_policy"]["policy_id"] == "solar.deepdive.section_render_writing.v1"
     assert "本节判断" in packet["writing_policy"]["section_template"]
     assert "Literature Lineage" not in packet["writing_policy"]["section_template"]
+    assert packet["figure_type_guidance"]["suggested_figure_type"] == "insight_argument_map"
+    assert "architecture_map" in packet["figure_type_guidance"]["supported_types"]
 
     result = run_section_revision_loop(tmp_path, "ch01/sec01", min_chars=800)
     assert result["ok"] is True

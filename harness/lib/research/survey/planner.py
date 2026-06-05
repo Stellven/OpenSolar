@@ -74,6 +74,25 @@ INSIGHT_SECTION_TITLES = [
 ]
 
 
+def _suggested_figure_type(chapter_title: str, section_title: str, *, insight_mode: bool) -> str:
+    if not insight_mode:
+        return ""
+    text = f"{chapter_title} {section_title}".lower()
+    if re.search(r"路线图|下一步|roadmap|预测|forecast|观察指标|watch", text):
+        return "roadmap_timeline"
+    if re.search(r"风险|反证|边界|缺口|失败|risk|gap|limit", text):
+        return "risk_map"
+    if re.search(r"行动|吸收|映射|架构|architecture|runtime|系统|规格|协议|生态|工程", text):
+        return "architecture_map"
+    if re.search(r"证据|signal|source|强度|质量|链", text):
+        return "evidence_map"
+    if re.search(r"分歧|机会|比较|对比|取舍|opportunit|difference", text):
+        return "comparison_matrix"
+    if re.search(r"流程|过程|pipeline|process|工作流", text):
+        return "process_flow"
+    return "insight_argument_map"
+
+
 def _stable_id(prefix: str, text: str) -> str:
     return f"{prefix}_{hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]}"
 
@@ -262,6 +281,7 @@ def create_survey_plan(
                 required_source_types=required,
                 min_evidence=4,
                 min_claims=3,
+                suggested_figure_type=_suggested_figure_type(title, section_title, insight_mode=insight_mode),
             ))
             questions.append(SurveyQuestion(
                 question_id=f"q{cidx:02d}_{sidx:02d}",

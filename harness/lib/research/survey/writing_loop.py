@@ -61,6 +61,7 @@ SECTION_RENDER_WRITING_POLICY = {
         "Bind important factual claims to [claim:<id>] and [evidence:<id>] tags.",
         "Separate facts, interpretation, action, and falsification conditions.",
         "Use evidence callouts and takeaways that can be compiled into SectionRender cards.",
+        "Choose figure_spec.type from the provided figure_type guidance; do not always emit a generic card diagram.",
         "If evidence is weak, downgrade the conclusion instead of making it sound decisive.",
     ],
     "forbidden_patterns": [
@@ -68,6 +69,16 @@ SECTION_RENDER_WRITING_POLICY = {
         "Do not write a source-by-source summary.",
         "Do not publish unsupported strategy or product recommendations.",
     ],
+}
+
+FIGURE_TYPE_GUIDANCE = {
+    "architecture_map": "Use when the section explains components, runtime structure, schema/operator/gate mapping, or system absorption.",
+    "roadmap_timeline": "Use when the section turns signals into next steps, forecast horizons, watchlist, or implementation roadmap.",
+    "process_flow": "Use when the section explains a pipeline, workflow, sequence, or operational loop.",
+    "comparison_matrix": "Use when the section compares options, camps, tradeoffs, disagreements, or competing routes.",
+    "evidence_map": "Use when the section mainly maps evidence strength, source coverage, signal clusters, or claim support.",
+    "risk_map": "Use when the section focuses on counter-evidence, failure modes, uncertainty, gaps, or downgrade conditions.",
+    "insight_argument_map": "Use as the default when the section is a thesis-first argument with evidence and action but no stronger visual type.",
 }
 
 
@@ -227,6 +238,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
     chapter_context = _chapter_context(root, section_id, spec)
     insight_mode = _is_insight_run(root)
     writing_policy = SECTION_RENDER_WRITING_POLICY if insight_mode else PROFESSOR_GRADE_WRITING_POLICY
+    suggested_figure_type = str(spec.get("suggested_figure_type") or "insight_argument_map")
     packet = SectionPromptPacket(
         section_id=section_id,
         round_index=round_index,
@@ -249,6 +261,7 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
                 "Markdown section draft that is directly convertible to SectionRender cards.",
                 "Include headings: 本节判断, 证据链, 影响与行动, 反证和观察, Figure Spec, SectionRender JSON.",
                 "SectionRender JSON must include thesis, evidence_callouts, takeaways, figure_spec, claim_ids, evidence_ids.",
+                f"figure_spec.type should be `{suggested_figure_type}` unless the evidence strongly requires another supported figure type.",
                 "All core claims must reference claim_id and evidence_id tags.",
             ]
             if insight_mode
@@ -279,6 +292,10 @@ def build_section_prompt_packet(root: Path, section_id: str, round_index: int = 
     payload["chapter_context"] = chapter_context
     payload["writing_policy"] = writing_policy
     payload["insight_mode"] = insight_mode
+    payload["figure_type_guidance"] = {
+        "suggested_figure_type": suggested_figure_type if insight_mode else "",
+        "supported_types": FIGURE_TYPE_GUIDANCE if insight_mode else {},
+    }
     payload["source_type_guidance"] = _source_type_guidance(source_types)
     payload["synthesis_outline"] = (
         [
@@ -385,6 +402,12 @@ def _write_prompt_packet(section_dir: Path, packet: dict) -> None:
     md.extend(f"- {item}" for item in packet.get("source_type_guidance", []))
     md.extend(["", "## Synthesis Outline", ""])
     md.extend(f"- {item}" for item in packet.get("synthesis_outline", []))
+    figure_guidance = packet.get("figure_type_guidance") if isinstance(packet.get("figure_type_guidance"), dict) else {}
+    if figure_guidance.get("suggested_figure_type"):
+        md.extend(["", "## Figure Type Guidance", ""])
+        md.append(f"- Suggested: {figure_guidance.get('suggested_figure_type')}")
+        supported = figure_guidance.get("supported_types") if isinstance(figure_guidance.get("supported_types"), dict) else {}
+        md.extend(f"- {key}: {value}" for key, value in sorted(supported.items()))
     md.extend(["", "## Required Claims", ""])
     md.extend(f"- {item}" for item in packet.get("required_claim_ids", []))
     md.extend(["", "## Required Evidence", ""])
@@ -416,6 +439,7 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
     evidence_ids = [eid for eid in pack.get("evidence_ids", []) if eid]
     title = spec.get("title") or section_id
     question = spec.get("research_question") or ""
+    suggested_figure_type = str(spec.get("suggested_figure_type") or "insight_argument_map")
     source_type_list = [str(item) for item in pack.get("source_types", []) if str(item)] if isinstance(pack.get("source_types"), list) else []
     source_types = ", ".join(source_type_list) or "N/A"
     anchor = _section_anchor(section_id, str(title), chapter_context)
@@ -456,8 +480,9 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
                 f"如果出现 `{lens['risk']}`，本节结论必须降级为观察项。",
             ],
             "figure_spec": {
-                "type": "section_render_card",
+                "type": suggested_figure_type,
                 "title": str(title),
+                "rationale": FIGURE_TYPE_GUIDANCE.get(suggested_figure_type, FIGURE_TYPE_GUIDANCE["insight_argument_map"]),
                 "claim_ids": claim_ids[:5],
                 "evidence_ids": evidence_ids[:5],
             },
@@ -494,8 +519,9 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 ## Figure Spec
 
-- figure_type: section_render_card
+- figure_type: {suggested_figure_type}
 - figure_title: {title}
+- figure_rationale: {FIGURE_TYPE_GUIDANCE.get(suggested_figure_type, FIGURE_TYPE_GUIDANCE["insight_argument_map"])}
 - claim_ids: {", ".join(claim_ids[:5]) or "N/A"}
 - evidence_ids: {", ".join(evidence_ids[:5]) or "N/A"}
 

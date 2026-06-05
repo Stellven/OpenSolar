@@ -72,6 +72,11 @@ def test_planner_uses_generic_insight_shape_for_deepdive_hint():
     first_section = plan["report_ast"]["sections"][0]
     assert "本节判断" in first_section["title"]
     assert "中心论点" in first_section["research_question"]
+    assert first_section["suggested_figure_type"] == "insight_argument_map"
+    figure_types = {section["suggested_figure_type"] for section in plan["report_ast"]["sections"]}
+    assert "architecture_map" in figure_types
+    assert "roadmap_timeline" in figure_types
+    assert "risk_map" in figure_types
 
 
 def test_planner_keeps_general_mode_for_non_conference_briefs():

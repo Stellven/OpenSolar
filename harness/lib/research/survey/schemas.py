@@ -69,6 +69,7 @@ class SectionSpec:
     required_source_types: list[str]
     min_evidence: int
     min_claims: int
+    suggested_figure_type: str = ""
     schema_version: str = SCHEMA_VERSION
 
 
