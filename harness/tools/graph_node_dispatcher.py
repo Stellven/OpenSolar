@@ -1128,6 +1128,16 @@ def _strict_dependencies_passed(graph: dict[str, Any], node: dict[str, Any]) -> 
     return True
 
 
+HANDOFF_ARTIFACT_KEYS = {
+    "handoff_md",
+    "handoff",
+    "handoff_path",
+    "handoff_file",
+    "handoff_ref",
+    "handoff_artifact",
+}
+
+
 def _resolve_handoff_artifact_path(value: Any) -> Path | None:
     raw = str(value or "").strip()
     if not raw:
@@ -1141,14 +1151,34 @@ def _resolve_handoff_artifact_path(value: Any) -> Path | None:
     return SPRINTS_DIR / path
 
 
+def _resolve_handoff_artifact_paths(value: Any) -> list[Path]:
+    """Resolve handoff paths from graph artifact fields without assuming shape."""
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        paths: list[Path] = []
+        for key in HANDOFF_ARTIFACT_KEYS | {"path", "file", "md"}:
+            if key in value:
+                paths.extend(_resolve_handoff_artifact_paths(value.get(key)))
+        return paths
+    if isinstance(value, (list, tuple, set)):
+        paths = []
+        for item in value:
+            paths.extend(_resolve_handoff_artifact_paths(item))
+        return paths
+    path = _resolve_handoff_artifact_path(value)
+    return [path] if path is not None else []
+
+
 def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
     node_id = str(node.get("id") or "")
     candidates = [_handoff_file(sid, node_id)]
     artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
-    for key in ("handoff_md", "handoff", "handoff_path"):
-        artifact_path = _resolve_handoff_artifact_path(artifacts.get(key))
-        if artifact_path is not None:
-            candidates.append(artifact_path)
+    for key in HANDOFF_ARTIFACT_KEYS:
+        candidates.extend(_resolve_handoff_artifact_paths(node.get(key)))
+        candidates.extend(_resolve_handoff_artifact_paths(artifacts.get(key)))
+    candidates.extend(_resolve_handoff_artifact_paths(node.get("artifact_refs")))
+    candidates.extend(_resolve_handoff_artifact_paths(artifacts.get("refs")))
     for alias in _legacy_handoff_aliases(node_id):
         candidates.append(_handoff_file(sid, alias))
     parent_handoff = f"sprints/{sid}.handoff.md"
@@ -4142,14 +4172,129 @@ def _first_available_evaluator(dry_run: bool = False) -> dict[str, Any] | None:
     return None
 
 
+def _parse_pm_submit_output(stdout: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    task_match = re.search(r"task_id\s*=\s*(\S+)", stdout)
+    operator_match = re.search(r"operator\s*=\s*([^\s(]+)", stdout)
+    dispatch_match = re.search(r"dispatch\s*=\s*(\S+)", stdout)
+    result_match = re.search(r"result\s*=\s*(\S+)", stdout)
+    if task_match:
+        parsed["pm_task_id"] = task_match.group(1)
+    if operator_match:
+        parsed["operator_id"] = operator_match.group(1)
+    if dispatch_match:
+        parsed["pm_dispatch_file"] = dispatch_match.group(1)
+    if result_match:
+        parsed["pm_result_path"] = result_match.group(1)
+    return parsed
+
+
+def _submit_eval_to_operator_pool(
+    *,
+    sid: str,
+    node_id: str,
+    graph_path: str,
+    pane: str,
+    dispatch_id: str,
+    instruction_file: Path,
+    dry_run: bool,
+) -> dict[str, Any]:
+    dispatch_preview = instruction_file.read_text(encoding="utf-8")
+    if len(dispatch_preview) > 60000:
+        dispatch_preview = (
+            dispatch_preview[:60000]
+            + "\n\n[TRUNCATED] Full graph eval dispatch instructions are in the file path above; read the file before acting."
+        )
+    objective = (
+        "你是 graph-dispatch evaluator。请严格执行下面这个 DAG 节点评审文件；"
+        "必须阅读 builder handoff/evidence，写入文件内要求的 eval.md/eval.json verdict，"
+        "不要只写 PM result。\n\n"
+        f"Graph eval dispatch file: {instruction_file}\n"
+        f"Graph: {graph_path}\n"
+        f"Sprint: {sid}\n"
+        f"Node: {node_id}\n"
+        f"Dispatch ID: {dispatch_id}\n"
+        f"Original evaluator slot: {pane or 'N/A'}\n\n"
+        "--- BEGIN GRAPH EVAL DISPATCH FILE ---\n"
+        f"{dispatch_preview}"
+        "\n--- END GRAPH EVAL DISPATCH FILE ---"
+    )
+    context = json.dumps(
+        {
+            "source": "graph_node_dispatcher",
+            "graph": graph_path,
+            "dispatch_id": dispatch_id,
+            "original_assigned_pane": pane,
+            "eval_dispatch_file": str(instruction_file),
+        },
+        ensure_ascii=False,
+    )
+    cmd = [
+        sys.executable,
+        str(HARNESS_DIR / "tools" / "pm_dispatch.py"),
+        "submit",
+        "--role",
+        "evaluator",
+        "--sprint",
+        sid,
+        "--node",
+        node_id,
+        "--task-type",
+        "graph_eval",
+        "--objective",
+        objective,
+        "--context",
+        context,
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+    env = _broker_env(sid)
+    env["SOLAR_PM_DISPATCH_ALLOW_DIRECT"] = "1"
+    env.setdefault("SOLAR_PM_DISPATCH_SOURCE", "graph_node_dispatcher")
+    try:
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=45, env=env)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "reason": "operator_pool_eval_submit_exception",
+            "error": str(exc),
+            "instruction_file": str(instruction_file),
+        }
+    if completed.returncode != 0:
+        return {
+            "ok": False,
+            "reason": "operator_pool_eval_submit_failed",
+            "returncode": completed.returncode,
+            "stdout": completed.stdout[-1200:],
+            "stderr": completed.stderr[-1200:],
+            "instruction_file": str(instruction_file),
+        }
+    parsed = _parse_pm_submit_output(completed.stdout)
+    operator_id = parsed.get("operator_id") or "unknown"
+    return {
+        "ok": True,
+        "pane": f"operator:{operator_id}",
+        "operator_id": operator_id,
+        "pm_dispatch": parsed,
+        "instruction_file": str(instruction_file),
+        "dispatch_mode": "operator_pool_eval",
+        "dry_run": dry_run,
+    }
+
+
 def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                         force: bool = False, max_items: int = 0) -> dict[str, Any]:
     graph = load_graph(graph_path)
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     dispatched: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    reconciled: list[dict[str, Any]] = []
     used_evaluator_panes: set[str] = set()
-    evaluators = _discover_evaluators(dry_run)
+    if not dry_run:
+        reconciled = _reconcile_existing_dispatches(graph, graph_path)
+        if reconciled:
+            save_graph(graph_path, graph)
+    evaluators: list[dict[str, Any]] | None = None
 
     for node in graph.get("nodes", []):
         if max_items and len(dispatched) >= max_items:
@@ -4157,6 +4302,8 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         node_id = str(node.get("id") or "")
         if not _node_eval_needed(graph, sid, node, force=force):
             continue
+        if evaluators is None:
+            evaluators = _discover_evaluators(dry_run)
         requested_plan = _plan_node_evaluation(graph, node)
         loop_evaluators = [
             {**item, "busy": bool(item.get("busy")) or str(item.get("pane") or "") in used_evaluator_panes}
@@ -4172,12 +4319,26 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         node["evaluation_plan"] = runtime_plan
         node["evaluation_plan_updated_at"] = _utc_now()
         if not runtime_capacity.get("available_evaluators"):
-            skipped.append({
-                "node": node_id,
-                "reason": "no_available_evaluator",
-                "evaluation_plan": runtime_plan,
-            })
-            break
+            pool_worker = {
+                "pane": "operator-pool:evaluator.0",
+                "models": ["operator-pool", "deepseek-v4-pro", "opus", "gpt-5.5"],
+                "skills": ["review", "testing", "bash"],
+                "busy": False,
+                "title": "operator pool evaluator",
+                "evaluator_host_role": "operator_pool",
+                "unavailable_reason": "",
+            }
+            evaluators.append(pool_worker)
+            loop_evaluators.append(pool_worker)
+            runtime_capacity = _evaluation_capacity_snapshot(runtime_plan, loop_evaluators)
+            runtime_plan["capacity"] = runtime_capacity
+            if not runtime_capacity.get("available_evaluators"):
+                skipped.append({
+                    "node": node_id,
+                    "reason": "no_available_evaluator",
+                    "evaluation_plan": runtime_plan,
+                })
+                break
         if not runtime_capacity.get("capacity_satisfied", False):
             skipped.append({
                 "node": node_id,
@@ -4318,15 +4479,32 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                     "dry_run": True,
                 })
                 continue
-            sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=str(assignment["dispatch_id"]))
+            if pane.startswith("operator-pool:evaluator"):
+                submit_result = _submit_eval_to_operator_pool(
+                    sid=sid,
+                    node_id=node_id,
+                    graph_path=graph_path,
+                    pane=pane,
+                    dispatch_id=str(assignment["dispatch_id"]),
+                    instruction_file=instruction_file,
+                    dry_run=dry_run,
+                )
+                sent = bool(submit_result.get("ok"))
+                if sent:
+                    pane = str(submit_result.get("pane") or pane)
+                    assignment["pane"] = pane
+            else:
+                submit_result = {}
+                sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=str(assignment["dispatch_id"]))
             if not sent:
                 send_failed = {"assignment": assignment, "instruction_file": str(instruction_file)}
-                _mark_pane_recover_cooldown(
-                    pane,
-                    "eval_send_failed",
-                    sid=sid,
-                    dispatch_id=str(assignment["dispatch_id"]),
-                )
+                if not str(assignment["pane"]).startswith("operator-pool:"):
+                    _mark_pane_recover_cooldown(
+                        pane,
+                        str(submit_result.get("reason") or "eval_send_failed"),
+                        sid=sid,
+                        dispatch_id=str(assignment["dispatch_id"]),
+                    )
                 used_evaluator_panes.add(pane)
                 break
             _write_submit_ack(sid, node_id, pane, str(assignment["dispatch_id"]))
@@ -4363,6 +4541,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     return {
         "ok": not skipped,
         "sprint_id": sid,
+        "reconciled": reconciled,
         "dispatched": dispatched,
         "skipped": skipped,
     }

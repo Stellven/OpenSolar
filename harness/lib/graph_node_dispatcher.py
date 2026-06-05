@@ -1377,6 +1377,16 @@ def _strict_dependencies_passed(graph: dict[str, Any], node: dict[str, Any]) -> 
     return True
 
 
+HANDOFF_ARTIFACT_KEYS = {
+    "handoff_md",
+    "handoff",
+    "handoff_path",
+    "handoff_file",
+    "handoff_ref",
+    "handoff_artifact",
+}
+
+
 def _resolve_handoff_artifact_path(value: Any) -> Path | None:
     raw = str(value or "").strip()
     if not raw:
@@ -1390,14 +1400,34 @@ def _resolve_handoff_artifact_path(value: Any) -> Path | None:
     return SPRINTS_DIR / path
 
 
+def _resolve_handoff_artifact_paths(value: Any) -> list[Path]:
+    """Resolve handoff paths from graph artifact fields without assuming shape."""
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        paths: list[Path] = []
+        for key in HANDOFF_ARTIFACT_KEYS | {"path", "file", "md"}:
+            if key in value:
+                paths.extend(_resolve_handoff_artifact_paths(value.get(key)))
+        return paths
+    if isinstance(value, (list, tuple, set)):
+        paths = []
+        for item in value:
+            paths.extend(_resolve_handoff_artifact_paths(item))
+        return paths
+    path = _resolve_handoff_artifact_path(value)
+    return [path] if path is not None else []
+
+
 def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
     node_id = str(node.get("id") or "")
     candidates = [_handoff_file(sid, node_id)]
     artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
-    for key in ("handoff_md", "handoff", "handoff_path"):
-        artifact_path = _resolve_handoff_artifact_path(artifacts.get(key))
-        if artifact_path is not None:
-            candidates.append(artifact_path)
+    for key in HANDOFF_ARTIFACT_KEYS:
+        candidates.extend(_resolve_handoff_artifact_paths(node.get(key)))
+        candidates.extend(_resolve_handoff_artifact_paths(artifacts.get(key)))
+    candidates.extend(_resolve_handoff_artifact_paths(node.get("artifact_refs")))
+    candidates.extend(_resolve_handoff_artifact_paths(artifacts.get("refs")))
     for alias in _legacy_handoff_aliases(node_id):
         candidates.append(_handoff_file(sid, alias))
     parent_handoff = f"sprints/{sid}.handoff.md"
@@ -5673,8 +5703,13 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     sid = str(graph.get("sprint_id") or Path(graph_path).stem.replace(".task_graph", ""))
     dispatched: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    reconciled: list[dict[str, Any]] = []
     used_evaluator_panes: set[str] = set()
-    evaluators = _discover_evaluators(dry_run)
+    if not dry_run:
+        reconciled = _reconcile_existing_dispatches(graph, graph_path)
+        if reconciled:
+            save_graph(graph_path, graph)
+    evaluators: list[dict[str, Any]] | None = None
 
     for node in graph.get("nodes", []):
         if max_items and len(dispatched) >= max_items:
@@ -5682,6 +5717,8 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         node_id = str(node.get("id") or "")
         if not _node_eval_needed(graph, sid, node, force=force):
             continue
+        if evaluators is None:
+            evaluators = _discover_evaluators(dry_run)
         requested_plan = _plan_node_evaluation(graph, node)
         loop_evaluators = [
             {**item, "busy": bool(item.get("busy")) or str(item.get("pane") or "") in used_evaluator_panes}
@@ -5914,6 +5951,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
     return {
         "ok": not skipped,
         "sprint_id": sid,
+        "reconciled": reconciled,
         "dispatched": dispatched,
         "skipped": skipped,
     }
