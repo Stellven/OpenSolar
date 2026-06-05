@@ -575,8 +575,10 @@ def _load_tech_hotspot_module():
     return mod
 
 
-def _ai_influence_collect_attachments(report_dir: Path) -> list[Path]:
+def _ai_influence_collect_attachments(report_dir: Path, report_html_path: Path | None = None) -> list[Path]:
     attachments: list[Path] = []
+    if report_html_path and report_html_path.exists() and report_html_path.is_file():
+        attachments.append(report_html_path)
     for path in [
         report_dir / "transcripts.txt",
         report_dir / "transcripts-cleaned.txt",
@@ -598,6 +600,34 @@ def _ai_influence_collect_attachments(report_dir: Path) -> list[Path]:
         seen.add(raw)
         unique.append(item)
     return unique
+
+
+def _ai_influence_email_body_html(item: dict, report_html_path: Path, attachments: list[Path]) -> str:
+    report_html = report_html_path.read_text(encoding="utf-8", errors="ignore").strip()
+    if "<html" in report_html[:2000].lower():
+        return report_html
+    title = html.escape(str(item.get("title") or report_html_path.stem or "AI Influence 报告"))
+    module_label = html.escape(str(item.get("module_label") or "AI Influence"))
+    date_label = html.escape(str(item.get("date") or "N/A"))
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<body style="margin:0;background:#f8f4ec;color:#24322d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:720px;margin:0 auto;padding:28px;">
+    <div style="background:#fffdf8;border:1px solid #eadfcf;border-radius:22px;padding:24px;">
+      <div style="font-size:13px;color:#7a6a55;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Solar Harness · AI Influence</div>
+      <h1 style="margin:10px 0 12px;font-size:24px;line-height:1.25;color:#173f36;">{title}</h1>
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#47564f;">
+        下面是完整报告正文；同一份 HTML 也随邮件作为附件发送，方便在浏览器中打开查看原始版式。
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin:18px 0;background:#fbf7ef;border-radius:14px;overflow:hidden;">
+        <tr><td style="padding:10px 12px;color:#806f59;width:120px;">报告类型</td><td style="padding:10px 12px;font-weight:700;">{module_label}</td></tr>
+        <tr><td style="padding:10px 12px;color:#806f59;">日期</td><td style="padding:10px 12px;font-weight:700;">{date_label}</td></tr>
+      </table>
+      <div style="margin-top:18px;padding-top:18px;border-top:1px solid #eadfcf;">{report_html}</div>
+    </div>
+  </div>
+</body>
+</html>"""
 
 
 def _unique_preserve(values: list[str]) -> list[str]:
@@ -1234,7 +1264,6 @@ def _ai_influence_send_report(data: dict) -> dict:
     if not to_value:
         return {"ok": False, "status": "error", "error": "missing_mail_to"}
     module = _load_tech_hotspot_module()
-    html_content = target.read_text(encoding="utf-8", errors="ignore")
     report_dir = target.parent
     item = {
         "title": data.get("title") or report_dir.name,
@@ -1242,7 +1271,8 @@ def _ai_influence_send_report(data: dict) -> dict:
         "module_label": data.get("module_label") or "AI Influence",
     }
     subject = str(data.get("subject") or _build_report_subject(item))
-    attachments = _ai_influence_collect_attachments(report_dir)
+    attachments = _ai_influence_collect_attachments(report_dir, target)
+    html_content = _ai_influence_email_body_html(item, target, attachments)
     from_value = str(config.get("from") or "").strip()
     if not from_value:
         # Status-server launchd does not inherit the user's shell GMAIL_USER.
@@ -1260,6 +1290,7 @@ def _ai_influence_send_report(data: dict) -> dict:
     result = dict(result or {})
     result["subject"] = subject
     result["report_path"] = str(target)
+    result["mail_body_mode"] = "full_report_html_with_html_attachment"
     result["to"] = result.get("to") or [addr.strip() for addr in re.split(r"[,;]", to_value) if addr.strip()]
     if str(result.get("status") or "").lower() == "sent":
         (report_dir / "mail-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
