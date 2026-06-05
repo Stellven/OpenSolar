@@ -134,6 +134,7 @@ def compute_score(
     recent_failure: bool = False,
     same_provider_verifier: bool = False,
     stale_context: bool = False,
+    penalty_overrides: Optional[Dict[str, float]] = None,
 ) -> Tuple[float, Dict[str, float], Dict[str, float]]:
     """Compute weighted score with penalties."""
     factors = {
@@ -146,12 +147,15 @@ def compute_score(
         "CostFit": cost_fit * FACTOR_WEIGHTS["CostFit"],
     }
     penalties: Dict[str, float] = {}
+    overrides = penalty_overrides or {}
     if recent_failure:
-        penalties["RecentFailurePenalty"] = RECENT_FAILURE_PENALTY
+        penalties["RecentFailurePenalty"] = float(overrides.get("RecentFailurePenalty", RECENT_FAILURE_PENALTY))
     if same_provider_verifier:
-        penalties["SameProviderVerifierPenalty"] = SAME_PROVIDER_VERIFIER_PENALTY
+        penalties["SameProviderVerifierPenalty"] = float(
+            overrides.get("SameProviderVerifierPenalty", SAME_PROVIDER_VERIFIER_PENALTY)
+        )
     if stale_context:
-        penalties["StaleContextPenalty"] = STALE_CONTEXT_PENALTY
+        penalties["StaleContextPenalty"] = float(overrides.get("StaleContextPenalty", STALE_CONTEXT_PENALTY))
 
     total = sum(factors.values()) - sum(penalties.values())
     return total, factors, penalties

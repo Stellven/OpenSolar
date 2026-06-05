@@ -168,3 +168,98 @@ def test_autopilot_does_not_dispatch_when_dependency_blocked(tmp_path, monkeypat
     assert result["decision"]["can_dispatch"] is False
     assert result["decision"]["blocked_reason"] == "parent_dependency_blocked"
     assert result["enqueue"]["skipped"] is True
+
+
+def test_assign_ready_uses_state_plane_when_inline_status_is_stale(tmp_path, monkeypatch):
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    sprint_id = "sprint-s04-state"
+    graph_path = sprints / f"{sprint_id}.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": sprint_id,
+                "nodes": [
+                    {"id": "N1", "goal": "done", "status": "passed", "depends_on": [], "write_scope": ["a"]},
+                    {"id": "N2", "goal": "dispatch", "status": "in_progress", "depends_on": ["N1"], "write_scope": ["b"]},
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (sprints / f"{sprint_id}.task_dag.state.json").write_text(
+        json.dumps(
+            {
+                "sprint_id": sprint_id,
+                "node_results": {"N1": {"status": "passed"}, "N2": {"status": "pending"}},
+                "gate_results": {},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SOLAR_AUTOPILOT_DECISION", "state")
+    monkeypatch.setattr(graph_scheduler, "SPRINTS_DIR", sprints)
+
+    graph = graph_scheduler.load_graph(graph_path)
+    result = graph_scheduler.assign_ready(
+        graph,
+        [{
+            "pane": "pane-a",
+            "models": ["sonnet"],
+            "skills": ["python", "workflow.planning", "technical-writing", "algorithm"],
+            "capabilities": ["harness.context_preflight", "harness.contracts", "harness.dag", "harness.status"],
+        }],
+        graph_path=graph_path,
+    )
+
+    assert result["queued"] == []
+    assert [item["node"] for item in result["assigned"]] == ["N2"]
+
+
+def test_autopilot_shadow_writes_per_sprint_event_with_state_decision(tmp_path, monkeypatch):
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    sprint_id = "sprint-s04-shadow"
+    graph_path = sprints / f"{sprint_id}.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": sprint_id,
+                "nodes": [
+                    {"id": "N1", "goal": "done", "status": "passed", "depends_on": [], "write_scope": ["a"]},
+                    {"id": "N2", "goal": "dispatch", "status": "in_progress", "depends_on": ["N1"], "write_scope": ["b"]},
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (sprints / f"{sprint_id}.task_dag.state.json").write_text(
+        json.dumps(
+            {
+                "sprint_id": sprint_id,
+                "node_results": {"N1": {"status": "passed"}, "N2": {"status": "pending"}},
+                "gate_results": {},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SOLAR_AUTOPILOT_DECISION", "inline")
+    monkeypatch.setenv("SOLAR_AUTOPILOT_SHADOW", "1")
+    monkeypatch.setattr(graph_scheduler, "SPRINTS_DIR", sprints)
+
+    graph = graph_scheduler.load_graph(graph_path)
+    decision = graph_scheduler.autopilot_ready_decision(graph, graph_path=graph_path, emit_shadow=True)
+
+    assert decision["source"] == "inline"
+    assert decision["ready_node_ids"] == []
+    assert decision["state_ready"] == ["N2"]
+    assert decision["decision_taken"] == "state"
+    event = json.loads((sprints / f"{sprint_id}.events.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert event["event"] == "autopilot_cutover_diff"
+    assert event["decision_taken"] == "state"
+    trace = json.loads((sprints / f"{sprint_id}.traceability.json").read_text(encoding="utf-8"))
+    assert trace["s04_orchestration_ui:autopilot_drift"][-1]["diff_added"] == ["N2"]

@@ -28,7 +28,9 @@ from pathlib import Path
 import pytest
 
 
-LIB_PATH = Path(__file__).resolve().parents[1] / "lib" / "prerequisite_resolver.py"
+HARNESS_PATH = Path(__file__).resolve().parents[1]
+LIB_PATH = HARNESS_PATH / "lib" / "prerequisite_resolver.py"
+TOOLS_PATH = HARNESS_PATH / "tools" / "prerequisite_resolver.py"
 
 
 @pytest.fixture(scope="module")
@@ -38,6 +40,17 @@ def pr():
         "prerequisite_resolver_under_test", LIB_PATH
     )
     assert spec is not None and spec.loader is not None, f"no spec for {LIB_PATH}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def tools_pr():
+    spec = importlib.util.spec_from_file_location(
+        "tools_prerequisite_resolver_under_test", TOOLS_PATH
+    )
+    assert spec is not None and spec.loader is not None, f"no spec for {TOOLS_PATH}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -63,6 +76,23 @@ def _write_graph(
     if node_results is not None:
         payload["node_results"] = node_results
     path = sprints_dir / f"{sid}.task_graph.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _write_state(
+    sprints_dir: Path,
+    sid: str,
+    *,
+    node_results: dict | None = None,
+    gate_results: dict | None = None,
+) -> Path:
+    payload = {
+        "sprint_id": sid,
+        "node_results": node_results or {},
+        "gate_results": gate_results or {},
+    }
+    path = sprints_dir / f"{sid}.task_dag.state.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -107,6 +137,35 @@ class TestAcceptanceA_NodeStatusAllowsWhileSprintActive:
         assert detail["current_status"] == "active"
         assert detail["current_phase"] == "planning_complete"
         assert "reason" not in detail
+
+    def test_state_driven_node_passed_via_task_dag_state(self, pr, tmp_path: Path) -> None:
+        _write_graph(tmp_path, "upstream", nodes=[{"id": "N_root", "status": "pending"}])
+        _write_state(
+            tmp_path,
+            "upstream",
+            node_results={"N_root": {"status": "passed", "updated_at": "2026-06-05T00:00:00Z"}},
+        )
+
+        ok, detail = pr.evaluate_node_state_driven("upstream", "N_root", tmp_path)
+
+        assert ok is True, detail
+        assert detail["source"] == "state_driven"
+        assert detail["current_node_status"] == "passed"
+
+    def test_state_driven_node_waits_for_gate(self, pr, tmp_path: Path) -> None:
+        _write_graph(tmp_path, "upstream", nodes=[{"id": "N_root", "status": "pending", "gate": "G1"}])
+        _write_state(
+            tmp_path,
+            "upstream",
+            node_results={"N_root": {"status": "pending"}},
+            gate_results={"G1": {"status": "blocked"}},
+        )
+
+        ok, detail = pr.evaluate_node_state_driven("upstream", "N_root", tmp_path)
+
+        assert ok is False
+        assert detail["reason"] == "gate_not_passed"
+        assert detail["current_gate_status"] == "blocked"
 
     def test_node_passed_via_inline_node_status(self, pr, tmp_path: Path) -> None:
         """If ``node_results`` is absent, the resolver falls back to the
@@ -519,3 +578,19 @@ class TestIterBlockedIntegration:
         assert len(blocked) == 2
         reasons = {b["reason"] for b in blocked}
         assert reasons == {"missing_status", "status_not_satisfied"}
+
+
+def test_tools_state_driven_helper_direct_import_uses_state_file(
+    tools_pr, tmp_path: Path
+) -> None:
+    _write_state(
+        tmp_path,
+        "state-sprint",
+        node_results={"N0": {"status": "passed"}},
+    )
+
+    ok, detail = tools_pr.evaluate_node_state_driven("state-sprint", "N0", tmp_path)
+
+    assert ok is True
+    assert detail["source"] == "state_driven"
+    assert detail["current_node_status"] == "passed"

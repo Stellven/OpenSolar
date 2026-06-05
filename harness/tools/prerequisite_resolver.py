@@ -325,3 +325,71 @@ def iter_blocked(
             blocked.append(detail)
 
     return blocked
+
+
+def evaluate_node_state_driven(
+    sprint_id: str,
+    node_id: str,
+    sprints_dir: Path | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Evaluate a node using task_dag.state.json as runtime truth."""
+    if sprints_dir is None:
+        sprints_dir = _DEFAULT_SPRINTS_DIR
+
+    state_path = sprints_dir / f"{sprint_id}.task_dag.state.json"
+    spec_path = sprints_dir / f"{sprint_id}.task_graph.json"
+    detail: dict[str, Any] = {
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+        "source": "state_driven",
+        "state_path": str(state_path),
+        "current_node_status": None,
+        "current_gate_status": None,
+        "required_status": "passed",
+        "reason": None,
+    }
+
+    if not state_path.exists():
+        detail["reason"] = "state_missing"
+        return False, detail
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        detail["reason"] = "state_corrupt"
+        detail["error"] = str(exc)
+        return False, detail
+
+    node_results: dict = state.get("node_results") or {}
+    gate_results: dict = state.get("gate_results") or {}
+    nr = node_results.get(node_id)
+    effective = str(nr.get("status") or "pending").lower() if isinstance(nr, dict) else "pending"
+    detail["current_node_status"] = effective
+
+    if effective in ("passed", "skipped", "cancelled", "skipped_parent_passed"):
+        return True, detail
+    if effective == "failed":
+        detail["reason"] = "node_failed"
+        return False, detail
+
+    gate_for_node = None
+    try:
+        graph_data = json.loads(spec_path.read_text(encoding="utf-8")) if spec_path.exists() else {}
+        for node in graph_data.get("nodes") or []:
+            if str(node.get("id") or "") == node_id:
+                gate_for_node = node.get("gate")
+                break
+    except Exception:
+        gate_for_node = None
+
+    if gate_for_node:
+        gr = gate_results.get(str(gate_for_node))
+        if isinstance(gr, dict):
+            gate_status = str(gr.get("status") or "").lower()
+            detail["current_gate_status"] = gate_status
+            if gate_status != "passed":
+                detail["reason"] = "gate_not_passed"
+                return False, detail
+
+    detail["reason"] = f"node_not_ready:status={effective}"
+    return False, detail
