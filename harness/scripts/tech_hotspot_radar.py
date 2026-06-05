@@ -9052,6 +9052,177 @@ def hf_report_collection_summary(
     return summary
 
 
+def _hf_report_db_conn(config: dict[str, Any] | None) -> sqlite3.Connection | None:
+    db_path = hf_radar_db_path(config)
+    if not db_path.exists():
+        return None
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _hf_fetchall_dicts(conn: sqlite3.Connection, sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
+    return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+
+def hf_report_heat_overview(
+    config: dict[str, Any] | None,
+    *,
+    report_context: dict[str, Any],
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Compile reader-facing daily/weekly/monthly heat data for HF reports."""
+    start = str(report_context.get("window_start") or report_context.get("date") or "")
+    end = str(report_context.get("window_end") or report_context.get("date") or start)
+    if not start or not end:
+        return {"ok": False, "reason": "missing_report_window"}
+    try:
+        end_date = dt.date.fromisoformat(end)
+    except ValueError:
+        end_date = dt.date.today()
+    month_start = end_date.replace(day=1).isoformat()
+    conn = _hf_report_db_conn(config)
+    if conn is None:
+        return {"ok": False, "reason": "database_missing", "window_start": start, "window_end": end}
+    try:
+        daily_rows = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT d.paper_date,
+                   COUNT(DISTINCT d.paper_id) AS paper_count,
+                   MIN(d.rank) AS best_rank,
+                   (
+                     SELECT title FROM hf_daily_papers x
+                     WHERE x.paper_date=d.paper_date
+                     ORDER BY x.rank ASC, x.title ASC
+                     LIMIT 1
+                   ) AS top_title,
+                   (
+                     SELECT hf_url FROM hf_daily_papers x
+                     WHERE x.paper_date=d.paper_date
+                     ORDER BY x.rank ASC, x.title ASC
+                     LIMIT 1
+                   ) AS top_url
+            FROM hf_daily_papers d
+            WHERE d.paper_date BETWEEN ? AND ?
+            GROUP BY d.paper_date
+            ORDER BY d.paper_date ASC
+            """,
+            (start, end),
+        )
+        weekly_hotspots = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT paper_id,
+                   MAX(title) AS title,
+                   MAX(hf_url) AS hf_url,
+                   COUNT(DISTINCT paper_date) AS days_seen,
+                   MIN(rank) AS best_daily_rank,
+                   ROUND(AVG(rank), 2) AS avg_daily_rank,
+                   MIN(paper_date) AS first_seen,
+                   MAX(paper_date) AS last_seen
+            FROM hf_daily_papers
+            WHERE paper_date BETWEEN ? AND ?
+            GROUP BY paper_id
+            ORDER BY days_seen DESC, best_daily_rank ASC, avg_daily_rank ASC, title ASC
+            LIMIT ?
+            """,
+            (start, end, max(1, int(limit))),
+        )
+        breakout_hotspots = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT paper_id,
+                   MAX(title) AS title,
+                   MAX(hf_url) AS hf_url,
+                   COUNT(DISTINCT paper_date) AS days_seen,
+                   MIN(rank) AS best_daily_rank,
+                   MIN(paper_date) AS first_seen,
+                   MAX(paper_date) AS last_seen
+            FROM hf_daily_papers
+            WHERE paper_date BETWEEN ? AND ?
+            GROUP BY paper_id
+            HAVING days_seen <= 2 AND best_daily_rank <= 5
+            ORDER BY best_daily_rank ASC, last_seen DESC, title ASC
+            LIMIT ?
+            """,
+            (start, end, max(1, int(limit))),
+        )
+        monthly_hotspots = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT paper_id,
+                   MAX(title) AS title,
+                   COUNT(DISTINCT substr(snapshot_at, 1, 10)) AS days_seen,
+                   MIN(rank) AS best_monthly_rank,
+                   ROUND(AVG(rank), 2) AS avg_monthly_rank,
+                   MIN(substr(snapshot_at, 1, 10)) AS first_seen,
+                   MAX(substr(snapshot_at, 1, 10)) AS last_seen
+            FROM hf_paper_period_snapshots
+            WHERE period='monthly'
+              AND substr(snapshot_at, 1, 10) BETWEEN ? AND ?
+            GROUP BY paper_id
+            ORDER BY days_seen DESC, best_monthly_rank ASC, avg_monthly_rank ASC, title ASC
+            LIMIT ?
+            """,
+            (month_start, end, max(1, int(limit))),
+        )
+        period_overview = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT period,
+                   COUNT(*) AS observations,
+                   COUNT(DISTINCT paper_id) AS unique_papers,
+                   MIN(rank) AS best_rank,
+                   MAX(substr(snapshot_at, 1, 10)) AS latest_snapshot_day
+            FROM hf_paper_period_snapshots
+            WHERE period IN ('daily', 'weekly', 'monthly')
+              AND substr(snapshot_at, 1, 10) BETWEEN ? AND ?
+            GROUP BY period
+            ORDER BY CASE period WHEN 'daily' THEN 1 WHEN 'weekly' THEN 2 ELSE 3 END
+            """,
+            (start, end),
+        )
+    except sqlite3.Error as exc:
+        return {"ok": False, "reason": f"sqlite_error:{type(exc).__name__}", "window_start": start, "window_end": end}
+    finally:
+        conn.close()
+    notes: list[str] = []
+    if daily_rows:
+        total_daily = sum(int(row.get("paper_count") or 0) for row in daily_rows)
+        notes.append(f"本周日榜基线覆盖 {len(daily_rows)} 天、累计 {total_daily} 条日榜记录。")
+    if weekly_hotspots:
+        top = weekly_hotspots[0]
+        top_days_seen = int(top.get("days_seen") or 0)
+        if top_days_seen >= 2:
+            notes.append(
+                f"周内持续热度最高的是《{_hf_text(top.get('title'))}》，出现 {top_days_seen} 天，最佳日榜第 {int(top.get('best_daily_rank') or 0)}。"
+            )
+        else:
+            notes.append(
+                "本周日榜暂未形成多日持续霸榜论文，当前更像多点新晋热点轮动，需要继续观察后半周是否出现连续上榜。"
+            )
+    if breakout_hotspots:
+        notes.append(f"新晋爆发候选 {len(breakout_hotspots)} 篇，均在 1-2 天内冲入日榜 Top 5。")
+    if monthly_hotspots:
+        top_month = monthly_hotspots[0]
+        notes.append(
+            f"本月持续热点以《{_hf_text(top_month.get('title'))}》为代表，月榜观测 {int(top_month.get('days_seen') or 0)} 天。"
+        )
+    return {
+        "ok": True,
+        "window_start": start,
+        "window_end": end,
+        "month_start": month_start,
+        "daily_heat": daily_rows,
+        "period_heat": period_overview,
+        "weekly_hotspots": weekly_hotspots,
+        "monthly_hotspots": monthly_hotspots,
+        "breakout_hotspots": breakout_hotspots,
+        "trend_notes": notes,
+    }
+
+
 def hf_candidate_reasoning_plan(
     *,
     report_context: dict[str, Any],
@@ -9470,6 +9641,210 @@ def _hf_markdown_link(label: str, url: str) -> str:
     return f"[{clean_label}]({escaped_url})"
 
 
+def _hf_short_title(value: Any, *, limit: int = 64) -> str:
+    text = _hf_text(value)
+    if len(text) <= limit:
+        return text
+    return text[: max(1, limit - 1)].rstrip() + "…"
+
+
+def _hf_heat_title_link(row: dict[str, Any], *, title_key: str = "title", url_key: str = "hf_url") -> str:
+    title = _hf_short_title(row.get(title_key) or row.get("top_title") or row.get("paper_id"))
+    url = str(row.get(url_key) or row.get("top_url") or "").strip()
+    return _hf_markdown_link(title, url) if url else title
+
+
+def _hf_render_heat_overview_markdown(heat_overview: dict[str, Any] | None) -> list[str]:
+    overview = heat_overview or {}
+    if not overview.get("ok"):
+        return [
+            "## 日 / 周 / 月热度总览",
+            "",
+            f"- 数据状态：{_hf_text(overview.get('reason'), default='暂无可用热度数据')}",
+            "",
+        ]
+    lines = [
+        "## 日 / 周 / 月热度总览",
+        "",
+    ]
+    notes = _hf_list(overview.get("trend_notes"))
+    lines.extend(_hf_section_list_lines(notes, empty_text="暂无趋势备注"))
+    lines.extend([
+        "",
+        "### 每日热度基线",
+        "",
+        "| 日期 | 日榜论文数 | 当日 Top 1 |",
+        "| --- | ---: | --- |",
+    ])
+    for row in overview.get("daily_heat") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_hf_text(row.get('paper_date'))} | {int(row.get('paper_count') or 0)} | {_hf_heat_title_link(row, title_key='top_title', url_key='top_url')} |"
+        )
+    if not (overview.get("daily_heat") or []):
+        lines.append("| N/A | 0 | N/A |")
+    lines.extend([
+        "",
+        "### 周榜 / 月榜观测覆盖",
+        "",
+        "| 榜单窗口 | 观测条数 | 独立论文 | 最新观测日 |",
+        "| --- | ---: | ---: | --- |",
+    ])
+    period_label = {"daily": "日热榜快照", "weekly": "周热榜快照", "monthly": "月热榜快照"}
+    for row in overview.get("period_heat") or []:
+        if not isinstance(row, dict):
+            continue
+        period = str(row.get("period") or "")
+        lines.append(
+            f"| {period_label.get(period, period or 'N/A')} | {int(row.get('observations') or 0)} | {int(row.get('unique_papers') or 0)} | {_hf_text(row.get('latest_snapshot_day'))} |"
+        )
+    if not (overview.get("period_heat") or []):
+        lines.append("| N/A | 0 | 0 | N/A |")
+    lines.extend([
+        "",
+        "### 本周持续热点",
+        "",
+        "| 论文 | 出现天数 | 最佳日榜 | 平均日榜 | 最近出现 |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ])
+    for row in (overview.get("weekly_hotspots") or [])[:8]:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_hf_heat_title_link(row)} | {int(row.get('days_seen') or 0)} | {int(row.get('best_daily_rank') or 0)} | {_hf_score_text(row.get('avg_daily_rank'))} | {_hf_text(row.get('last_seen'))} |"
+        )
+    if not (overview.get("weekly_hotspots") or []):
+        lines.append("| N/A | 0 | 0 | N/A | N/A |")
+    lines.extend([
+        "",
+        "### 本月持续热点",
+        "",
+        "| 论文 | 月榜观测天数 | 最佳月榜 | 平均月榜 | 最近出现 |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ])
+    for row in (overview.get("monthly_hotspots") or [])[:8]:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_hf_heat_title_link(row)} | {int(row.get('days_seen') or 0)} | {int(row.get('best_monthly_rank') or 0)} | {_hf_score_text(row.get('avg_monthly_rank'))} | {_hf_text(row.get('last_seen'))} |"
+        )
+    if not (overview.get("monthly_hotspots") or []):
+        lines.append("| N/A | 0 | 0 | N/A | N/A |")
+    lines.extend([
+        "",
+        "### 新晋爆发候选",
+        "",
+        "| 论文 | 出现天数 | 最佳日榜 | 首次出现 | 最近出现 |",
+        "| --- | ---: | ---: | --- | --- |",
+    ])
+    for row in (overview.get("breakout_hotspots") or [])[:8]:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_hf_heat_title_link(row)} | {int(row.get('days_seen') or 0)} | {int(row.get('best_daily_rank') or 0)} | {_hf_text(row.get('first_seen'))} | {_hf_text(row.get('last_seen'))} |"
+        )
+    if not (overview.get("breakout_hotspots") or []):
+        lines.append("| N/A | 0 | 0 | N/A | N/A |")
+    lines.append("")
+    return lines
+
+
+def _hf_html_rows(rows: Any, cells_fn) -> str:
+    rendered: list[str] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict):
+                rendered.append("<tr>" + "".join(f"<td>{cell}</td>" for cell in cells_fn(row)) + "</tr>")
+    return "".join(rendered)
+
+
+def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
+    overview = heat_overview or {}
+    if not overview.get("ok"):
+        return f"""
+        <section class="hf-panel hf-heat">
+          <h2>日 / 周 / 月热度总览</h2>
+          <p>{html.escape(_hf_text(overview.get('reason'), default='暂无可用热度数据'))}</p>
+        </section>
+        """
+    notes = "".join(f"<li>{html.escape(item)}</li>" for item in _hf_list(overview.get("trend_notes"))) or "<li>暂无趋势备注</li>"
+    daily_rows = _hf_html_rows(
+        overview.get("daily_heat"),
+        lambda row: [
+            html.escape(_hf_text(row.get("paper_date"))),
+            str(int(row.get("paper_count") or 0)),
+            (
+                f'<a href="{html.escape(str(row.get("top_url") or ""))}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_short_title(row.get("top_title")))}</a>'
+                if str(row.get("top_url") or "").strip()
+                else html.escape(_hf_short_title(row.get("top_title")))
+            ),
+        ],
+    ) or "<tr><td>N/A</td><td>0</td><td>N/A</td></tr>"
+    week_rows = _hf_html_rows(
+        (overview.get("weekly_hotspots") or [])[:8],
+        lambda row: [
+            (
+                f'<a href="{html.escape(str(row.get("hf_url") or ""))}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_short_title(row.get("title")))}</a>'
+                if str(row.get("hf_url") or "").strip()
+                else html.escape(_hf_short_title(row.get("title")))
+            ),
+            str(int(row.get("days_seen") or 0)),
+            str(int(row.get("best_daily_rank") or 0)),
+            html.escape(_hf_score_text(row.get("avg_daily_rank"))),
+            html.escape(_hf_text(row.get("last_seen"))),
+        ],
+    ) or "<tr><td>N/A</td><td>0</td><td>0</td><td>N/A</td><td>N/A</td></tr>"
+    month_rows = _hf_html_rows(
+        (overview.get("monthly_hotspots") or [])[:8],
+        lambda row: [
+            html.escape(_hf_short_title(row.get("title"))),
+            str(int(row.get("days_seen") or 0)),
+            str(int(row.get("best_monthly_rank") or 0)),
+            html.escape(_hf_score_text(row.get("avg_monthly_rank"))),
+            html.escape(_hf_text(row.get("last_seen"))),
+        ],
+    ) or "<tr><td>N/A</td><td>0</td><td>0</td><td>N/A</td><td>N/A</td></tr>"
+    breakout_rows = _hf_html_rows(
+        (overview.get("breakout_hotspots") or [])[:8],
+        lambda row: [
+            (
+                f'<a href="{html.escape(str(row.get("hf_url") or ""))}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_short_title(row.get("title")))}</a>'
+                if str(row.get("hf_url") or "").strip()
+                else html.escape(_hf_short_title(row.get("title")))
+            ),
+            str(int(row.get("days_seen") or 0)),
+            str(int(row.get("best_daily_rank") or 0)),
+            html.escape(_hf_text(row.get("first_seen"))),
+            html.escape(_hf_text(row.get("last_seen"))),
+        ],
+    ) or "<tr><td>N/A</td><td>0</td><td>0</td><td>N/A</td><td>N/A</td></tr>"
+    return f"""
+    <section class="hf-panel hf-heat">
+      <h2>日 / 周 / 月热度总览</h2>
+      <ul>{notes}</ul>
+      <div class="hf-heat-grid">
+        <div>
+          <h3>每日热度基线</h3>
+          <table><thead><tr><th>日期</th><th>论文数</th><th>当日 Top 1</th></tr></thead><tbody>{daily_rows}</tbody></table>
+        </div>
+        <div>
+          <h3>本周持续热点</h3>
+          <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>均值</th><th>最近</th></tr></thead><tbody>{week_rows}</tbody></table>
+        </div>
+        <div>
+          <h3>本月持续热点</h3>
+          <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>均值</th><th>最近</th></tr></thead><tbody>{month_rows}</tbody></table>
+        </div>
+        <div>
+          <h3>新晋爆发候选</h3>
+          <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>首次</th><th>最近</th></tr></thead><tbody>{breakout_rows}</tbody></table>
+        </div>
+      </div>
+    </section>
+    """
+
+
 def _hf_missing_value(value: Any) -> bool:
     if value is None:
         return True
@@ -9674,9 +10049,11 @@ def hf_build_report_planner_prompt(
     date_str: str,
     model_name: str,
     report_context: dict[str, Any] | None = None,
+    heat_overview: dict[str, Any] | None = None,
 ) -> str:
     planner_input = _hf_report_planner_input(public_records)
     context = report_context or hf_report_context(date_str, {})
+    heat_input = heat_overview or {}
     return f"""你是 AI Influence 的 HF Paper 专题主编。
 
 你将收到一批 HuggingFace 热门论文的摘要、基础标签和已有单篇判断。你的任务不是逐篇写作，而是先做“版面规划”：
@@ -9684,6 +10061,7 @@ def hf_build_report_planner_prompt(
 2. 每个部分应放哪些论文；
 3. 每个部分的核心判断是什么；
 4. 最终{context.get('period_label') or '日报'}应如何排序。
+5. 必须参考日 / 周 / 月热度数据，说明哪些是周内持续热点、哪些是新晋爆发、哪些只是月榜延续。
 
 硬规则：
 - 只能基于输入材料做分组，不要引入外部事实。
@@ -9691,6 +10069,7 @@ def hf_build_report_planner_prompt(
 - 所有 paper_ids 必须来自输入，不能编造。
 - 每篇论文必须被分到某个 section，不能遗漏。
 - section 数量控制在 2-5 个之间。
+- 如果热度数据与单篇评分冲突，优先把它写成“热度强但证据待验证”或“质量强但热度弱”的区分，不要混成一个结论。
 - 输出必须是合法 JSON object，不要 Markdown，不要代码块，不要解释。
 
 输出 JSON schema：
@@ -9714,6 +10093,15 @@ def hf_build_report_planner_prompt(
 报告周期：{context.get('window_label') or date_str}
 报告日期：{date_str}
 模型：{model_name}
+
+日 / 周 / 月热度数据：
+{json.dumps({
+    "daily_heat": heat_input.get("daily_heat") or [],
+    "weekly_hotspots": heat_input.get("weekly_hotspots") or [],
+    "monthly_hotspots": heat_input.get("monthly_hotspots") or [],
+    "breakout_hotspots": heat_input.get("breakout_hotspots") or [],
+    "trend_notes": heat_input.get("trend_notes") or [],
+}, ensure_ascii=False, indent=2)}
 
 论文材料：
 {json.dumps(planner_input, ensure_ascii=False, indent=2)}
@@ -9967,6 +10355,7 @@ def hf_call_grouped_report_flow(
     *,
     date_str: str,
     report_context: dict[str, Any] | None = None,
+    heat_overview: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not public_records:
         raise ValueError("hf_grouped_report_no_records")
@@ -9976,7 +10365,13 @@ def hf_call_grouped_report_flow(
         raise ValueError(f"hf_grouped_report_requires_browser_agent:{mode}")
     model_name = str(high_cfg.get("model") or "chatgpt-5.5")
     raw_plan = hf_call_report_json_with_repair(
-        hf_build_report_planner_prompt(public_records, date_str=date_str, model_name=model_name, report_context=context),
+        hf_build_report_planner_prompt(
+            public_records,
+            date_str=date_str,
+            model_name=model_name,
+            report_context=context,
+            heat_overview=heat_overview,
+        ),
         config,
         purpose=f"hf-paper-report-plan-{date_str}",
         model_name=model_name,
@@ -10022,6 +10417,7 @@ def _hf_render_grouped_report_markdown(
     public_records: list[dict[str, Any]],
     grouped_report: dict[str, Any],
     report_context: dict[str, Any] | None = None,
+    heat_overview: dict[str, Any] | None = None,
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     plan = grouped_report.get("plan") or {}
@@ -10053,6 +10449,7 @@ def _hf_render_grouped_report_markdown(
         f"| 周期 | {context.get('window_label') or date_str} |",
         "",
     ])
+    lines.extend(_hf_render_heat_overview_markdown(heat_overview))
     for idx, section in enumerate(sections, 1):
         recommendations = _hf_list(section.get("planning_recommendations"))
         commentary = section.get("paper_commentary") if isinstance(section.get("paper_commentary"), list) else []
@@ -10110,6 +10507,7 @@ def _hf_render_grouped_report_html(
     public_records: list[dict[str, Any]],
     grouped_report: dict[str, Any],
     report_context: dict[str, Any] | None = None,
+    heat_overview: dict[str, Any] | None = None,
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     plan = grouped_report.get("plan") or {}
@@ -10196,8 +10594,14 @@ def _hf_render_grouped_report_html(
     .hf-rank {{ width: 64px; height: 64px; display: grid; place-items: center; border-radius: 18px; background: linear-gradient(135deg, #8a4b22, #c98950); color: white; font: 700 22px/1 "Avenir Next", sans-serif; }}
     .hf-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin: 18px 0; padding: 16px; background: #fbf6ef; border-radius: 18px; border: 1px solid var(--line); }}
     .hf-panel {{ padding: 22px; margin-top: 24px; }}
+    .hf-heat h2 {{ font-size: 28px; }}
+    .hf-heat-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 18px; }}
     h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
     h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
+    table {{ width: 100%; border-collapse: collapse; font: 14px/1.45 "Avenir Next", sans-serif; }}
+    th, td {{ padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
+    th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }}
+    a {{ color: var(--accent); text-decoration: none; }}
     ul {{ padding-left: 20px; }}
   </style>
 </head>
@@ -10210,6 +10614,7 @@ def _hf_render_grouped_report_html(
       <p>{html.escape('报告周期：' + str(context.get('window_label') or date_str))}</p>
       <div class="hf-metrics">{metric_html}</div>
     </section>
+    {_hf_render_heat_overview_html(heat_overview)}
     {''.join(section_html)}
     <section class="hf-panel">
       <h3>后续观察点</h3>
@@ -10228,6 +10633,7 @@ def _hf_render_public_report_markdown(
     fallback_count: int,
     public_records: list[dict[str, Any]],
     report_context: dict[str, Any] | None = None,
+    heat_overview: dict[str, Any] | None = None,
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     public_variant = hf_public_report_variant_label(report_variant)
@@ -10258,6 +10664,8 @@ def _hf_render_public_report_markdown(
         "## Top 论文洞察",
         "",
     ])
+    heat_lines = _hf_render_heat_overview_markdown(heat_overview)
+    lines[lines.index("## Top 论文洞察"):lines.index("## Top 论文洞察")] = heat_lines
     if not public_records:
         lines.append("- N/A")
         return "\n".join(lines)
@@ -10376,6 +10784,7 @@ def _hf_render_public_report_html(
     fallback_count: int,
     public_records: list[dict[str, Any]],
     report_context: dict[str, Any] | None = None,
+    heat_overview: dict[str, Any] | None = None,
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     title = hf_public_headline(None, context, premium=(report_variant == "premium_insight_report"))
@@ -10571,6 +10980,13 @@ def _hf_render_public_report_html(
       margin-top: 24px;
     }}
     .hf-panel {{ padding: 22px; }}
+    .hf-heat h2 {{ font-size: 28px; }}
+    .hf-heat-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }}
     table {{ width: 100%; border-collapse: collapse; }}
     th, td {{ padding: 12px 0; text-align: left; border-bottom: 1px solid var(--line); }}
     th {{
@@ -10595,6 +11011,8 @@ def _hf_render_public_report_html(
       <p class="hf-subtitle">报告周期：{html.escape(str(context.get('window_label') or date_str))}</p>
       <div class="hf-metrics">{metric_html}</div>
     </section>
+
+    {_hf_render_heat_overview_html(heat_overview)}
 
     <h2 class="hf-section-title">Top 论文洞察</h2>
     {''.join(article_blocks) or '<div class="hf-card"><p>N/A</p></div>'}
@@ -10636,12 +11054,19 @@ def hf_write_public_report(
     premium_count = sum(1 for r in public_records if bool(((r.get("reasoning") or {}).get("premium_insight_available"))))
     fallback_count = max(0, len(public_records) - premium_count)
     collection_summary = hf_report_collection_summary(config, report_context=report_context, public_records=public_records)
+    heat_overview = hf_report_heat_overview(config, report_context=report_context, limit=max(8, min(20, limit)))
     base_report_variant = "premium_insight_report" if public_records and premium_count == len(public_records) else "fallback_report"
     grouped_report: dict[str, Any] | None = None
     grouped_report_error_kind = ""
     if public_records:
         try:
-            grouped_report = hf_call_grouped_report_flow(public_records, config, date_str=date_str, report_context=report_context)
+            grouped_report = hf_call_grouped_report_flow(
+                public_records,
+                config,
+                date_str=date_str,
+                report_context=report_context,
+                heat_overview=heat_overview,
+            )
         except Exception as exc:
             grouped_report_error_kind = type(exc).__name__
     report_variant = "premium_insight_report" if grouped_report else base_report_variant
@@ -10677,6 +11102,7 @@ def hf_write_public_report(
         fallback_count=fallback_count,
         public_records=public_records,
         report_context=report_context,
+        heat_overview=heat_overview,
     )
     if grouped_report:
         render_kwargs["grouped_report"] = grouped_report
@@ -10713,6 +11139,7 @@ def hf_write_public_report(
         "premium_insight_count": premium_count,
         "fallback_count": fallback_count,
         "collection_summary": collection_summary,
+        "heat_overview": heat_overview,
         "grouped_report_ok": bool(grouped_report),
         "grouped_report_model": (grouped_report or {}).get("model") or "",
         "grouped_report_error": grouped_report_error_kind,
