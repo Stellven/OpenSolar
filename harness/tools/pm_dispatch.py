@@ -688,6 +688,8 @@ def _shared_quota_block_for_operator(op: dict[str, Any]) -> dict[str, str]:
     operator_id = str(op.get("operator_id") or "")
     billing_pool = str(op.get("billing_pool") or "").strip()
     key_ref = str(op.get("key_ref") or "").strip()
+    provider = str(op.get("provider") or "").strip().lower()
+    model = str(op.get("model") or "").strip().lower()
     if not billing_pool and not key_ref:
         return {}
     try:
@@ -700,7 +702,18 @@ def _shared_quota_block_for_operator(op: dict[str, Any]) -> dict[str, str]:
         if str(peer_id) == operator_id or not isinstance(peer_spec, dict):
             continue
         same_pool = billing_pool and str(peer_spec.get("billing_pool") or "").strip() == billing_pool
-        same_key = key_ref and str(peer_spec.get("key_ref") or "").strip() == key_ref
+        # Key refs often represent a broad login/API account. Propagate through
+        # key_ref only when provider and model also match; otherwise independent
+        # model budget pools such as GPT-5.5 and Codex Spark would block each
+        # other despite having separate rate limits.
+        same_key = (
+            key_ref
+            and str(peer_spec.get("key_ref") or "").strip() == key_ref
+            and provider
+            and model
+            and str(peer_spec.get("provider") or "").strip().lower() == provider
+            and str(peer_spec.get("model") or "").strip().lower() == model
+        )
         if not (same_pool or same_key):
             continue
         status = get_operator_status_data(str(peer_id))

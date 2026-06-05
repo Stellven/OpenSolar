@@ -202,6 +202,61 @@ def test_is_dispatchable_inherits_shared_billing_pool_cooldown(monkeypatch):
     assert "primary-opus-evaluator" in reason
 
 
+def test_is_dispatchable_does_not_share_key_ref_across_distinct_models(monkeypatch):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setattr(
+        pm_dispatch,
+        "load_registry",
+        lambda: {
+            "version": 1,
+            "operators": {
+                "spark-builder": {
+                    "enabled": True,
+                    "available": True,
+                    "operator_id": "spark-builder",
+                    "provider": "openai",
+                    "model": "gpt-5.3-codex-spark",
+                    "key_ref": "codex_auth",
+                },
+                "gpt55-builder": {
+                    "enabled": True,
+                    "available": True,
+                    "operator_id": "gpt55-builder",
+                    "provider": "openai",
+                    "model": "gpt-5.5",
+                    "key_ref": "codex_auth",
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(
+        pm_dispatch,
+        "get_operator_status_data",
+        lambda operator_id: {
+            "runtime_state": "cooldown",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        if operator_id == "spark-builder"
+        else {},
+    )
+    monkeypatch.setattr(pm_dispatch, "get_operator_runtime_state", lambda operator_id: "idle")
+    monkeypatch.setattr(pm_dispatch, "_operator_external_health", lambda op: (True, ""))
+
+    ok, reason = pm_dispatch.is_dispatchable(
+        {
+            "enabled": True,
+            "available": True,
+            "operator_id": "gpt55-builder",
+            "provider": "openai",
+            "model": "gpt-5.5",
+            "key_ref": "codex_auth",
+        }
+    )
+
+    assert ok is True
+    assert reason == ""
+
+
 def test_transient_operator_failure_text_reads_operator_result_logs(tmp_path):
     pm_dispatch = _load_pm_dispatch()
     pm_dispatch.HARNESS_DIR = tmp_path
