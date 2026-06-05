@@ -575,3 +575,100 @@ def test_cmd_complete_marks_builder_graph_node_reviewing(monkeypatch, tmp_path):
     assert status["handoff_to"] == "evaluator"
     record = json.loads((inbox / f"{task_id}.json").read_text(encoding="utf-8"))
     assert record["graph_reviewing"]["marked"] is True
+
+
+def test_evaluator_dispatch_marks_graph_assignment(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    graph_path = sprints / "sprint-eval.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-eval",
+                "nodes": [{"id": "E1", "status": "reviewing"}],
+                "node_results": {"E1": {"status": "reviewing"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = pm_dispatch._mark_graph_node_evaluation_dispatched(
+        {
+            "task_id": "pm-sprint-eval-E1-test",
+            "sprint_id": "sprint-eval",
+            "node_id": "E1",
+            "operator_id": "mini-claude-opus-evaluator",
+            "requested_role": "evaluator",
+        }
+    )
+
+    assert result["marked"] is True
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert node["eval_dispatch_id"] == "pm-sprint-eval-E1-test"
+    assert node["eval_assignments"][0]["operator_id"] == "mini-claude-opus-evaluator"
+    assert graph["node_results"]["E1"]["eval_dispatch_id"] == "pm-sprint-eval-E1-test"
+
+
+def test_transient_evaluator_failure_releases_graph_assignment(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    task_id = "pm-sprint-eval-E1-test"
+    graph_path = sprints / "sprint-eval.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-eval",
+                "nodes": [
+                    {
+                        "id": "E1",
+                        "status": "reviewing",
+                        "eval_dispatch_id": task_id,
+                        "eval_dispatched_at": "2026-06-05T00:00:00Z",
+                        "eval_operator_id": "mini-claude-opus-evaluator",
+                        "eval_assignments": [{"task_id": task_id, "operator_id": "mini-claude-opus-evaluator"}],
+                    }
+                ],
+                "node_results": {
+                    "E1": {
+                        "status": "reviewing",
+                        "eval_dispatch_id": task_id,
+                        "eval_dispatched_at": "2026-06-05T00:00:00Z",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = pm_dispatch._release_graph_eval_on_transient_operator_failure(
+        {
+            "task_id": task_id,
+            "sprint_id": "sprint-eval",
+            "node_id": "E1",
+            "operator_id": "mini-claude-opus-evaluator",
+            "requested_role": "evaluator",
+            "status": "failed",
+            "failure_reason": "quota_guard_state=cooldown",
+        }
+    )
+
+    assert result["released"] is True
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert "eval_dispatch_id" not in node
+    assert "eval_assignments" not in node
+    assert node["eval_requeue_history"][0]["task_id"] == task_id
+    assert "eval_dispatch_id" not in graph["node_results"]["E1"]
