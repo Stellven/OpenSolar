@@ -385,17 +385,19 @@ def _build_section_render_card(root: Path, section: dict, row: dict) -> dict[str
     claim_ids = list(row.get("claim_ids") or [])
 
     thesis_candidates: list[str] = []
-    for heading in ("position", "architecture synthesis", "comparative positioning"):
+    for heading in ("本节判断", "position", "architecture synthesis", "comparative positioning"):
         thesis_candidates.extend(_fallback_units(_clean_human_text(blocks.get(heading, ""), {}), limit=2))
     if not thesis_candidates:
         thesis_candidates = _fallback_units(_clean_human_text(text, {}), limit=2)
 
     takeaways: list[str] = []
     for heading in (
+        "影响与行动",
         "architecture synthesis",
         "comparative positioning",
         "evaluation and risk boundary",
         "limitations and failure modes",
+        "反证和观察",
         "open problems",
     ):
         _append_unique(takeaways, _fallback_units(_clean_human_text(blocks.get(heading, ""), {}), limit=1), max_items=5)

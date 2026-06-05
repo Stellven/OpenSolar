@@ -12,7 +12,7 @@ from research.survey.evidence_pack import build_evidence_packs
 from research.survey.backends import LocalCommandWriterError, PanePacketSurveyWriterBackend
 from research.survey.planner import create_survey_plan, write_survey_plan
 from research.survey.section_compiler import compile_section, compile_survey
-from research.survey.writing_loop import run_ready_sections, run_section_revision_loop, watch_pane_responses
+from research.survey.writing_loop import build_section_prompt_packet, run_ready_sections, run_section_revision_loop, watch_pane_responses
 
 
 def _append_jsonl(path, rows):
@@ -149,6 +149,28 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert "#### 本节判断" in human_text
     assert "#### 影响与行动" in human_text
     assert "2026 年的 Agentic Runtime" not in human_text
+
+
+def test_insight_writer_uses_section_render_policy(tmp_path):
+    _strong_insight_fixture(tmp_path)
+    packet = build_section_prompt_packet(tmp_path, "ch01/sec01")
+
+    assert packet["insight_mode"] is True
+    assert packet["role"] == "DeepDive insight section writer"
+    assert packet["writing_policy"]["policy_id"] == "solar.deepdive.section_render_writing.v1"
+    assert "本节判断" in packet["writing_policy"]["section_template"]
+    assert "Literature Lineage" not in packet["writing_policy"]["section_template"]
+
+    result = run_section_revision_loop(tmp_path, "ch01/sec01", min_chars=800)
+    assert result["ok"] is True
+    text = (tmp_path / "sections" / "ch01" / "sec01" / "final.md").read_text(encoding="utf-8")
+    assert "## 本节判断" in text
+    assert "## 证据链" in text
+    assert "## 影响与行动" in text
+    assert "## 反证和观察" in text
+    assert "## SectionRender JSON" in text
+    assert "## Literature Lineage" not in text
+    assert "section_render_card" in text
 
 
 def test_deterministic_writer_outputs_professor_survey_scaffolds(tmp_path):
