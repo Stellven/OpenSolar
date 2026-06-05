@@ -739,6 +739,8 @@ def load_task_graph_node(sprint_id: str, node_id: str) -> dict[str, Any] | None:
 def _capsule_submit_metadata(node: dict[str, Any] | None) -> dict[str, Any]:
     if not node:
         return {}
+    capsule_plan = dict(node.get("capsule_plan") or {})
+    dispatch_task_type = node.get("dispatch_task_type") or capsule_plan.get("dispatch_task_type")
     if not (
         node.get("capability_native")
         or node.get("capability_capsule_id")
@@ -746,11 +748,12 @@ def _capsule_submit_metadata(node: dict[str, Any] | None) -> dict[str, Any]:
         or node.get("capsule_plan")
     ):
         return {}
-    capsule_plan = dict(node.get("capsule_plan") or {})
+    if (node.get("capability_capsule_id") or node.get("execution_capsule_id") or capsule_plan.get("capability_capsule_id")) and not dispatch_task_type:
+        return {}
     return {
         "capability_native": bool(node.get("capability_native", True)),
         "capability_capsule_id": node.get("capability_capsule_id") or capsule_plan.get("capability_capsule_id"),
-        "dispatch_task_type": node.get("dispatch_task_type") or capsule_plan.get("dispatch_task_type"),
+        "dispatch_task_type": dispatch_task_type,
         "logical_operator": node.get("logical_operator", ""),
         "capsule_plan": capsule_plan,
     }

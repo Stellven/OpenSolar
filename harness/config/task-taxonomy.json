@@ -6,8 +6,8 @@
     "PERFORMANCE_REGRESSION": {
       "id": "PERFORMANCE_REGRESSION",
       "description": "A previously-passing performance metric has degraded. Root cause is unknown and must be traced.",
-      "primary_signals": ["regression", "slower", "degraded", "latency", "throughput", "ttft", "p50", "p99", "baseline"],
-      "secondary_signals": ["benchmark", "performance", "memory", "mlx", "flashmlx"],
+      "primary_signals": ["slower", "degraded", "latency", "throughput", "ttft", "p50", "p99", "baseline"],
+      "secondary_signals": ["benchmark", "performance", "memory", "mlx", "flashmlx", "regression"],
       "negative_signals": ["frontend", "ui", "visual", "css"],
       "min_signal_score": 2,
       "default_workflow": "performance_debug_workflow",
