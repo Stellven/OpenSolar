@@ -53,7 +53,8 @@ RESET_RELATIVE_RE = re.compile(
 )
 RESET_COLON_RE = re.compile(r"resets?\s+in\s+(?P<hours>\d{1,2}):(?P<minutes>\d{2})(?::(?P<seconds>\d{2}))?", re.I)
 RESET_AT_RE = re.compile(
-    r"resets?(?:\s+(?:at|on))?\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?",
+    r"(?:resets?|try again)(?:\s+(?:at|on))?\s+"
+    r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?",
     re.I,
 )
 
@@ -120,6 +121,7 @@ def parse_rate_limit_reset_at(text: str, *, now: dt.datetime | None = None) -> d
     - "You've hit your limit · resets 1:40pm (America/Toronto)"
     - "rate limit resets in 2h 15m"
     - "resets in 01:30:00"
+    - "try again at 9:25 PM"
     """
     raw = text or ""
     tz = _timezone_from_text(raw)

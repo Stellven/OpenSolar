@@ -823,3 +823,23 @@ class TestFailureFlowControl:
         status_path = tmp_path / "run" / "operator-status" / "test-command-builder.json"
         status = json.loads(status_path.read_text(encoding="utf-8"))
         assert status["runtime_state"] == "auth_expired"
+
+
+class TestFailureTextForFlowControl:
+    def test_includes_codex_sidecar_log_tail(self, tmp_path):
+        result_dir = tmp_path / "task"
+        result_dir.mkdir()
+        (result_dir / "codex-cli-output.log").write_text(
+            "ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark. "
+            "Switch to another model now, or try again at 9:25 PM.\n",
+            encoding="utf-8",
+        )
+
+        text = _od._failure_text_for_flow_control(
+            result_dir,
+            ["wrapper exited before surfacing provider stderr"],
+        )
+
+        assert "wrapper exited before surfacing provider stderr" in text
+        assert "codex-cli-output.log" in text
+        assert "usage limit for GPT-5.3-Codex-Spark" in text
