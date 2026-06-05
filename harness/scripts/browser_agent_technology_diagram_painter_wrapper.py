@@ -28,17 +28,72 @@ if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
 import browser_job_runtime as bjrt
-from browser_use.browser.profile import BrowserProfile
-from browser_use.browser.session import BrowserSession
-from playwright.async_api import async_playwright
+from browser import runtime_control as brtc
 
 DEFAULT_URL = "https://chatgpt.com/"
 DEFAULT_USER_DATA_DIR = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
 DEFAULT_PROFILE_DIRECTORY = "Profile 1"
 DEFAULT_ALLOWED_DOMAINS = [
-    "chatgpt.com", "openai.com", "auth0.openai.com", "google.com", "accounts.google.com"
+    "chatgpt.com",
+    "openai.com",
+    "auth.openai.com",
+    "auth0.openai.com",
+    "challenges.cloudflare.com",
+    "google.com",
+    "accounts.google.com",
 ]
-TARGET_ACCOUNT_EMAIL = "browser-agent@example.com"
+TARGET_ACCOUNT_EMAIL = os.environ.get("BROWSER_AGENT_TARGET_EMAIL", "browser-agent@example.com")
+
+COMPOSER_SELECTOR = (
+    "#prompt-textarea:visible, "
+    "textarea:visible, "
+    "div[contenteditable='true']:visible, "
+    "[data-testid='composer-text-input']:visible, "
+    "div[role='textbox'][contenteditable='true']:visible, "
+    "[contenteditable='true'][role='textbox']:visible"
+)
+
+CHATGPT_PAGE_STATE_JS = """
+    (() => {
+        const body = document.body;
+        const text = body ? (body.innerText || body.textContent || '') : '';
+        const title = document.title || '';
+        const url = location.href || '';
+        const lower = `${title}\n${text}`.toLowerCase();
+
+        function visible(el) {
+            if (!el) return false;
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style && style.visibility !== 'hidden' && style.display !== 'none'
+                && rect.width > 8 && rect.height > 8;
+        }
+
+        const composer = Array.from(document.querySelectorAll(
+            '#prompt-textarea, textarea, div[contenteditable="true"], '
+            + '[data-testid="composer-text-input"], '
+            + 'div[role="textbox"][contenteditable="true"], '
+            + '[contenteditable="true"][role="textbox"]'
+        )).find(visible);
+
+        const loginWall = /\\b(log in|sign up|continue with google)\\b|登录|注册/.test(lower)
+            && !composer;
+        const challengeWall = /cloudflare|verify you are human|checking your browser|enable javascript and cookies|challenge-error-text|__cf_chl|安全检查|验证您是真人|验证成功|人机验证|captcha/.test(lower)
+            && !composer;
+        const loadingWall = /请稍候|just a moment|please wait|loading/.test(lower)
+            && !composer;
+
+        return {
+            url,
+            title,
+            composer_visible: !!composer,
+            login_wall: loginWall,
+            challenge_wall: challengeWall,
+            loading_wall: loadingWall,
+            text_sample: text.slice(0, 800),
+        };
+    })()
+"""
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -79,6 +134,134 @@ def _prompt_from_stdin() -> dict:
 # ---------------------------------------------------------------------------
 # ChatGPT page interaction helpers
 # ---------------------------------------------------------------------------
+
+def _readiness_failure_reason(state: dict | None) -> str:
+    state = state or {}
+    if state.get("login_wall"):
+        return "chatgpt_login_wall_detected"
+    if state.get("challenge_wall"):
+        return "chatgpt_cloudflare_challenge_detected"
+    if state.get("loading_wall"):
+        return "chatgpt_loading_timeout"
+    return "composer_not_found_after_recovery"
+
+
+def _is_nonfatal_chatgpt_toast(message: str) -> bool:
+    sample = str(message or "").strip().lower()
+    return any(
+        token in sample
+        for token in (
+            "failed to copy to clipboard",
+            "copy to clipboard",
+            "clipboard",
+            "复制到剪贴板",
+            "复制失败",
+        )
+    )
+
+
+async def _chatgpt_page_state(page) -> dict:
+    try:
+        state = await page.evaluate(CHATGPT_PAGE_STATE_JS)
+        if not isinstance(state, dict):
+            state = {}
+    except Exception as exc:
+        state = {"state_error": f"{type(exc).__name__}: {exc}"}
+    try:
+        state["url"] = page.url
+    except Exception:
+        pass
+    try:
+        state["title"] = await page.title()
+    except Exception:
+        pass
+    return state
+
+
+async def _write_readiness_artifacts(page, request_dir: Path, reason: str, state: dict) -> None:
+    _write_json(
+        request_dir / "chatgpt_readiness_failed.json",
+        {
+            "reason": reason,
+            "state": state,
+            "failed_at": bjrt._now(),
+        },
+    )
+    try:
+        (request_dir / "chatgpt_readiness_failed.html").write_text(
+            await page.content(),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        _write_json(request_dir / "chatgpt_readiness_html_error.json", {"error": str(exc)})
+    try:
+        await page.screenshot(path=str(request_dir / "chatgpt_readiness_failed.png"), full_page=True)
+    except Exception as exc:
+        _write_json(request_dir / "chatgpt_readiness_screenshot_error.json", {"error": str(exc)})
+
+
+async def _wait_for_chatgpt_ready(
+    page,
+    request_dir: Path,
+    *,
+    timeout_s: int = 90,
+    reload_after_s: int = 20,
+    max_reloads: int = 2,
+) -> dict:
+    """Wait for a usable ChatGPT composer and recover from transient loading pages."""
+    deadline = time.time() + timeout_s
+    first_loading_at: float | None = None
+    reloads = 0
+    last_state: dict = {}
+
+    while time.time() < deadline:
+        state = await _chatgpt_page_state(page)
+        last_state = state
+
+        if state.get("composer_visible"):
+            _write_json(
+                request_dir / "chatgpt_readiness.json",
+                {
+                    "status": "ready",
+                    "state": state,
+                    "reloads": reloads,
+                    "checked_at": bjrt._now(),
+                },
+            )
+            return {"ok": True, "state": state, "reloads": reloads}
+
+        reason = _readiness_failure_reason(state)
+        if reason in {"chatgpt_login_wall_detected", "chatgpt_cloudflare_challenge_detected"}:
+            # Give Cloudflare/login redirects a short grace period before failing
+            # so a valid persisted profile can finish its own redirect.
+            await page.wait_for_timeout(3000)
+            state = await _chatgpt_page_state(page)
+            if state.get("composer_visible"):
+                return {"ok": True, "state": state, "reloads": reloads}
+            if _readiness_failure_reason(state) == reason:
+                await _write_readiness_artifacts(page, request_dir, reason, state)
+                return {"ok": False, "reason": reason, "state": state, "reloads": reloads}
+
+        if state.get("loading_wall"):
+            first_loading_at = first_loading_at or time.time()
+            if reloads < max_reloads and time.time() - first_loading_at >= reload_after_s:
+                print(
+                    f"[TechDiagram] ChatGPT still loading; reloading page ({reloads + 1}/{max_reloads})...",
+                    flush=True,
+                )
+                try:
+                    await page.reload(wait_until="domcontentloaded", timeout=45000)
+                except Exception as exc:
+                    print(f"[TechDiagram] Reload during readiness failed: {exc}", flush=True)
+                reloads += 1
+                first_loading_at = time.time()
+
+        await page.wait_for_timeout(2000)
+
+    reason = _readiness_failure_reason(last_state)
+    await _write_readiness_artifacts(page, request_dir, reason, last_state)
+    return {"ok": False, "reason": reason, "state": last_state, "reloads": reloads}
+
 
 async def _verify_account(page) -> bool:
     """Check if logged-in account matches TARGET_ACCOUNT_EMAIL."""
@@ -245,15 +428,24 @@ async def _select_model(page) -> bool:
 async def _submit_prompt(page, full_prompt: str) -> bool:
     print("[TechDiagram] Submitting prompt...", flush=True)
     try:
+        ready_timeout = int(os.environ.get("TECH_DIAGRAM_CHATGPT_READY_TIMEOUT") or "90")
+        readiness = await _wait_for_chatgpt_ready(
+            page,
+            _request_dir(),
+            timeout_s=ready_timeout,
+        )
+        if not readiness.get("ok"):
+            print(
+                "[TechDiagram] ChatGPT not ready for prompt submission: "
+                f"reason={readiness.get('reason')} url={page.url} title={await page.title()}",
+                flush=True,
+            )
+            return False
+
         # Wait for either the current ChatGPT composer or legacy textareas.
-        editor = page.locator(
-            "#prompt-textarea:visible, "
-            "textarea:visible, "
-            "div[contenteditable='true']:visible, "
-            "[data-testid='composer-text-input']:visible"
-        ).first
+        editor = page.locator(COMPOSER_SELECTOR).first
         try:
-            await editor.wait_for(state="visible", timeout=15000)
+            await editor.wait_for(state="visible", timeout=10000)
         except Exception:
             # Current ChatGPT DOM changes frequently; capture a useful artifact
             # instead of failing as a black box.
@@ -262,7 +454,15 @@ async def _submit_prompt(page, full_prompt: str) -> bool:
                 await page.content(),
                 encoding="utf-8",
             )
-            print(f"[TechDiagram] Composer not found. url={page.url} title={await page.title()}", flush=True)
+            _write_json(
+                _request_dir() / "submit_prompt_failed_state.json",
+                {
+                    "readiness": readiness,
+                    "state": await _chatgpt_page_state(page),
+                    "failed_at": bjrt._now(),
+                },
+            )
+            print(f"[TechDiagram] Composer not found after readiness. url={page.url} title={await page.title()}", flush=True)
             return False
 
         # Click to focus
@@ -378,8 +578,18 @@ async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120
             })()
         """)
         if error_msg:
-            print(f"[TechDiagram] Detected ChatGPT error: {error_msg}", flush=True)
-            return {"status": "error", "error": error_msg}
+            if _is_nonfatal_chatgpt_toast(error_msg):
+                _write_json(
+                    request_dir / "nonfatal-chatgpt-toast.json",
+                    {
+                        "message": error_msg,
+                        "observed_at": bjrt._now(),
+                    },
+                )
+                print(f"[TechDiagram] Ignoring non-fatal ChatGPT toast: {error_msg}", flush=True)
+            else:
+                print(f"[TechDiagram] Detected ChatGPT error: {error_msg}", flush=True)
+                return {"status": "error", "error": error_msg}
 
         await asyncio.sleep(2)
 
@@ -788,6 +998,10 @@ def _trim_chatgpt_header(path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 async def _run(input_data: dict) -> int:
+    from browser_use.browser.profile import BrowserProfile
+    from browser_use.browser.session import BrowserSession
+    from playwright.async_api import async_playwright
+
     request_dir = _request_dir()
     profile_directory = str(os.environ.get("BROWSER_AGENT_PROFILE_DIRECTORY") or DEFAULT_PROFILE_DIRECTORY)
     user_data_dir = Path(os.environ.get("BROWSER_AGENT_USER_DATA_DIR") or str(DEFAULT_USER_DATA_DIR)).expanduser()
@@ -797,6 +1011,32 @@ async def _run(input_data: dict) -> int:
     staged_dir, cleanup_dir = bjrt._stage_browser_profile(user_data_dir, profile_directory)
     if user_data_dir and not staged_dir:
         raise RuntimeError("protected_browser_profile_cache_missing")
+    control_ctx = brtc.initialize_runtime_contract(
+        request_dir=request_dir,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="diagram",
+        profile_directory=profile_directory,
+        user_data_dir=str(user_data_dir),
+        staged_user_data_dir=str(staged_dir),
+        account_identifier=TARGET_ACCOUNT_EMAIL if TARGET_ACCOUNT_EMAIL != "browser-agent@example.com" else None,
+        explicit_profile_id=str(os.environ.get("BROWSER_AGENT_PROFILE_ID") or "").strip() or None,
+        task_id=str(os.environ.get("TASK_ID") or request_dir.name),
+        control_modes={
+            "browser_use_session": True,
+            "playwright_cdp_attach": True,
+            "webwright_bridge": False,
+        },
+        metadata={
+            "provider": "browser_agent_technology_diagram",
+            "request_dir": str(request_dir),
+            "target_url": DEFAULT_URL,
+            "headless": headless,
+        },
+    )
+    final_error_text: str | None = None
+    final_page_state: dict | None = None
+    logged_in_verified = False
 
     input_text = input_data.get("input_text", "")
     prompt = input_data.get("prompt", "请根据上述文本绘制技术架构图。")
@@ -822,6 +1062,11 @@ async def _run(input_data: dict) -> int:
     )
     try:
         await asyncio.wait_for(browser.start(), timeout=40)
+        brtc.update_runtime_endpoint(
+            control_ctx,
+            cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+            browser_session_ref=f"browser-use-session://technology-diagram/{control_ctx['profile_id']}",
+        )
         async with async_playwright() as pw:
             pw_browser = await pw.chromium.connect_over_cdp(browser.cdp_url)
             pw_context = pw_browser.contexts[0] if pw_browser.contexts else None
@@ -835,6 +1080,14 @@ async def _run(input_data: dict) -> int:
             print(f"[TechDiagram] Navigating to {DEFAULT_URL}", flush=True)
             await playwright_page.goto(DEFAULT_URL, wait_until="domcontentloaded")
             await playwright_page.wait_for_timeout(3000)
+            initial_ready = await _wait_for_chatgpt_ready(
+                playwright_page,
+                request_dir,
+                timeout_s=int(os.environ.get("TECH_DIAGRAM_CHATGPT_INITIAL_READY_TIMEOUT") or "120"),
+            )
+            final_page_state = initial_ready.get("state") if isinstance(initial_ready.get("state"), dict) else None
+            if not initial_ready.get("ok"):
+                raise RuntimeError(initial_ready.get("reason") or "chatgpt_not_ready")
 
             # 2. Verify account
             await _verify_account(playwright_page)
@@ -846,6 +1099,7 @@ async def _run(input_data: dict) -> int:
             # 4. Submit
             submitted = await _submit_prompt(playwright_page, full_prompt)
             if not submitted:
+                final_page_state = await _chatgpt_page_state(playwright_page)
                 raise RuntimeError("failed_to_submit_prompt")
             original_capture["active"] = True
 
@@ -871,7 +1125,12 @@ async def _run(input_data: dict) -> int:
 
             if result.get("status") != "success":
                 return 1
+            final_page_state = await _chatgpt_page_state(playwright_page)
+            logged_in_verified = True
             return 0
+    except Exception as exc:
+        final_error_text = str(exc)
+        raise
 
     finally:
         try:
@@ -881,6 +1140,18 @@ async def _run(input_data: dict) -> int:
         if cleanup_dir is not None:
             import shutil
             shutil.rmtree(cleanup_dir, ignore_errors=True)
+        brtc.finalize_runtime_contract(
+            control_ctx,
+            success=logged_in_verified and not final_error_text,
+            error_text=final_error_text,
+            page_state=final_page_state,
+            logged_in_state_verified=logged_in_verified,
+            details={
+                "provider": "browser_agent_technology_diagram",
+                "request_dir": str(request_dir),
+            },
+            requires_precise_page_control=True,
+        )
 
 
 def main() -> int:
