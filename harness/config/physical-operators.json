@@ -1939,7 +1939,6 @@
       "available": true,
       "health_status": "ok",
       "roles": [
-        "planner",
         "evaluator"
       ],
       "task_classes": [
