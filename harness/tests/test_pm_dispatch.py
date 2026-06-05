@@ -151,6 +151,57 @@ def test_multi_role_operator_uses_requested_role_persona(monkeypatch, tmp_path):
     assert "# Builder" not in dispatch_text
 
 
+def test_is_dispatchable_inherits_shared_billing_pool_cooldown(monkeypatch):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setattr(
+        pm_dispatch,
+        "load_registry",
+        lambda: {
+            "version": 1,
+            "operators": {
+                "primary-opus-evaluator": {
+                    "enabled": True,
+                    "available": True,
+                    "operator_id": "primary-opus-evaluator",
+                    "billing_pool": "anthropic_subscription_interactive",
+                    "key_ref": "claude_subscription",
+                },
+                "reserve-opus-print": {
+                    "enabled": True,
+                    "available": True,
+                    "operator_id": "reserve-opus-print",
+                    "billing_pool": "anthropic_subscription_interactive",
+                    "key_ref": "claude_subscription",
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(
+        pm_dispatch,
+        "get_operator_status_data",
+        lambda operator_id: {
+            "runtime_state": "cooldown",
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        if operator_id == "primary-opus-evaluator"
+        else {},
+    )
+
+    ok, reason = pm_dispatch.is_dispatchable(
+        {
+            "enabled": True,
+            "available": True,
+            "operator_id": "reserve-opus-print",
+            "billing_pool": "anthropic_subscription_interactive",
+            "key_ref": "claude_subscription",
+        }
+    )
+
+    assert ok is False
+    assert "shared_quota_guard_state=cooldown" in reason
+    assert "primary-opus-evaluator" in reason
+
+
 def test_transient_operator_failure_text_reads_operator_result_logs(tmp_path):
     pm_dispatch = _load_pm_dispatch()
     pm_dispatch.HARNESS_DIR = tmp_path
