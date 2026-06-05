@@ -66,6 +66,9 @@ def test_browser_agent_operator_request_is_standard_implementation_not_research(
     assert payload["dag_variant"] == "standard"
     node_ids = [node["id"] for node in payload["compiled_artifacts"]["task_dag"]["nodes"]]
     assert node_ids[:4] == ["S1", "S2", "S3", "S4"]
+    validation = router.validate_compiled_package(payload)
+    assert validation["ok"] is True
+    assert not any("task_graph_ready_width_below_min" in error for error in validation["errors"])
 
 
 def test_convergence_request_uses_parallel_spec_dag():
