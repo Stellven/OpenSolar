@@ -145,6 +145,60 @@ def test_dispatch_node_evals_send_failed_restores_reviewing(monkeypatch) -> None
     assert saved["graph"] is graph
 
 
+def test_force_dispatch_node_evals_archives_stale_eval_sidecars(monkeypatch, tmp_path) -> None:
+    graph = {
+        "sprint_id": "sid-force-archive",
+        "nodes": [
+            {
+                "id": "N1",
+                "goal": "retry after repaired artifact",
+                "status": "failed",
+            }
+        ],
+        "node_results": {"N1": {"status": "failed"}},
+    }
+    eval_md = tmp_path / "sid-force-archive.N1-eval.md"
+    eval_json = tmp_path / "sid-force-archive.N1-eval.json"
+    eval_md.write_text("old fail", encoding="utf-8")
+    eval_json.write_text('{"verdict":"FAIL"}', encoding="utf-8")
+    handoff = tmp_path / "sid-force-archive.N1-handoff.md"
+    handoff.write_text("repaired", encoding="utf-8")
+
+    monkeypatch.setattr(gnd, "load_graph", lambda path: graph)
+    monkeypatch.setattr(gnd, "save_graph", lambda path, data: None)
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: handoff)
+    monkeypatch.setattr(gnd, "_node_handoff_candidates", lambda sid, node, graph: [handoff])
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: eval_md)
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: eval_json)
+    monkeypatch.setattr(gnd, "_dispatch_file", lambda sid, node_id: tmp_path / "dispatch.md")
+    monkeypatch.setattr(gnd, "_eval_dispatch_file", lambda sid, node_id: tmp_path / "eval-dispatch.md")
+    monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_send_to_pane", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_ensure_lease", lambda *args, **kwargs: {"acquired": True, "reason": "ok"})
+    monkeypatch.setattr(
+        gnd,
+        "_discover_evaluators",
+        lambda dry_run=False: [
+            {"pane": "solar-harness:0.3", "busy": False, "models": ["opus"], "skills": ["review"]},
+        ],
+    )
+
+    result = gnd.dispatch_node_evals("/tmp/sid-force-archive.task_graph.json", dry_run=False, force=True)
+
+    assert result["skipped"] == []
+    assert result["dispatched"][0]["node"] == "N1"
+    assert not eval_md.exists()
+    assert not eval_json.exists()
+    archived = graph["nodes"][0]["last_eval_sidecar_archive"]
+    assert {Path(item["from"]).name for item in archived} == {
+        "sid-force-archive.N1-eval.md",
+        "sid-force-archive.N1-eval.json",
+    }
+    assert all(Path(item["to"]).exists() for item in archived)
+    assert graph["nodes"][0]["eval_retry_reason"] == "force_retry_archived_stale_eval_sidecars"
+
+
 def test_dispatch_node_evals_keeps_dual_plan_when_quorum_capacity_exists(monkeypatch) -> None:
     graph = {
         "sprint_id": "sid-eval-plan-quorum",

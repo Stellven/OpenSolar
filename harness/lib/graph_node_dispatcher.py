@@ -2152,6 +2152,22 @@ def _node_eval_assignments(node: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def _archive_eval_sidecars_for_retry(paths: list[Path], node: dict[str, Any]) -> list[dict[str, str]]:
+    archived: list[dict[str, str]] = []
+    stamp = _utc_now().replace(":", "").replace("-", "")
+    for path in paths:
+        if not path.exists():
+            continue
+        archive = path.with_name(f"{path.name}.stale-{stamp}")
+        path.replace(archive)
+        archived.append({"from": str(path), "to": str(archive)})
+    if archived:
+        node["last_eval_sidecar_archive"] = archived
+        node["eval_retry_reason"] = "force_retry_archived_stale_eval_sidecars"
+        node["updated_at"] = _utc_now()
+    return archived
+
+
 def _read_json_file_safe(path: str | Path) -> dict[str, Any]:
     try:
         candidate = Path(path).expanduser()
@@ -5678,6 +5694,10 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             )
         if not planned_assignments:
             break
+        if force and not dry_run:
+            archive_paths = [Path(str(item["eval_md_path"])) for item in planned_assignments]
+            archive_paths.extend(Path(str(item["eval_json_path"])) for item in planned_assignments)
+            _archive_eval_sidecars_for_retry(archive_paths, node)
 
         lease_results: list[dict[str, Any]] = []
         lease_failed = None
