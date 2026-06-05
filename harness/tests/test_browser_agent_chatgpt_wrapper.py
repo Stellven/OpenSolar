@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import sys
 import types
@@ -313,6 +314,10 @@ def test_chatgpt_wrapper_reads_and_writes_active_session_broker():
     assert "brtc.read_active_session(control_ctx, require_lineage_match=False)" in source
     assert "brtc.activate_reusable_session(" in source
     assert "if not _is_cdp_connect_failure(exc):" in source
+    assert "_kill_browser_processes_by_remote_debugging_port(stale_cdp_port)" in source
+    assert "_wait_for_browser_processes_gone_by_remote_debugging_port(stale_cdp_port, timeout_s=15.0)" in source
+    assert "_reap_orphan_browser_use_chrome_processes(" in source
+    assert "_protected_cdp_ports_from_profile_registry()" in source
     assert "LocalBrowserWatchdog._wait_for_cdp_url = staticmethod(_patched_wait_for_cdp_url)" in source
     assert "LocalBrowserWatchdog.on_BrowserStopEvent = on_BrowserStopEvent" in source
     assert "await _wait_for_cdp_websocket_ready(ws_url" in source
@@ -330,7 +335,116 @@ def test_chatgpt_wrapper_reads_and_writes_active_session_broker():
     assert "await page.reload()" in source
     assert "collect-empty-conversation-page.json" not in source
     assert "f\"{action}-empty-conversation-page.json\"" in source
+    assert "logged_in_verified = True" in source
+    assert "if final_data.get(\"is_generating\") or not str(final_data.get(\"latest_assistant_text\") or \"\").strip():" in source
+    assert "\"forced_exit\": True" in source
     assert "elif action in {\"poll\", \"collect\"} and collect_target_id:" in source
+    assert "active_session_port = _remote_debugging_port_from_cdp_url(" in source
+    assert "_browser_processes_exist_for_remote_debugging_port" in source
     assert "SUBMIT_FALLBACK_JS" in source
     assert "\"mode\": \"dom_fallback_after_native_setter\"" in source
     assert "\"mode\": \"clipboard_dom_submit_retry\"" in source
+    assert "const form = composer.closest(\"form\")" in source
+    assert "form direct_submit" in source
+    assert "form.querySelectorAll(selector)" in source
+
+
+def test_remote_debugging_port_extracts_from_cdp_url():
+    ns = _load_namespace()
+    assert ns["_remote_debugging_port_from_cdp_url"]("ws://127.0.0.1:55942/devtools/browser/abc") == "55942"
+    assert ns["_remote_debugging_port_from_cdp_url"]("https://example.com/") == ""
+
+
+def test_protected_cdp_ports_from_profile_registry_reads_active_sessions(tmp_path, monkeypatch):
+    ns = _load_namespace()
+    registry_root = tmp_path / "browser-profiles"
+    active_a = registry_root / "chatgpt" / "acct-a" / "active-session.json"
+    active_a.parent.mkdir(parents=True, exist_ok=True)
+    active_a.write_text(
+        '{"cdp_url":"ws://127.0.0.1:62001/devtools/browser/aaa"}\n',
+        encoding="utf-8",
+    )
+    active_b = registry_root / "chatgpt" / "acct-b" / "active-session.json"
+    active_b.parent.mkdir(parents=True, exist_ok=True)
+    active_b.write_text(
+        '{"cdp_url":"ws://127.0.0.1:62002/devtools/browser/bbb"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BROWSER_PROFILE_REGISTRY_ROOT", str(registry_root))
+    assert ns["_protected_cdp_ports_from_profile_registry"]() == {"62001", "62002"}
+
+
+def test_browser_processes_exist_for_remote_debugging_port_matches_root_command(monkeypatch):
+    ns = _load_namespace()
+
+    class _Result:
+        stdout = (
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            "--remote-debugging-port=62099 --user-data-dir=/tmp/browser-use-user-data-dir-abc\n"
+        )
+
+    monkeypatch.setattr(ns["subprocess"], "run", lambda *args, **kwargs: _Result())
+    assert ns["_browser_processes_exist_for_remote_debugging_port"]("62099") is True
+    assert ns["_browser_processes_exist_for_remote_debugging_port"]("62098") is False
+
+
+def test_prompt_from_stdin_allows_watch_complete_without_prompt(monkeypatch):
+    ns = _load_namespace()
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_ACTION", "watch_complete")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    assert ns["_prompt_from_stdin"]() == ""
+
+
+def test_notify_completion_ready_dedupes_same_conversation(tmp_path, monkeypatch):
+    ns = _load_namespace()
+    notify_script = tmp_path / "notify.sh"
+    notify_script.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    class _DummyProc:
+        pid = 12345
+
+    monkeypatch.setitem(ns, "NOTIFY_SCRIPT", notify_script)
+    monkeypatch.setattr(
+        ns["subprocess"],
+        "Popen",
+        lambda args, **kwargs: calls.append(list(args)) or _DummyProc(),
+    )
+    request_dir = tmp_path / "request"
+    request_dir.mkdir(parents=True, exist_ok=True)
+
+    ns["_notify_completion_ready"](
+        request_dir,
+        conversation_id="conv-123",
+        latest_text="first message",
+    )
+    ns["_notify_completion_ready"](
+        request_dir,
+        conversation_id="conv-123",
+        latest_text="first message",
+    )
+
+    marker = ns["_read_json"](request_dir / "completion-notify.json")
+    assert len(calls) == 1
+    assert marker["status"] == "notified"
+    assert marker["conversation_id"] == "conv-123"
+
+
+def test_chatgpt_wrapper_completion_sentinel_hooks_present():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert 'NOTIFY_SCRIPT = ROOT / "osascript-notify.sh"' in source
+    assert 'return request_dir / "completion-sentinel.json"' in source
+    assert 'return request_dir / "completion-notify.json"' in source
+    assert "def _maybe_start_completion_sentinel(" in source
+    assert "async def _watch_completion_signal(" in source
+    assert 'if action == "watch_complete":' in source
+    assert 'if action in {"poll", "collect", "watch_complete"} and collect_url:' in source
+    assert 'env["BROWSER_AGENT_CHATGPT_ACTION"] = "watch_complete"' in source
+    assert 'env["BROWSER_AGENT_CHATGPT_ENABLE_COMPLETION_SENTINEL"] = "false"' in source
+    assert "_force_wrapper_exit(0)" in source
+    assert "_force_wrapper_exit(1)" in source
+    assert 'marker_path = _completion_notify_marker_path(request_dir)' in source
+    assert '(request_dir / "completion-notify.json")' not in source
+    assert 'sentinel_state = _maybe_start_completion_sentinel(' in source
+    assert '_write_json(request_dir / "completion-sentinel-submit.json", sentinel_state)' in source
+    assert '"completion_sentinel_status": sentinel_state.get("status")' in source

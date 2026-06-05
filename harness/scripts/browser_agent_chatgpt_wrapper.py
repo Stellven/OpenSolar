@@ -7,10 +7,12 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import shutil
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 from urllib.parse import unquote, urlparse
@@ -22,6 +24,7 @@ if str(LIB) not in sys.path:
 
 import browser_job_runtime as bjrt
 from browser import runtime_control as brtc
+from browser.profile_registry import ProfileRegistry
 from browser_use.browser.profile import BrowserProfile
 from browser_use.browser.session import BrowserSession
 from browser_use.browser.watchdogs.local_browser_watchdog import LocalBrowserWatchdog
@@ -33,6 +36,7 @@ DEFAULT_PROFILE_DIRECTORY = "Profile 1"
 DEFAULT_BROWSER_CHANNEL = "chrome"
 DEFAULT_CHROME_EXECUTABLE = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 DEFAULT_ALLOWED_DOMAINS = ["chatgpt.com", "auth.openai.com", "challenges.cloudflare.com"]
+NOTIFY_SCRIPT = ROOT / "osascript-notify.sh"
 _BROWSER_USE_CDP_PATCHED = False
 
 
@@ -66,6 +70,10 @@ def _finalize_runtime_success(
     final_page_state: dict | None,
     keep_session_alive: bool,
 ) -> None:
+    current_cdp_port = _remote_debugging_port_from_cdp_url(str(getattr(browser, "cdp_url", "") or ""))
+    _reap_orphan_browser_use_chrome_processes(
+        protected_ports={current_cdp_port} if current_cdp_port else set()
+    )
     if keep_session_alive:
         brtc.activate_reusable_session(
             control_ctx,
@@ -529,6 +537,45 @@ SUBMIT_JS = r"""() => {
     const style = window.getComputedStyle(el);
     return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
   };
+  const isSendCandidate = (button) => {
+    if (!button || !visible(button)) return false;
+    const label = String(button.getAttribute("aria-label") || button.textContent || "").trim();
+    if (/语音|voice|stop|停止|cancel|中止/i.test(label)) return false;
+    const disabled = button.disabled || button.getAttribute("aria-disabled") === "true";
+    return !disabled;
+  };
+  const clickButton = (button, selector) => {
+    if (!isSendCandidate(button)) return null;
+    const label = String(button.getAttribute("aria-label") || button.textContent || "").trim();
+    button.click();
+    return JSON.stringify({ ok: true, selector, label });
+  };
+  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea");
+  if (composer) {
+    const form = composer.closest("form");
+    if (form) {
+      const localCandidates = [
+        "button[type='submit']",
+        "button[data-testid='send-button']",
+        "button[data-testid='composer-send-button']",
+        "button[aria-label*='Send']",
+        "button[aria-label*='send']",
+        "button[aria-label*='发送']",
+        "button.composer-submit-button-color[type='button']",
+        "button.composer-submit-button-color",
+      ];
+      for (const selector of localCandidates) {
+        const buttons = Array.from(form.querySelectorAll(selector));
+        for (const button of buttons) {
+          const result = clickButton(button, `form ${selector}`);
+          if (result) return result;
+        }
+      }
+      const localSubmit = form.querySelector("button[type='submit'], input[type='submit']");
+      const localResult = clickButton(localSubmit, "form direct_submit");
+      if (localResult) return localResult;
+    }
+  }
   const candidates = [
     "form button[type='submit']",
     "button[type='submit']",
@@ -543,16 +590,10 @@ SUBMIT_JS = r"""() => {
   for (const selector of candidates) {
     const buttons = Array.from(document.querySelectorAll(selector));
     for (const button of buttons) {
-      if (!visible(button)) continue;
-      const label = String(button.getAttribute("aria-label") || button.textContent || "").trim();
-      if (/语音|voice|stop|停止|cancel|中止/i.test(label)) continue;
-      const disabled = button.disabled || button.getAttribute("aria-disabled") === "true";
-      if (disabled) continue;
-      button.click();
-      return JSON.stringify({ ok: true, selector, label });
+      const result = clickButton(button, selector);
+      if (result) return result;
     }
   }
-  const composer = document.querySelector("#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea']");
   return JSON.stringify({ ok: false, error: "submit_button_not_found" });
 }"""
 
@@ -1049,6 +1090,138 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _read_json(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _pid_alive(pid: int | None) -> bool:
+    if not pid or int(pid) <= 0:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except OSError:
+        return False
+    return True
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _completion_signal_path(request_dir: Path) -> Path:
+    return request_dir / "completion-sentinel.json"
+
+
+def _completion_notify_marker_path(request_dir: Path) -> Path:
+    return request_dir / "completion-notify.json"
+
+
+def _notify_completion_ready(request_dir: Path, *, conversation_id: str, latest_text: str) -> None:
+    if not NOTIFY_SCRIPT.exists():
+        return
+    marker_path = _completion_notify_marker_path(request_dir)
+    marker = _read_json(marker_path)
+    if (
+        str(marker.get("status") or "").strip().lower() == "notified"
+        and str(marker.get("conversation_id") or "").strip()
+        and str(marker.get("conversation_id") or "").strip() == str(conversation_id or "").strip()
+    ):
+        return
+    message = f"{request_dir.name} 可以取结果了"
+    if conversation_id:
+        message = f"{message} ({conversation_id[:12]})"
+    snippet = str(latest_text or "").strip().replace("\n", " ")
+    if snippet:
+        message = f"{message}: {snippet[:72]}"
+    try:
+        subprocess.Popen(
+            ["bash", str(NOTIFY_SCRIPT), "ChatGPT 已完成", message, "Glass"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _write_json(
+            marker_path,
+            {
+                "ok": True,
+                "status": "notified",
+                "conversation_id": str(conversation_id or "").strip(),
+                "request_dir": str(request_dir),
+                "message": message,
+                "notified_at": _now_iso(),
+            },
+        )
+    except Exception:
+        return
+
+
+def _maybe_start_completion_sentinel(
+    *,
+    request_dir: Path,
+    target_url: str,
+    conversation_id: str,
+    model: str,
+    reasoning_effort: str,
+) -> dict[str, object]:
+    if not _env_flag("BROWSER_AGENT_CHATGPT_ENABLE_COMPLETION_SENTINEL", default=True):
+        return {"ok": False, "status": "disabled"}
+    if str(os.environ.get("BROWSER_AGENT_CHATGPT_ACTION") or "").strip().lower() == "watch_complete":
+        return {"ok": False, "status": "child_mode"}
+    state_path = _completion_signal_path(request_dir)
+    existing = _read_json(state_path)
+    existing_status = str(existing.get("status") or "").strip().lower()
+    existing_pid = int(existing.get("watch_pid") or 0) if str(existing.get("watch_pid") or "").isdigit() else 0
+    if existing_status == "completed":
+        return {"ok": True, "status": "completed", "state_path": str(state_path)}
+    if existing_status in {"watching", "launched", "attached"} and _pid_alive(existing_pid):
+        return {"ok": True, "status": existing_status, "watch_pid": existing_pid, "state_path": str(state_path)}
+    env = os.environ.copy()
+    env["BROWSER_AGENT_CHATGPT_ACTION"] = "watch_complete"
+    env["BROWSER_AGENT_CHATGPT_CONVERSATION_URL"] = str(target_url or "").strip()
+    env["CHATGPT_MODEL"] = str(model or "").strip()
+    env["CHATGPT_REASONING_EFFORT"] = str(reasoning_effort or "").strip()
+    env["BROWSER_AGENT_CHATGPT_ENABLE_COMPLETION_SENTINEL"] = "false"
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve())],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=env,
+        )
+    except Exception as exc:
+        payload = {
+            "ok": False,
+            "status": "launch_failed",
+            "error": f"{type(exc).__name__}: {exc}",
+            "request_dir": str(request_dir),
+            "target_url": str(target_url or ""),
+            "conversation_id": str(conversation_id or ""),
+            "updated_at": _now_iso(),
+        }
+        _write_json(state_path, payload)
+        return payload
+    payload = {
+        "ok": True,
+        "status": "launched",
+        "watch_pid": int(proc.pid),
+        "request_dir": str(request_dir),
+        "target_url": str(target_url or ""),
+        "conversation_id": str(conversation_id or ""),
+        "updated_at": _now_iso(),
+    }
+    _write_json(state_path, payload)
+    return payload
+
+
 def _kill_browser_profile_processes(profile_dir: Path | None) -> None:
     if not profile_dir:
         return
@@ -1067,10 +1240,151 @@ def _kill_browser_profile_processes(profile_dir: Path | None) -> None:
         pass
 
 
+def _remote_debugging_port_from_cdp_url(cdp_url: str | None) -> str:
+    text = str(cdp_url or "").strip()
+    match = re.search(r":(\d+)/", text)
+    return str(match.group(1) or "").strip() if match else ""
+
+
+def _protected_cdp_ports_from_profile_registry() -> set[str]:
+    root = Path(
+        os.environ.get("BROWSER_PROFILE_REGISTRY_ROOT")
+        or (Path.home() / ".solar" / "browser-profiles")
+    ).expanduser()
+    protected: set[str] = set()
+    if not root.exists():
+        return protected
+    try:
+        for path in root.glob("**/active-session.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            port = _remote_debugging_port_from_cdp_url(str(payload.get("cdp_url") or ""))
+            if port:
+                protected.add(port)
+    except Exception:
+        return protected
+    return protected
+
+
+def _kill_browser_processes_by_remote_debugging_port(port: str | None) -> None:
+    value = str(port or "").strip()
+    if not value:
+        return
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid,command"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return
+    marker = f"--remote-debugging-port={value}"
+    pids: list[int] = []
+    for raw_line in str(result.stdout or "").splitlines():
+        line = raw_line.strip()
+        if marker not in line or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" not in line:
+            continue
+        parts = line.split(None, 1)
+        if not parts:
+            continue
+        try:
+            pids.append(int(parts[0]))
+        except ValueError:
+            continue
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                continue
+            except Exception:
+                continue
+        time.sleep(0.5)
+
+
+def _browser_processes_exist_for_remote_debugging_port(port: str | None) -> bool:
+    value = str(port or "").strip()
+    if not value:
+        return False
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "command"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return False
+    marker = f"--remote-debugging-port={value}"
+    for raw_line in str(result.stdout or "").splitlines():
+        line = raw_line.strip()
+        if marker in line and "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" in line:
+            return True
+    return False
+
+
+def _wait_for_browser_processes_gone_by_remote_debugging_port(
+    port: str | None,
+    *,
+    timeout_s: float = 10.0,
+    sleep_s: float = 0.5,
+) -> None:
+    value = str(port or "").strip()
+    if not value:
+        return
+    deadline = time.time() + max(float(timeout_s), 0.0)
+    while time.time() < deadline:
+        if not _browser_processes_exist_for_remote_debugging_port(value):
+            return
+        time.sleep(max(float(sleep_s), 0.1))
+
+
+def _reap_orphan_browser_use_chrome_processes(*, protected_ports: set[str] | None = None) -> None:
+    protected = {str(item).strip() for item in (protected_ports or set()) if str(item).strip()}
+    protected.update(_protected_cdp_ports_from_profile_registry())
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid,ppid,command"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return
+    orphan_ports: set[str] = set()
+    for raw_line in str(result.stdout or "").splitlines():
+        line = raw_line.strip()
+        if "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" not in line:
+            continue
+        if "--headless=new" not in line or "browser-use-user-data-dir-" not in line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        _, ppid, command = parts
+        if ppid != "1":
+            continue
+        port_match = re.search(r"--remote-debugging-port=(\d+)", command)
+        port = str(port_match.group(1) or "").strip() if port_match else ""
+        if not port or port in protected:
+            continue
+        orphan_ports.add(port)
+    for port in sorted(orphan_ports):
+        _kill_browser_processes_by_remote_debugging_port(port)
+
+
 def _prompt_from_stdin() -> str:
     prompt = sys.stdin.read()
     action = str(os.environ.get("BROWSER_AGENT_CHATGPT_ACTION") or "run").strip().lower()
-    if not prompt.strip() and action not in {"poll", "collect"}:
+    if not prompt.strip() and action not in {"poll", "collect", "watch_complete"}:
         raise SystemExit("stdin prompt is empty")
     return prompt
 
@@ -1393,6 +1707,137 @@ async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: in
     raise TimeoutError("chatgpt_response_timeout")
 
 
+async def _watch_completion_signal(
+    *,
+    request_dir: Path,
+    target_url: str,
+    timeout_s: int,
+    headless: bool,
+    browser_channel: str,
+    browser_user_agent: str,
+    allowed_domains: list[str],
+    model: str,
+    reasoning_effort: str,
+) -> int:
+    state_path = _completion_signal_path(request_dir)
+    runtime = _read_json(request_dir / "runtime.json")
+    profile_id = str(runtime.get("profile_id") or "").strip()
+    if not profile_id:
+        _write_json(
+            state_path,
+            {
+                "ok": False,
+                "status": "error",
+                "error": "profile_id_missing",
+                "request_dir": str(request_dir),
+                "updated_at": _now_iso(),
+            },
+        )
+        return 1
+    active_session = ProfileRegistry().read_active_session(profile_id)
+    cdp_url = str(active_session.get("cdp_url") or "").strip()
+    if not cdp_url:
+        _write_json(
+            state_path,
+            {
+                "ok": False,
+                "status": "error",
+                "error": "active_session_missing",
+                "request_dir": str(request_dir),
+                "profile_id": profile_id,
+                "updated_at": _now_iso(),
+            },
+        )
+        return 1
+    _write_json(
+        state_path,
+        {
+            "ok": True,
+            "status": "attached",
+            "request_dir": str(request_dir),
+            "profile_id": profile_id,
+            "cdp_url": cdp_url,
+            "target_url": str(target_url or ""),
+            "watch_pid": os.getpid(),
+            "updated_at": _now_iso(),
+        },
+    )
+    browser = BrowserSession(
+        cdp_url=cdp_url,
+        browser_profile=BrowserProfile(
+            headless=headless,
+            keep_alive=True,
+            allowed_domains=allowed_domains,
+            channel=browser_channel,
+            user_agent=browser_user_agent,
+        ),
+    )
+    try:
+        await asyncio.wait_for(browser.start(), timeout=20)
+        page = await _find_existing_conversation_page(browser, target_url=target_url)
+        if page is None:
+            page = await asyncio.wait_for(browser.get_current_page(), timeout=15)
+        if page is None:
+            page = await asyncio.wait_for(browser.new_page(), timeout=15)
+        should_navigate = True
+        collect_target_id = _conversation_target_id(target_url)
+        if collect_target_id:
+            current_state = await _capture_state(page, timeout_s=8.0, default={}, label="watch_complete_current_state")
+            if str((current_state or {}).get("conversation_id") or "").strip() == collect_target_id:
+                should_navigate = False
+        if should_navigate and target_url:
+            try:
+                await asyncio.wait_for(page.goto(target_url), timeout=30)
+            except Exception:
+                await asyncio.wait_for(page.navigate(target_url), timeout=30)
+        await _wait_for_ready(page, timeout_s=90)
+        final_data = await _wait_for_conversation_ready(page, target_url=target_url, timeout_s=20)
+        if final_data.get("is_generating") or not str(final_data.get("latest_assistant_text") or "").strip():
+            final_data = await _wait_for_answer(page, -1, timeout_s=timeout_s)
+        latest = await _write_conversation_artifacts(
+            page,
+            request_dir,
+            final_data,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            prompt=None,
+        )
+        payload = {
+            "ok": True,
+            "status": "completed",
+            "request_dir": str(request_dir),
+            "profile_id": profile_id,
+            "target_url": str(target_url or ""),
+            "conversation_id": str(final_data.get("conversation_id") or ""),
+            "message_count": final_data.get("message_count"),
+            "assistant_count": final_data.get("assistant_count"),
+            "watch_pid": os.getpid(),
+            "completed_at": _now_iso(),
+        }
+        _write_json(state_path, payload)
+        _notify_completion_ready(
+            request_dir,
+            conversation_id=str(final_data.get("conversation_id") or ""),
+            latest_text=latest,
+        )
+        _force_wrapper_exit(0)
+    except Exception as exc:
+        _write_json(
+            state_path,
+            {
+                "ok": False,
+                "status": "error",
+                "request_dir": str(request_dir),
+                "profile_id": profile_id,
+                "target_url": str(target_url or ""),
+                "watch_pid": os.getpid(),
+                "error": f"{type(exc).__name__}: {exc}",
+                "updated_at": _now_iso(),
+            },
+        )
+        _force_wrapper_exit(1)
+
+
 async def _write_conversation_artifacts(
     page,
     request_dir: Path,
@@ -1668,7 +2113,7 @@ async def _run(prompt: str) -> int:
     target_url = str(os.environ.get("BROWSER_AGENT_CHATGPT_URL") or DEFAULT_URL)
     action = str(os.environ.get("BROWSER_AGENT_CHATGPT_ACTION") or "run").strip().lower()
     collect_url = str(os.environ.get("BROWSER_AGENT_CHATGPT_CONVERSATION_URL") or "").strip()
-    if action in {"poll", "collect"} and collect_url:
+    if action in {"poll", "collect", "watch_complete"} and collect_url:
         target_url = collect_url
     timeout_s = int(os.environ.get("BROWSER_AGENT_CHATGPT_TIMEOUT") or "1200")
     project_name = str(os.environ.get("BROWSER_AGENT_CHATGPT_PROJECT_NAME") or "").strip()
@@ -1746,6 +2191,18 @@ async def _run(prompt: str) -> int:
         "started_at": bjrt._now(),
     }
     _write_json(request_dir / "wrapper-meta.json", meta)
+    if action == "watch_complete":
+        return await _watch_completion_signal(
+            request_dir=request_dir,
+            target_url=target_url,
+            timeout_s=timeout_s,
+            headless=headless,
+            browser_channel=browser_channel,
+            browser_user_agent=browser_user_agent,
+            allowed_domains=allowed_domains,
+            model=model,
+            reasoning_effort=reasoning_effort,
+        )
     if not headless and not headed_allowed:
         raise RuntimeError("browser_agent_headed_run_requires_explicit_opt_in")
     control_ctx = brtc.initialize_runtime_contract(
@@ -1780,9 +2237,16 @@ async def _run(prompt: str) -> int:
     keep_session_alive = bool(control_ctx.get("session_reuse")) and bool(control_ctx.get("session_lineage"))
     runtime_cleanup_dir = cleanup_dir
     runtime_staged_dir = staged_dir
+    active_session_port = _remote_debugging_port_from_cdp_url(
+        str((active_session or {}).get("cdp_url") or "")
+    )
+    _reap_orphan_browser_use_chrome_processes(
+        protected_ports={active_session_port} if active_session_port else set()
+    )
     if active_session and active_session.get("cdp_url"):
         same_lineage = str(active_session.get("session_lineage") or "").strip() == str(control_ctx.get("session_lineage") or "").strip()
         stale_cleanup_dir = Path(str((active_session.get("details") or {}).get("cleanup_dir") or "")).expanduser() if str((active_session.get("details") or {}).get("cleanup_dir") or "").strip() else None
+        stale_cdp_port = _remote_debugging_port_from_cdp_url(str(active_session.get("cdp_url") or ""))
         try:
             browser = BrowserSession(
                 cdp_url=str(active_session.get("cdp_url") or "").strip(),
@@ -1806,6 +2270,8 @@ async def _run(prompt: str) -> int:
                     shutil.rmtree(stale_cleanup_dir, ignore_errors=True)
                 browser = None
         except Exception:
+            _kill_browser_processes_by_remote_debugging_port(stale_cdp_port)
+            _wait_for_browser_processes_gone_by_remote_debugging_port(stale_cdp_port, timeout_s=15.0)
             brtc.clear_active_session(control_ctx)
             browser = None
     if browser is None:
@@ -1832,6 +2298,10 @@ async def _run(prompt: str) -> int:
                     await asyncio.wait_for(browser.kill(), timeout=20)
                 except Exception:
                     pass
+                _wait_for_browser_processes_gone_by_remote_debugging_port(
+                    _remote_debugging_port_from_cdp_url(str(getattr(browser, "cdp_url", "") or "")),
+                    timeout_s=15.0,
+                )
                 await asyncio.sleep(1.0)
                 browser = BrowserSession(
                     browser_profile=BrowserProfile(
@@ -1957,6 +2427,13 @@ async def _run(prompt: str) -> int:
                 except TimeoutError:
                     final_data = await _capture_state(page, timeout_s=8.0, default=final_data, label="collect_after_timeout")
             if final_data.get("is_generating") or not str(final_data.get("latest_assistant_text") or "").strip():
+                sentinel_state = _maybe_start_completion_sentinel(
+                    request_dir=request_dir,
+                    target_url=str(final_data.get("url") or target_url or "").strip(),
+                    conversation_id=str(final_data.get("conversation_id") or "").strip(),
+                    model=model,
+                    reasoning_effort=reasoning_effort,
+                )
                 if expected_conversation_id and int(final_data.get("message_count") or 0) == 0:
                     try:
                         html = await page.evaluate(HTML_JS)
@@ -1978,12 +2455,14 @@ async def _run(prompt: str) -> int:
                     "conversation_id": final_data.get("conversation_id"),
                     "assistant_count": final_data.get("assistant_count"),
                     "message_count": final_data.get("message_count"),
+                    "completion_sentinel": sentinel_state,
                     "checked_at": bjrt._now(),
                 })
                 print(json.dumps({
                     "status": "running" if final_data.get("is_generating") else "submitted",
                     "url": final_data.get("url"),
                     "conversation_id": final_data.get("conversation_id"),
+                    "completion_sentinel_status": sentinel_state.get("status"),
                 }, ensure_ascii=False))
                 final_page_state = {
                     "url": final_data.get("url"),
@@ -1993,7 +2472,20 @@ async def _run(prompt: str) -> int:
                     "login_wall": final_data.get("login_wall"),
                     "challenge_wall": final_data.get("challenge_wall"),
                 }
-                return 0
+                logged_in_verified = True
+                _finalize_runtime_success(
+                    control_ctx=control_ctx,
+                    browser=browser,
+                    headless=headless,
+                    reused_existing_session=reused_existing_session,
+                    runtime_staged_dir=runtime_staged_dir,
+                    runtime_cleanup_dir=runtime_cleanup_dir,
+                    request_dir=request_dir,
+                    action=action,
+                    final_page_state=final_page_state,
+                    keep_session_alive=keep_session_alive,
+                )
+                _force_wrapper_exit(0)
             if action == "collect":
                 try:
                     final_data = await _wait_for_answer(
@@ -2173,6 +2665,14 @@ async def _run(prompt: str) -> int:
                 "submitted_at": bjrt._now(),
             }
             _write_json(request_dir / "submitted-run.json", submitted)
+            sentinel_state = _maybe_start_completion_sentinel(
+                request_dir=request_dir,
+                target_url=str(submitted.get("url") or target_url or "").strip(),
+                conversation_id=str(submitted.get("conversation_id") or "").strip(),
+                model=model,
+                reasoning_effort=reasoning_effort,
+            )
+            _write_json(request_dir / "completion-sentinel-submit.json", sentinel_state)
             final_page_state = {
                 "url": submitted.get("url"),
                 "conversation_id": submitted.get("conversation_id"),
