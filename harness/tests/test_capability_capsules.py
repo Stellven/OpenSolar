@@ -138,6 +138,33 @@ def test_resolution_gate_attaches_guard_and_resource_capsules(monkeypatch):
     assert resolved["resolved_mcp_bindings"]["git.read"] == "plugin.test"
 
 
+def test_verification_capsule_accepts_graph_eval_task_type(monkeypatch):
+    monkeypatch.setattr(
+        caps,
+        "_query_capability_providers",
+        lambda capability, min_level=3: [{"capability": capability, "provider": "plugin.test", "level": 4}],
+    )
+    envelope = {
+        "capability_native": True,
+        "capability_capsule_id": "cap.requirement-compiler-verification",
+        "task_type": "graph_eval",
+        "objective": "Review graph node handoff and write eval sidecars.",
+        "requirement_ir": {"sprint_id": "sprint-x", "node_id": "N1"},
+        "handoff_md": "/tmp/sprint-x.N1-handoff.md",
+        "operator_id": "mini-claude-opus-evaluator",
+    }
+
+    resolved = caps.resolve_capability_capsule_for_envelope(
+        envelope,
+        registry_path=ROOT / "config" / "capability-capsules.registry.yaml",
+    )
+
+    assert resolved["capability_capsule_id"] == "cap.requirement-compiler-verification"
+    assert resolved["attached_guard_capsules"] == ["guard.secret-leak-guard"]
+    assert resolved["attached_resource_capsules"] == ["resource.github-readonly"]
+    assert "eval_json exists" in resolved["verification_hooks"]["pass_conditions"]
+
+
 def test_resolution_gate_blocks_missing_resource(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)

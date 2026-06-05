@@ -33,6 +33,18 @@ def _write_graph(sprints: Path, sid: str) -> Path:
     return path
 
 
+def _write_graph_with_nodes(sprints: Path, sid: str, nodes: list[dict]) -> Path:
+    graph = {
+        "schema_version": "solar.task_graph.v1",
+        "sprint_id": sid,
+        "nodes": nodes,
+        "node_results": {},
+    }
+    path = sprints / f"{sid}.task_graph.json"
+    path.write_text(json.dumps(graph), encoding="utf-8")
+    return path
+
+
 def test_graph_drain_dry_run_discovers_without_counting_submitted(monkeypatch, tmp_path):
     controller = _load_controller()
     sprints = tmp_path / "sprints"
@@ -255,3 +267,57 @@ def test_graph_drain_uses_scheduler_autopilot_when_dispatcher_lacks_it(monkeypat
     assert payload["counters"]["builder_candidates"] == 0
     assert payload["counters"]["builder_attempts"] == 0
     assert payload["skipped"] == []
+
+
+def test_graph_drain_prioritizes_handoff_ready_eval_graphs_inside_scan_window(monkeypatch, tmp_path):
+    controller = _load_controller()
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    hot_sid = "sprint-hot-eval"
+    cold_sid = "sprint-cold-newer"
+    _write_graph_with_nodes(
+        sprints,
+        hot_sid,
+        [{"id": "B1", "status": "reviewing", "artifacts": {"handoff_md": f"{hot_sid}.B1-handoff.md"}}],
+    )
+    (sprints / f"{hot_sid}.B1-handoff.md").write_text("# hot handoff\n", encoding="utf-8")
+    _write_graph_with_nodes(
+        sprints,
+        cold_sid,
+        [{"id": "B1", "status": "pending"}],
+    )
+    cold_path = sprints / f"{cold_sid}.task_graph.json"
+    hot_path = sprints / f"{hot_sid}.task_graph.json"
+    cold_path.touch()
+
+    class FakeDispatcher:
+        @staticmethod
+        def load_graph(path):
+            return json.loads(Path(path).read_text(encoding="utf-8"))
+
+        @staticmethod
+        def _existing_node_handoff(sprint_id, node, graph):
+            path = sprints / f"{sprint_id}.{node['id']}-handoff.md"
+            return path if path.exists() else None
+
+        @staticmethod
+        def _node_eval_needed(graph, sprint_id, node, force=False):
+            return sprint_id == hot_sid and node["id"] == "B1"
+
+        @staticmethod
+        def ready_nodes(graph):
+            return []
+
+        @staticmethod
+        def dispatch_node_evals(path, dry_run=False, ttl=900, max_items=0):
+            assert Path(path) == hot_path
+            return {"ok": True, "dispatched": [{"node": "B1"}], "reconciled": [], "skipped": []}
+
+    monkeypatch.setattr(controller, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(controller, "_load_graph_dispatcher", lambda: FakeDispatcher)
+
+    payload = controller.run_graph_drain(apply=False, max_graphs=1, max_evals=1, max_builders=0)
+
+    assert payload["counters"]["graphs_scanned"] == 1
+    assert payload["counters"]["eval_candidates"] == 1
+    assert payload["candidates"][0]["sprint_id"] == hot_sid

@@ -64,12 +64,31 @@ def _load_graph_scheduler() -> Any | None:
         return None
 
 
+def _graph_path_priority(path: Path) -> tuple[int, float]:
+    """Prefer graphs that already have handoffs waiting for evaluator closeout."""
+    mtime = path.stat().st_mtime if path.exists() else 0
+    try:
+        graph = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return (0, mtime)
+    hot_eval = 0
+    for node in _list_nodes(graph if isinstance(graph, dict) else {}):
+        node_id = str(node.get("id") or "")
+        status = str(node.get("status") or "").lower()
+        artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+        has_handoff = bool(node.get("handoff_md") or node.get("handoff_path") or artifacts.get("handoff_md"))
+        eval_json = node.get("eval_json") or artifacts.get("eval_json")
+        if node_id and status == "reviewing" and has_handoff and not eval_json:
+            hot_eval += 1
+    return (hot_eval, mtime)
+
+
 def _iter_graph_paths(max_graphs: int) -> list[Path]:
     if not SPRINTS_DIR.exists():
         return []
     paths = sorted(
         SPRINTS_DIR.glob("*.task_graph.json"),
-        key=lambda item: item.stat().st_mtime if item.exists() else 0,
+        key=_graph_path_priority,
         reverse=True,
     )
     if max_graphs > 0:

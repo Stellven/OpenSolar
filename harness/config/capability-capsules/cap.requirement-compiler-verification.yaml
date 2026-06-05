@@ -7,6 +7,7 @@ metadata:
 applicability:
   task_types:
     - tests
+    - graph_eval
     - verification
     - review
     - evidence
@@ -41,6 +42,7 @@ contract:
     - check: task_type_in
       values:
         - tests
+        - graph_eval
         - verification
         - review
         - evidence
