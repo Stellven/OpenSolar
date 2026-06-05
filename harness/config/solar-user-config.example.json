@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-05T00:00:00Z",
+  "setup_complete": false,
+  "user": {
+    "display_name": "Solar User",
+    "timezone": "${TZ:-UTC}"
+  },
+  "paths": {
+    "knowledge_vault": "${SOLAR_KNOWLEDGE_DIR}",
+    "raw_dir": "${SOLAR_KNOWLEDGE_RAW_DIR}",
+    "harness_dir": "${HARNESS_DIR}"
+  },
+  "models": {
+    "planner": "${SOLAR_MODEL_PLANNER:-opus}",
+    "builder": "${SOLAR_MODEL_BUILDER:-opus}",
+    "evaluator": "${SOLAR_MODEL_EVALUATOR:-opus}",
+    "lab_builder_matrix": "${SOLAR_LAB_BUILDER_MODEL_MATRIX:-glm,glm,glm,anthropic-sonnet}",
+    "pm": "${SOLAR_MODEL_PM:-opus}"
+  },
+  "providers": {
+    "zhipu_base_url": "https://api.z.ai/api/anthropic",
+    "deepseek_base_url": "https://api.deepseek.com/anthropic",
+    "prefer_zhipu": true
+  },
+  "wiki": {
+    "qmd_collection": "solar-wiki",
+    "auto_ingest_enabled": false,
+    "capture_server_port": 8788
+  },
+  "mirage": {
+    "enabled": true,
+    "workspace_id": "solar-default",
+    "config_path": "${HARNESS_DIR}/config/mirage.solar.yaml"
+  },
+  "apple_notes": {
+    "enabled": false,
+    "folder": "Solar Inbox",
+    "interval_seconds": 7200
+  },
+  "ui": {
+    "open_on_first_run": true
+  }
+}

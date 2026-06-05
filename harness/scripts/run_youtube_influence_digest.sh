@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HARNESS_DIR="${HARNESS_DIR:-/Users/lisihao/Solar/harness}"
+HARNESS_DIR="${HARNESS_DIR:-${SOLAR_REPO}/harness}"
 CONFIG="${YOUTUBE_INFLUENCE_DIGEST_CONFIG:-$HARNESS_DIR/config/youtube-influence-digest.yaml}"
 PYTHON="${PYTHON:-python3}"
 

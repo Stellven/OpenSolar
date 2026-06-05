@@ -15,7 +15,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-DEFAULT_HOST = "lisihao@100.122.223.55"
+DEFAULT_HOST = "lisihao@${SOLAR_REMOTE_IP}"
 REMOTE_HARNESS = "~/.solar/harness"
 SESSION = "solar-harness-multi-task"
 ACTIVE_STATUSES = {"dispatched", "running"}

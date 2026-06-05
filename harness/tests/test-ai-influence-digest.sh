@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${ROOT:-/Users/lisihao/.solar/harness}"
+ROOT="${ROOT:-${HARNESS_DIR}}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 

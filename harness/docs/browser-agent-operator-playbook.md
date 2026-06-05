@@ -105,8 +105,8 @@ Location: `HARNESS_DIR/run/operator-results/{operator_id}/{task_id}/result.json`
   "finished_at": "2026-05-25T16:58:05Z",
   "log_tail": "[2026-05-25T16:58:00Z] Job webapp_research_operator submitted...\n[2026-05-25T16:58:05Z] Execution complete.",
   "artifacts": [
-    "/Users/lisihao/.solar/harness/run/operator-results/webapp_research_operator/T001/screenshot.png",
-    "/Users/lisihao/.solar/harness/run/operator-results/webapp_research_operator/T001/logs.txt"
+    "${HARNESS_DIR}/run/operator-results/webapp_research_operator/T001/screenshot.png",
+    "${HARNESS_DIR}/run/operator-results/webapp_research_operator/T001/logs.txt"
   ]
 }
 ```

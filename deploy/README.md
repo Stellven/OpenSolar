@@ -37,7 +37,7 @@ cd ~/Solar
 ```bash
 # 在 MacBook Pro 上执行
 cd ~/Solar
-./deploy/sync-config.sh lisihao@192.168.50.194
+./deploy/sync-config.sh user@remote-host
 ```
 
 这会自动：

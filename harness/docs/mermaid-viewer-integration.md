@@ -2,7 +2,7 @@
 
 Status: implemented  
 Source: https://github.com/mermaid-js/mermaid  
-Local package: `/Users/sihaoli/.solar/harness/vendor/mermaid-viewer/node_modules/mermaid`
+Local package: `${HARNESS_DIR}/vendor/mermaid-viewer/node_modules/mermaid`
 
 ## What It Does
 
@@ -10,7 +10,7 @@ Solar status-server can now browse and render `.mmd` files directly:
 
 ```bash
 solar-harness mermaid --open
-solar-harness mermaid /Users/sihaoli/.solar/harness/reports/solar-system-architecture-20260508.mmd --open
+solar-harness mermaid ${HARNESS_DIR}/reports/solar-system-architecture-20260508.mmd --open
 ```
 
 URLs:
@@ -27,13 +27,13 @@ The main Solar Status page also has an `架构图` tab with an embedded viewer.
 
 The server only reads `.mmd` files under:
 
-- `/Users/sihaoli/.solar/harness`
-- `/Users/sihaoli/Knowledge`
+- `${HARNESS_DIR}`
+- `${SOLAR_KNOWLEDGE_DIR}`
 
 Mermaid static assets are served from:
 
 ```text
-/Users/sihaoli/.solar/harness/vendor/mermaid-viewer/node_modules/mermaid/dist
+${HARNESS_DIR}/vendor/mermaid-viewer/node_modules/mermaid/dist
 ```
 
 No arbitrary local file read is exposed.

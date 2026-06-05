@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${ROOT:-/Users/lisihao/.solar/harness}"
+ROOT="${ROOT:-${HARNESS_DIR}}"
 HARNESS="${ROOT}/solar-harness.sh"
 PASS=0
 FAIL=0

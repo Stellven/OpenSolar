@@ -21,14 +21,14 @@ allowed_hostnames:
   - lisihaodeMini-3
 
 output:
-  raw_dir: /Users/lisihao/Knowledge/_raw/tech-hotspot-radar
-  state_dir: /Users/lisihao/.solar/harness/state/tech-hotspot-radar
-  database: /Users/lisihao/.solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite
+  raw_dir: ${SOLAR_KNOWLEDGE_DIR}/_raw/tech-hotspot-radar
+  state_dir: ${HARNESS_DIR}/state/tech-hotspot-radar
+  database: ${HARNESS_DIR}/state/tech-hotspot-radar/tech-hotspot-radar.sqlite
   retention_days: 120
   # legacy output dirs preserved
   legacy_raw_dirs:
-    youtube: /Users/lisihao/Knowledge/_raw/youtube-influence-digest
-    social: /Users/lisihao/Knowledge/_raw/ai-influence-daily-digest
+    youtube: ${SOLAR_KNOWLEDGE_DIR}/_raw/youtube-influence-digest
+    social: ${SOLAR_KNOWLEDGE_DIR}/_raw/ai-influence-daily-digest
 
 fetch:
   timeout_seconds: 20

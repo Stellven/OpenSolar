@@ -11,8 +11,8 @@ set -e
 
 # ========== 配置 ==========
 REMOTE_USER="${SOLAR_REMOTE_USER:-your-user}"
-REMOTE_HOST="${SOLAR_REMOTE_HOST:-192.168.50.194}"
-REMOTE_TAILSCALE="${SOLAR_REMOTE_TAILSCALE:-100.122.223.55}"  # 备用 Tailscale 地址
+REMOTE_HOST="${SOLAR_REMOTE_HOST:-}"
+REMOTE_TAILSCALE="${SOLAR_REMOTE_TAILSCALE:-}"  # optional fallback address
 
 # 颜色
 RED='\033[0;31m'
@@ -74,20 +74,20 @@ detect_remote() {
     log_info "检测远程主机连接..."
 
     # 先试局域网
-    if ssh -o ConnectTimeout=3 -o BatchMode=yes ${REMOTE_USER}@${REMOTE_HOST} "echo ok" &>/dev/null; then
+    if [ -n "$REMOTE_HOST" ] && ssh -o ConnectTimeout=3 -o BatchMode=yes ${REMOTE_USER}@${REMOTE_HOST} "echo ok" &>/dev/null; then
         REMOTE="${REMOTE_USER}@${REMOTE_HOST}"
         log_success "使用局域网地址: ${REMOTE_HOST}"
         return 0
     fi
 
     # 再试 Tailscale
-    if ssh -o ConnectTimeout=3 -o BatchMode=yes ${REMOTE_USER}@${REMOTE_TAILSCALE} "echo ok" &>/dev/null; then
+    if [ -n "$REMOTE_TAILSCALE" ] && ssh -o ConnectTimeout=3 -o BatchMode=yes ${REMOTE_USER}@${REMOTE_TAILSCALE} "echo ok" &>/dev/null; then
         REMOTE="${REMOTE_USER}@${REMOTE_TAILSCALE}"
         log_success "使用 Tailscale 地址: ${REMOTE_TAILSCALE}"
         return 0
     fi
 
-    log_error "无法连接到 Mac mini (局域网: ${REMOTE_HOST}, Tailscale: ${REMOTE_TAILSCALE})"
+    log_error "无法连接到远端机器；请设置 SOLAR_REMOTE_HOST 或 SOLAR_REMOTE_TAILSCALE"
     return 1
 }
 
@@ -388,5 +388,5 @@ echo "   1. 重新加载环境变量: source ~/.zshrc"
 echo "   2. 加载 LaunchAgents: launchctl load ~/Library/LaunchAgents/com.solar.*.plist"
 echo "   3. 重启 Claude Code (如果 MCP 配置有变化)"
 echo "   4. ⚠️  修正 .mcp.json 中的路径:"
-echo "      sed -i '' 's|/Users/OLD_USER|/Users/NEW_USER|g' ~/.mcp.json"
+echo "      sed -i '' 's|/Users/<old-user>|/Users/<new-user>|g' ~/.mcp.json"
 echo ""

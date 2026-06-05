@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 
-_STATUS_SERVER = Path("/Users/lisihao/Solar/harness/lib/symphony/status-server.py")
+_STATUS_SERVER = Path("${SOLAR_REPO}/harness/lib/symphony/status-server.py")
 
 
 def _load_module():

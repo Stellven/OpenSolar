@@ -5,8 +5,8 @@ description: Use this skill when Solar or solar-harness needs Mac mini sync audi
 
 # Solar Mac Mini Sync Auditor
 
-Use this skill to audit whether `/Users/sihaoli/.solar/harness` and
-`lisihao@100.122.223.55:/Users/lisihao/.solar/harness` are consistent enough
+Use this skill to audit whether `${HARNESS_DIR}` and
+`${SOLAR_REMOTE_SSH}:${SOLAR_REMOTE_HARNESS_DIR}` are consistent enough
 for Solar/Solar-Harness work.
 
 ## Command
