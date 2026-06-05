@@ -125,3 +125,76 @@ def test_status_summary_exposes_painter_health(tmp_path: Path) -> None:
     assert recent["result_kind"] == "technology_diagram"
     assert recent["original_image_ok"] is True
     assert summary["sources"]["health"].endswith("run/operator-health")
+
+
+def test_chatgpt_readiness_failure_reason_is_actionable() -> None:
+    mod = _load_module(
+        "technology_diagram_painter_wrapper_readiness_test",
+        ROOT / "scripts" / "browser_agent_technology_diagram_painter_wrapper.py",
+    )
+
+    assert mod._readiness_failure_reason({"login_wall": True}) == "chatgpt_login_wall_detected"
+    assert mod._readiness_failure_reason({"challenge_wall": True}) == "chatgpt_cloudflare_challenge_detected"
+    assert mod._readiness_failure_reason({"challenge_wall": True, "loading_wall": True}) == "chatgpt_cloudflare_challenge_detected"
+    assert mod._readiness_failure_reason({"loading_wall": True}) == "chatgpt_loading_timeout"
+    assert mod._readiness_failure_reason({"composer_visible": False}) == "composer_not_found_after_recovery"
+    assert mod._is_nonfatal_chatgpt_toast("Failed to copy to clipboard.") is True
+    assert mod._is_nonfatal_chatgpt_toast("Usage limit reached") is False
+
+
+def test_operator_defaults_headless_and_retries_headed_for_auth_recovery(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SOLAR_OPERATOR_RESULTS_DIR", str(tmp_path / "run" / "operator-results"))
+    monkeypatch.setenv("SOLAR_OPERATOR_HEALTH_DIR", str(tmp_path / "run" / "operator-health"))
+    monkeypatch.delenv("BROWSER_AGENT_HEADLESS", raising=False)
+    monkeypatch.setenv("TECH_DIAGRAM_ALLOW_HEADED_RECOVERY", "true")
+
+    fake_wrapper = tmp_path / "fake_tech_diagram_wrapper.py"
+    fake_wrapper.write_text(
+        "import json, os, pathlib, sys\n"
+        "req_dir = pathlib.Path(os.environ['BROWSER_AGENT_REQUEST_DIR'])\n"
+        "req_dir.mkdir(parents=True, exist_ok=True)\n"
+        "headless = os.environ.get('BROWSER_AGENT_HEADLESS')\n"
+        "(req_dir / 'env.json').write_text(json.dumps({'headless': headless}) + '\\n')\n"
+        "if headless == 'true':\n"
+        "    print('chatgpt_cloudflare_challenge_detected', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+        "image = req_dir / 'generated_diagram.png'\n"
+        "image.write_bytes(b'png')\n"
+        "(req_dir / 'result.json').write_text(json.dumps({\n"
+        "    'status': 'success',\n"
+        "    'source': 'network-image-response',\n"
+        "    'image_path': str(image),\n"
+        "    'url': 'https://chatgpt.com/backend-api/estuary/content?id=file_test',\n"
+        "    'width': 1024,\n"
+        "    'height': 768,\n"
+        "    'bytes': 3,\n"
+        "    'request_dir': str(req_dir),\n"
+        "}) + '\\n')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BROWSER_AGENT_TECH_DIAGRAM_CMD", f"{sys.executable} {fake_wrapper}")
+
+    mod = _load_module(
+        "technology_diagram_painter_operator_auth_recovery_test",
+        ROOT / "tools" / "technology_diagram_painter_operator.py",
+    )
+
+    task_dir = tmp_path / "task"
+    result = mod.run_request(
+        {
+            "input_text": "Agent runtime evidence plane",
+            "prompt": "draw",
+            "timeout_seconds": 5,
+            "max_retries": 1,
+        },
+        task_dir=task_dir,
+    )
+
+    assert result["status"] == "success"
+    recovery = json.loads((task_dir / "auth-recovery.json").read_text(encoding="utf-8"))
+    assert recovery["reason"] == "chatgpt_cloudflare_challenge_detected"
+    assert recovery["action"] == "retry_headed_once"
+    headless_env = json.loads((task_dir / "tech-diagram-request" / "env.json").read_text(encoding="utf-8"))
+    headed_env = json.loads((task_dir / "tech-diagram-request" / "headed-recovery" / "env.json").read_text(encoding="utf-8"))
+    assert headless_env["headless"] == "true"
+    assert headed_env["headless"] == "false"

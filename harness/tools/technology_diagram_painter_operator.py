@@ -124,6 +124,57 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    value = str(os.environ.get(name) or "").strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}
+
+
+def _auth_recovery_reason(text: str) -> str:
+    sample = str(text or "").lower()
+    if "chatgpt_cloudflare_challenge_detected" in sample or "cloudflare" in sample or "challenge" in sample:
+        return "chatgpt_cloudflare_challenge_detected"
+    if "chatgpt_login_wall_detected" in sample or "login_wall" in sample or "log in" in sample:
+        return "chatgpt_login_wall_detected"
+    return ""
+
+
+def _run_wrapper_process(
+    cmd: list[str],
+    request: dict[str, Any],
+    *,
+    env: dict[str, str],
+    task_dir: Path,
+    attempt_label: str,
+    timeout_seconds: int,
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    proc = subprocess.run(
+        cmd,
+        input=json.dumps(request),
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=timeout_seconds,
+    )
+    combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+    (task_dir / f"tech-diagram-output-{attempt_label}.txt").write_text(
+        combined + ("\n" if combined else ""),
+        encoding="utf-8",
+    )
+    return proc, combined
+
+
+def _load_success_result(request_dir: Path) -> dict[str, Any] | None:
+    result_path = request_dir / "result.json"
+    if not result_path.exists():
+        return None
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    if result.get("status") != "success":
+        raise RuntimeError(f"Wrapper failed to generate image: {result.get('error') or result.get('status')}")
+    return result
+
+
 def record_operator_result(
     response: dict[str, Any],
     *,
@@ -348,7 +399,7 @@ def run_request(request: dict[str, Any], *, task_dir: Path, operator_id: str = D
 
     env = os.environ.copy()
     if "BROWSER_AGENT_HEADLESS" not in env:
-        env["BROWSER_AGENT_HEADLESS"] = "false"
+        env["BROWSER_AGENT_HEADLESS"] = "true"
     env.update({
         "BROWSER_AGENT_REQUEST_DIR": str(request_dir),
         "BROWSER_AGENT_TIMEOUT": str(request.get("timeout_seconds") or 600),
@@ -362,32 +413,77 @@ def run_request(request: dict[str, Any], *, task_dir: Path, operator_id: str = D
     for attempt in range(1, max_retries + 1):
         print(f"[Tech Diagram Operator] Starting execution attempt {attempt} of {max_retries}...", flush=True)
         try:
-            proc = subprocess.run(
+            proc, combined = _run_wrapper_process(
                 cmd,
-                input=json.dumps(request),
-                text=True,
-                capture_output=True,
                 env=env,
-                timeout=subprocess_timeout,
-            )
-            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-            (task_dir / f"tech-diagram-output-attempt{attempt}.txt").write_text(
-                combined + ("\n" if combined else ""),
-                encoding="utf-8",
+                request=request,
+                task_dir=task_dir,
+                attempt_label=f"attempt{attempt}",
+                timeout_seconds=subprocess_timeout,
             )
 
             # The wrapper script should have written result.json to request_dir
-            result_path = request_dir / "result.json"
-            if not result_path.exists():
+            result = _load_success_result(request_dir)
+            if result is None:
                 if proc.returncode != 0:
-                    raise RuntimeError(f"Wrapper exited with code {proc.returncode}. Log snippet:\n{combined[-1000:]}")
+                    recovery_reason = _auth_recovery_reason(combined)
+                    allow_headed_recovery = _env_flag("TECH_DIAGRAM_ALLOW_HEADED_RECOVERY", default=True)
+                    headless_first = str(env.get("BROWSER_AGENT_HEADLESS") or "").strip().lower() in {"1", "true", "yes", "on"}
+                    if recovery_reason and allow_headed_recovery and headless_first:
+                        recovery_dir = request_dir / "headed-recovery"
+                        recovery_dir.mkdir(parents=True, exist_ok=True)
+                        recovery_env = env.copy()
+                        recovery_env["BROWSER_AGENT_HEADLESS"] = "false"
+                        recovery_env["BROWSER_AGENT_REQUEST_DIR"] = str(recovery_dir)
+                        _write_json_atomic(
+                            task_dir / "auth-recovery.json",
+                            {
+                                "schema": "technology_diagram.auth_recovery.v1",
+                                "reason": recovery_reason,
+                                "action": "retry_headed_once",
+                                "headless_request_dir": str(request_dir),
+                                "headed_request_dir": str(recovery_dir),
+                                "started_at": _utc_now(),
+                            },
+                        )
+                        print(
+                            f"[Tech Diagram Operator] Auth recovery required ({recovery_reason}); retrying headed once...",
+                            flush=True,
+                        )
+                        recovery_proc, recovery_combined = _run_wrapper_process(
+                            cmd,
+                            request,
+                            env=recovery_env,
+                            task_dir=task_dir,
+                            attempt_label=f"attempt{attempt}-headed-recovery",
+                            timeout_seconds=subprocess_timeout,
+                        )
+                        result = _load_success_result(recovery_dir)
+                        if result is None:
+                            if recovery_proc.returncode != 0:
+                                raise RuntimeError(
+                                    f"Headed recovery wrapper exited with code {recovery_proc.returncode}. "
+                                    f"Log snippet:\n{recovery_combined[-1000:]}"
+                                )
+                            raise FileNotFoundError(f"result.json was not generated in {recovery_dir}")
+                        result["request_dir"] = str(recovery_dir)
+                    else:
+                        if recovery_reason and not allow_headed_recovery:
+                            _write_json_atomic(
+                                task_dir / "auth-recovery.json",
+                                {
+                                    "schema": "technology_diagram.auth_recovery.v1",
+                                    "reason": recovery_reason,
+                                    "action": "deferred_headed_recovery_disabled",
+                                    "request_dir": str(request_dir),
+                                    "recorded_at": _utc_now(),
+                                },
+                            )
+                            raise RuntimeError(f"Wrapper requires auth recovery but headed retry is disabled: {recovery_reason}")
+                    if result is None:
+                        raise RuntimeError(f"Wrapper exited with code {proc.returncode}. Log snippet:\n{combined[-1000:]}")
                 else:
                     raise FileNotFoundError(f"result.json was not generated in {request_dir}")
-
-            result = json.loads(result_path.read_text(encoding="utf-8"))
-
-            if result.get("status") != "success":
-                raise RuntimeError(f"Wrapper failed to generate image: {result.get('error') or result.get('status')}")
 
             # Save final results
             (task_dir / "tech-diagram-result.json").write_text(
