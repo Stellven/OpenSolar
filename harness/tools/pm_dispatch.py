@@ -2370,6 +2370,118 @@ def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) ->
     return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
 
 
+def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> dict[str, Any]:
+    if normalize_role(str(record.get("requested_role") or "")) != "builder":
+        return {"ok": False, "marked": False, "reason": "not_builder_task"}
+    sprint_id = str(record.get("sprint_id") or "").strip()
+    node_id = str(record.get("node_id") or "").strip()
+    task_id = str(record.get("task_id") or "").strip()
+    if not sprint_id or not node_id or not task_id:
+        return {"ok": False, "marked": False, "reason": "missing_graph_identity"}
+    handoff_path = _node_handoff_path(sprint_id, node_id)
+    if not handoff_path.exists() or handoff_path.stat().st_size <= 0:
+        return {"ok": False, "marked": False, "reason": "missing_handoff", "handoff": str(handoff_path)}
+
+    graph_path = SPRINTS_DIR / f"{sprint_id}.task_graph.json"
+    if not graph_path.exists():
+        return {"ok": False, "marked": False, "reason": "graph_missing", "graph": str(graph_path)}
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"ok": False, "marked": False, "reason": f"graph_read_failed:{type(exc).__name__}", "graph": str(graph_path)}
+
+    nodes = graph.get("nodes") or []
+    if isinstance(nodes, dict):
+        iterable = nodes.items()
+    else:
+        iterable = [(str(node.get("id") or node.get("node_id") or ""), node) for node in nodes if isinstance(node, dict)]
+
+    target: dict[str, Any] | None = None
+    for candidate_id, node in iterable:
+        if str(candidate_id) == node_id:
+            target = node
+            break
+    if target is None:
+        return {"ok": False, "marked": False, "reason": "node_missing", "graph": str(graph_path), "node_id": node_id}
+    if str(target.get("status") or "") == "reviewing":
+        return {"ok": True, "marked": False, "reason": "already_reviewing", "graph": str(graph_path), "node_id": node_id}
+
+    node_results = graph.get("node_results") if isinstance(graph.get("node_results"), dict) else {}
+    result_entry = node_results.get(node_id) if isinstance(node_results.get(node_id), dict) else {}
+    dispatch_ids = {
+        str(target.get("dispatch_id") or ""),
+        str(target.get("pm_task_id") or ""),
+        str(result_entry.get("dispatch_id") or ""),
+        str(result_entry.get("pm_task_id") or ""),
+    }
+    if task_id not in dispatch_ids:
+        return {"ok": False, "marked": False, "reason": "dispatch_mismatch", "node_id": node_id}
+
+    now = _now()
+    previous = {
+        key: target.get(key)
+        for key in ("status", "assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id")
+        if target.get(key) is not None
+    }
+    target.setdefault("completion_history", []).append(
+        {
+            "ts": now,
+            "reason": "pm_builder_complete",
+            "task_id": task_id,
+            "previous_dispatch": previous,
+            "handoff": str(handoff_path),
+        }
+    )
+    target["status"] = "reviewing"
+    target["updated_at"] = now
+    target["handoff_path"] = str(handoff_path)
+    for key in ("assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id"):
+        target.pop(key, None)
+
+    graph.setdefault("node_results", {})
+    graph["node_results"].setdefault(node_id, {})
+    result_entry = graph["node_results"][node_id]
+    result_entry["status"] = "reviewing"
+    result_entry["updated_at"] = now
+    result_entry["handoff_path"] = str(handoff_path)
+    result_entry.setdefault("completion_history", []).append(
+        {"ts": now, "reason": "pm_builder_complete", "task_id": task_id}
+    )
+    for key in ("assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id"):
+        result_entry.pop(key, None)
+
+    graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    status_path = SPRINTS_DIR / f"{sprint_id}.status.json"
+    status_payload: dict[str, Any] = {}
+    if status_path.exists():
+        try:
+            loaded = json.loads(status_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                status_payload = loaded
+        except Exception:
+            status_payload = {}
+    status_payload.update(
+        {
+            "sprint_id": sprint_id,
+            "status": "reviewing",
+            "phase": "handoff_ready",
+            "handoff_to": "evaluator",
+            "handoff_node_id": node_id,
+            "updated_at": now,
+        }
+    )
+    status_path.write_text(json.dumps(status_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "ok": True,
+        "marked": True,
+        "graph": str(graph_path),
+        "status_path": str(status_path),
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+    }
+
+
 def cmd_drain_builder_ready(args: argparse.Namespace) -> int:
     max_items = max(0, int(getattr(args, "max_items", 0) or 0))
     dry_run = bool(getattr(args, "dry_run", False))
@@ -2636,6 +2748,12 @@ def cmd_complete(args: argparse.Namespace) -> int:
     record["status"] = "completed"
     record["completed_at"] = _now()
     record["closeout_status"] = closeout
+    graph_reviewing = _mark_graph_node_reviewing_on_builder_complete(record)
+    if graph_reviewing.get("marked"):
+        record["graph_reviewing"] = graph_reviewing
+        record.setdefault("reconcile_history", []).append(
+            {"ts": record["completed_at"], "action": "graph_reviewing", **graph_reviewing}
+        )
     write_pm_task_record(task_id, record)
     print(f"✅ 任务 {task_id} 已标记为 completed")
     return 0

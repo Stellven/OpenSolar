@@ -506,3 +506,72 @@ def test_cmd_fail_requeues_transient_operator_failure_graph_node(monkeypatch, tm
     assert node["dispatch_requeue_history"][0]["previous_dispatch"]["dispatch_id"] == task_id
     record = json.loads((inbox / f"{task_id}.json").read_text(encoding="utf-8"))
     assert record["graph_requeue"]["released"] is True
+
+
+def test_cmd_complete_marks_builder_graph_node_reviewing(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    task_id = "pm-sprint-review-B1-test"
+    graph_path = sprints / "sprint-review.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-review",
+                "nodes": [
+                    {
+                        "id": "B1",
+                        "status": "dispatched",
+                        "assigned_to": "mini-glm51-builder-1",
+                        "dispatch_id": task_id,
+                        "pm_task_id": task_id,
+                        "operator_id": "mini-glm51-builder-1",
+                    }
+                ],
+                "node_results": {
+                    "B1": {
+                        "status": "dispatched",
+                        "dispatch_id": task_id,
+                        "pm_task_id": task_id,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-review.status.json").write_text(
+        json.dumps({"sprint_id": "sprint-review", "status": "active", "phase": "planning_complete"}),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-review.B1-handoff.md").write_text("# Handoff\n", encoding="utf-8")
+    pm_dispatch.write_pm_task_record(
+        task_id,
+        {
+            "task_id": task_id,
+            "status": "submitted",
+            "sprint_id": "sprint-review",
+            "node_id": "B1",
+            "operator_id": "mini-glm51-builder-1",
+            "requested_role": "builder",
+        },
+    )
+
+    rc = pm_dispatch.cmd_complete(argparse.Namespace(task_id=task_id))
+
+    assert rc == 0
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert node["status"] == "reviewing"
+    assert "dispatch_id" not in node
+    assert node["handoff_path"].endswith("sprint-review.B1-handoff.md")
+    status = json.loads((sprints / "sprint-review.status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "reviewing"
+    assert status["phase"] == "handoff_ready"
+    assert status["handoff_to"] == "evaluator"
+    record = json.loads((inbox / f"{task_id}.json").read_text(encoding="utf-8"))
+    assert record["graph_reviewing"]["marked"] is True
