@@ -47,6 +47,23 @@ def _load_graph_dispatcher() -> Any:
     return module
 
 
+def _load_graph_scheduler() -> Any | None:
+    path = LIB_DIR / "graph_scheduler.py"
+    if not path.exists():
+        return None
+    if str(path.parent) not in sys.path:
+        sys.path.insert(0, str(path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("graph_drain_controller_scheduler", path)
+        if not spec or not spec.loader:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        return module
+    except Exception:
+        return None
+
+
 def _iter_graph_paths(max_graphs: int) -> list[Path]:
     if not SPRINTS_DIR.exists():
         return []
@@ -105,6 +122,9 @@ def _node_eval_needed(gnd: Any, graph: dict[str, Any], sid: str, node: dict[str,
 
 def _has_builder_ready_nodes(gnd: Any, graph: dict[str, Any]) -> bool:
     autopilot_ready = getattr(gnd, "autopilot_ready_decision", None)
+    if not callable(autopilot_ready):
+        scheduler_mod = _load_graph_scheduler()
+        autopilot_ready = getattr(scheduler_mod, "autopilot_ready_decision", None) if scheduler_mod is not None else None
     if callable(autopilot_ready):
         try:
             decision = autopilot_ready(graph, emit_shadow=False)

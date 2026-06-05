@@ -215,3 +215,43 @@ def test_graph_drain_uses_autopilot_ready_decision_for_builder_candidates(monkey
     assert payload["counters"]["builder_candidates"] == 0
     assert payload["counters"]["builder_attempts"] == 0
     assert payload["skipped"] == []
+
+
+def test_graph_drain_uses_scheduler_autopilot_when_dispatcher_lacks_it(monkeypatch, tmp_path):
+    controller = _load_controller()
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    sid = "sprint-test"
+    _write_graph(sprints, sid)
+
+    class FakeDispatcher:
+        @staticmethod
+        def load_graph(path):
+            return json.loads(Path(path).read_text(encoding="utf-8"))
+
+        @staticmethod
+        def _existing_node_handoff(sprint_id, node, graph):
+            return None
+
+        @staticmethod
+        def ready_nodes(graph):
+            return [node for node in graph["nodes"] if node["id"] == "B2"]
+
+        @staticmethod
+        def dispatch_ready(path, dry_run=False, ttl=900, max_parallel=None):
+            raise AssertionError("scheduler autopilot-empty graph should not dispatch builders")
+
+    class FakeScheduler:
+        @staticmethod
+        def autopilot_ready_decision(graph, emit_shadow=False):
+            return {"ready_nodes": []}
+
+    monkeypatch.setattr(controller, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(controller, "_load_graph_dispatcher", lambda: FakeDispatcher)
+    monkeypatch.setattr(controller, "_load_graph_scheduler", lambda: FakeScheduler)
+
+    payload = controller.run_graph_drain(apply=True, max_graphs=5, max_evals=0, max_builders=1)
+
+    assert payload["counters"]["builder_candidates"] == 0
+    assert payload["counters"]["builder_attempts"] == 0
+    assert payload["skipped"] == []
