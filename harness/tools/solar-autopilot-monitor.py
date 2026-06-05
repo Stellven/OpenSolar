@@ -134,12 +134,13 @@ try:
         parent_ready_check,
         validate_graph,
         blocked_external_prerequisites,
+        summarize_blocked_prerequisites,
         doctor_graph,
         node_status,
         sync_status_cache_from_graph,
     )
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
-    load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = doctor_graph = node_status = sync_status_cache_from_graph = None
+    load_graph = save_graph = enqueue_ready = parent_ready_check = validate_graph = blocked_external_prerequisites = summarize_blocked_prerequisites = doctor_graph = node_status = sync_status_cache_from_graph = None
 try:
     from prerequisite_resolver import iter_blocked
 except Exception:  # pragma: no cover - fallback for partially installed harnesses
@@ -2299,6 +2300,36 @@ def graph_status(sid: str) -> dict:
                 append_event(sid, "autopilot_graph_doctor_repaired", "warn", doctor)
         validation = validate_graph(graph) if validate_graph else {"ok": False, "errors": ["graph_scheduler_unavailable"]}
         parent = parent_ready_check(graph) if parent_ready_check else {"ready": False}
+        raw_blocked = blocked_external_prerequisites(graph) if blocked_external_prerequisites else []
+        blocked = (
+            summarize_blocked_prerequisites(raw_blocked)
+            if summarize_blocked_prerequisites
+            else raw_blocked
+        )
+        dispatch_ready = {}
+        ready_nodes: list[str] = []
+        dispatchable_nodes: list[str] = []
+        if graph_dispatch_ready is not None and not blocked:
+            try:
+                dispatch_ready = graph_dispatch_ready(str(path), dry_run=True, ttl=900)
+                enqueue = dispatch_ready.get("enqueue") if isinstance(dispatch_ready, dict) else {}
+                if not isinstance(enqueue, dict):
+                    enqueue = {}
+                assigned = enqueue.get("assigned") or []
+                enqueued = enqueue.get("enqueued") or enqueue.get("queued") or []
+                ready_nodes = [
+                    str(item.get("node") or item.get("node_id") or "")
+                    for item in assigned
+                    if isinstance(item, dict) and str(item.get("node") or item.get("node_id") or "")
+                ]
+                dispatchable_nodes = [
+                    str(item.get("node") or item.get("node_id") or "")
+                    for item in enqueued
+                    if isinstance(item, dict) and str(item.get("node") or item.get("node_id") or "")
+                ]
+            except Exception as exc:
+                dispatch_ready = {"ok": False, "error": str(exc)}
+        scheduler_state = "blocked" if blocked else ("ready" if ready_nodes or dispatchable_nodes else "idle")
         return {
             "exists": True,
             "path": str(path),
@@ -2307,6 +2338,11 @@ def graph_status(sid: str) -> dict:
             "doctor": doctor,
             "parent_ready": bool(parent.get("ready")),
             "parent": parent,
+            "scheduler_state": scheduler_state,
+            "blocked": blocked,
+            "ready_nodes": ready_nodes,
+            "dispatchable_nodes": dispatchable_nodes,
+            "graph_dispatch_ready": dispatch_ready,
         }
     except Exception as exc:
         return {"exists": True, "ready": False, "path": str(path), "valid": False, "error": str(exc)}
