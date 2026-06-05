@@ -4,7 +4,11 @@ from __future__ import annotations
 import argparse
 import importlib.util
 from pathlib import Path
+import signal
 import sqlite3
+import time
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +96,19 @@ def test_registry_query_indexes_created() -> None:
     assert "idx_validation_results_job_passed" in names
     assert "idx_documents_state_extract_updated" in names
     assert "idx_documents_source_path" in names
+
+
+def test_wall_timeout_interrupts_blocking_main_thread() -> None:
+    if not hasattr(signal, "SIGALRM"):
+        pytest.skip("SIGALRM unavailable on this platform")
+    mod = _load_module()
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        with mod.wall_timeout(0.05, "unit test call"):
+            time.sleep(2)
+
+    assert time.monotonic() - started < 1.0
 
 
 def test_registry_doc_id_prefers_duplicate_path_with_completed_extract() -> None:

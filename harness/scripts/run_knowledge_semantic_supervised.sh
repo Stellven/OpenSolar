@@ -14,9 +14,23 @@ LOG_DIR="${LOG_DIR:-/Users/lisihao/.solar/harness/run}"
 LOCK_DIR="${LOCK_DIR:-/Users/lisihao/.solar/harness/state/knowledge-semantic-supervised.lockdir}"
 
 mkdir -p "$LOG_DIR" "$(dirname "$LOCK_DIR")"
-if pgrep -f "knowledge-semantic-extract.py .*supervised-backfill" >/dev/null 2>&1; then
-  echo "[knowledge-semantic-supervised] another supervised-backfill process is already running; skip $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  exit 0
+ACTIVE_PIDS="$(pgrep -f "knowledge-semantic-extract.py .*supervised-backfill" || true)"
+if [[ -n "$ACTIVE_PIDS" ]]; then
+  STALE_SECONDS="${SUPERVISED_STALE_SECONDS:-$(( (${TIMEOUT_SEC:-240} * ${MAX_BATCHES:-6}) + 120 ))}"
+  for active_pid in $ACTIVE_PIDS; do
+    active_age="$(ps -o etimes= -p "$active_pid" 2>/dev/null | tr -d ' ' || true)"
+    if [[ "$active_age" =~ ^[0-9]+$ && "$active_age" -gt "$STALE_SECONDS" ]]; then
+      echo "[knowledge-semantic-supervised] stale supervised-backfill pid=$active_pid age=${active_age}s > ${STALE_SECONDS}s; terminating $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      kill -TERM "$active_pid" 2>/dev/null || true
+      sleep 2
+      if kill -0 "$active_pid" 2>/dev/null; then
+        kill -KILL "$active_pid" 2>/dev/null || true
+      fi
+    else
+      echo "[knowledge-semantic-supervised] another supervised-backfill process is already running pid=$active_pid age=${active_age:-N/A}s; skip $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      exit 0
+    fi
+  done
 fi
 if [[ -d "$LOCK_DIR" ]]; then
   lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"

@@ -20,9 +20,11 @@ import json
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -60,6 +62,35 @@ OBSIDIAN_TOP_LEVEL_DIRS = {
     "timelines",
     "contradictions",
 }
+
+
+@contextlib.contextmanager
+def wall_timeout(seconds: int | float, label: str):
+    """Bound blocking socket reads with a real wall-clock deadline.
+
+    urllib's socket timeout is not a total request timeout. A half-open local
+    model server can accept the connection and then never complete the body,
+    leaving the supervised worker lock held forever. SIGALRM is only installed
+    in the main thread; other callers keep the normal socket timeout behavior.
+    """
+    timeout = float(seconds or 0)
+    if timeout <= 0 or threading.current_thread() is not threading.main_thread() or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def _raise_timeout(signum, frame):
+        raise TimeoutError(f"{label} timed out after {timeout:.0f}s")
+
+    old_handler = signal.getsignal(signal.SIGALRM)
+    old_timer = signal.setitimer(signal.ITIMER_REAL, timeout)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
+        if old_timer[0] > 0:
+            signal.setitimer(signal.ITIMER_REAL, old_timer[0], old_timer[1])
 
 
 def now_iso() -> str:
@@ -1132,8 +1163,9 @@ def call_thunderomlx(messages: list[dict[str, str]], args: argparse.Namespace) -
         method="POST",
     )
     started = time.monotonic()
-    with urllib.request.urlopen(req, timeout=args.timeout_sec) as resp:
-        response = json.loads(resp.read().decode("utf-8", errors="replace"))
+    with wall_timeout(args.timeout_sec, "ThunderOMLX chat completion"):
+        with urllib.request.urlopen(req, timeout=args.timeout_sec) as resp:
+            response = json.loads(resp.read().decode("utf-8", errors="replace"))
     latency_ms = int((time.monotonic() - started) * 1000)
     parts: list[str] = []
     if "choices" in response:
