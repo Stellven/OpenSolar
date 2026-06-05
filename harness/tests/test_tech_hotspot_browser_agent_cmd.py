@@ -479,7 +479,8 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
             paper_id TEXT NOT NULL,
             title TEXT NOT NULL,
             hf_url TEXT NOT NULL,
-            rank INTEGER NOT NULL DEFAULT 0
+            rank INTEGER NOT NULL DEFAULT 0,
+            topic_tags TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE hf_paper_period_snapshots (
             paper_id TEXT NOT NULL,
@@ -491,21 +492,21 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
         """
     )
     conn.executemany(
-        "INSERT INTO hf_daily_papers (paper_date, paper_id, title, hf_url, rank) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO hf_daily_papers (paper_date, paper_id, title, hf_url, rank, topic_tags) VALUES (?, ?, ?, ?, ?, ?)",
         [
-            ("2026-06-01", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 1),
-            ("2026-06-01", "p4", "Top Two Paper", "https://huggingface.co/papers/p4", 2),
-            ("2026-06-01", "p5", "Top Three Paper", "https://huggingface.co/papers/p5", 3),
-            ("2026-06-01", "p2", "Vision Reasoning Paper", "https://huggingface.co/papers/p2", 4),
-            ("2026-06-01", "p6", "Top Five Paper", "https://huggingface.co/papers/p6", 5),
-            ("2026-06-01", "p7", "Top Six Paper", "https://huggingface.co/papers/p7", 6),
-            ("2026-06-02", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 2),
-            ("2026-06-03", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 3),
-            ("2026-06-03", "p3", "New Breakout Paper", "https://huggingface.co/papers/p3", 2),
-            ("2026-05-15", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 1),
-            ("2026-05-20", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 2),
-            ("2026-05-25", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 3),
-            ("2026-05-30", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 4),
+            ("2026-06-01", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 1, "agent,inference_compute"),
+            ("2026-06-01", "p4", "Top Two Paper", "https://huggingface.co/papers/p4", 2, "paper_research"),
+            ("2026-06-01", "p5", "Top Three Paper", "https://huggingface.co/papers/p5", 3, "multimodal"),
+            ("2026-06-01", "p2", "Vision Reasoning Paper", "https://huggingface.co/papers/p2", 4, "multimodal,reasoning"),
+            ("2026-06-01", "p6", "Top Five Paper", "https://huggingface.co/papers/p6", 5, "memory_context"),
+            ("2026-06-01", "p7", "Top Six Paper", "https://huggingface.co/papers/p7", 6, "paper_research"),
+            ("2026-06-02", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 2, "agent"),
+            ("2026-06-03", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 3, "agent"),
+            ("2026-06-03", "p3", "New Breakout Paper", "https://huggingface.co/papers/p3", 2, "research_automation"),
+            ("2026-05-15", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 1, "paper_research"),
+            ("2026-05-20", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 2, "paper_research"),
+            ("2026-05-25", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 3, "paper_research"),
+            ("2026-05-30", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 4, "paper_research"),
         ],
     )
     conn.executemany(
@@ -536,6 +537,7 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     assert len(overview["daily_heat"]) == 3
     assert overview["daily_heat"][0]["top_title"] == "Agent Runtime Paper"
     assert [item["paper_id"] for item in overview["daily_heat"][0]["top_papers"]] == ["p1", "p4", "p5", "p2", "p6"]
+    assert overview["daily_heat"][0]["top_papers"][0]["topic_tags"] == ["agent", "inference_compute"]
     assert overview["weekly_hotspots"][0]["paper_id"] == "p1"
     assert overview["weekly_hotspots"][0]["days_seen"] == 3
     assert overview["baseline_days"] == 90
@@ -547,6 +549,8 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     html = ns["_hf_render_heat_overview_html"](overview)
     assert "每日热度基线" in markdown
     assert "当日 Top 5" in markdown
+    assert "标签" in markdown
+    assert "agent, inference_compute" in markdown
     assert "Top Six Paper" not in markdown
     assert "本周持续热点" in markdown
     assert "近 90 天基线热点" in markdown
@@ -555,6 +559,9 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     assert "hf-heat-daily" in html
     assert 'class="hf-daily-table"' in html
     assert 'class="hf-top5-col"' in html
+    assert 'class="hf-tags-col"' in html
+    assert "hf-tag-list" in html
+    assert "inference_compute" in html
     assert "hf-heat-baseline" in html
     assert "hf-heat-secondary" in html
     assert "hf-top-list" in html

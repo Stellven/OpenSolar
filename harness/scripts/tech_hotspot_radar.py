@@ -9122,7 +9122,8 @@ def hf_report_heat_overview(
                    paper_id,
                    title,
                    hf_url,
-                   rank
+                   rank,
+                   topic_tags
             FROM hf_daily_papers
             WHERE paper_date BETWEEN ? AND ?
               AND rank BETWEEN 1 AND 5
@@ -9236,6 +9237,7 @@ def hf_report_heat_overview(
             "title": item.get("title"),
             "hf_url": item.get("hf_url"),
             "rank": item.get("rank"),
+            "topic_tags": [tag.strip() for tag in str(item.get("topic_tags") or "").split(",") if tag.strip()],
         })
     for row in daily_rows:
         day = str(row.get("paper_date") or "")
@@ -9729,6 +9731,19 @@ def _hf_daily_top_papers_markdown(row: dict[str, Any]) -> str:
     return _hf_heat_title_link(row, title_key="top_title", url_key="top_url")
 
 
+def _hf_daily_top_tags_markdown(row: dict[str, Any]) -> str:
+    top_papers = row.get("top_papers") if isinstance(row.get("top_papers"), list) else []
+    items = []
+    for item in top_papers[:5]:
+        if not isinstance(item, dict):
+            continue
+        rank = int(item.get("rank") or 0)
+        prefix = f"{rank}. " if rank else ""
+        tags = _hf_list(item.get("topic_tags"))[:4]
+        items.append(prefix + (", ".join(tags) if tags else "paper_research"))
+    return "<br>".join(items) if items else "paper_research"
+
+
 def _hf_daily_top_papers_html(row: dict[str, Any]) -> str:
     top_papers = row.get("top_papers") if isinstance(row.get("top_papers"), list) else []
     items = []
@@ -9754,6 +9769,18 @@ def _hf_daily_top_papers_html(row: dict[str, Any]) -> str:
     )
 
 
+def _hf_daily_top_tags_html(row: dict[str, Any]) -> str:
+    top_papers = row.get("top_papers") if isinstance(row.get("top_papers"), list) else []
+    items = []
+    for item in top_papers[:5]:
+        if not isinstance(item, dict):
+            continue
+        tags = _hf_list(item.get("topic_tags"))[:4] or ["paper_research"]
+        badges = "".join(f'<span class="hf-tag">{html.escape(tag)}</span>' for tag in tags)
+        items.append(f"<li>{badges}</li>")
+    return f'<ol class="hf-tag-list">{"".join(items)}</ol>' if items else '<span class="hf-tag">paper_research</span>'
+
+
 def _hf_render_heat_overview_markdown(heat_overview: dict[str, Any] | None) -> list[str]:
     overview = heat_overview or {}
     if not overview.get("ok"):
@@ -9773,17 +9800,17 @@ def _hf_render_heat_overview_markdown(heat_overview: dict[str, Any] | None) -> l
         "",
         "### 每日热度基线",
         "",
-        "| 日期 | 日榜论文数 | 当日 Top 5 |",
-        "| --- | ---: | --- |",
+        "| 日期 | 日榜论文数 | 当日 Top 5 | 标签 |",
+        "| --- | ---: | --- | --- |",
     ])
     for row in overview.get("daily_heat") or []:
         if not isinstance(row, dict):
             continue
         lines.append(
-            f"| {_hf_text(row.get('paper_date'))} | {int(row.get('paper_count') or 0)} | {_hf_daily_top_papers_markdown(row)} |"
+            f"| {_hf_text(row.get('paper_date'))} | {int(row.get('paper_count') or 0)} | {_hf_daily_top_papers_markdown(row)} | {_hf_daily_top_tags_markdown(row)} |"
         )
     if not (overview.get("daily_heat") or []):
-        lines.append("| N/A | 0 | N/A |")
+        lines.append("| N/A | 0 | N/A | N/A |")
     baseline_days = int(overview.get("baseline_days") or 90)
     lines.extend([
         "",
@@ -9891,8 +9918,9 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
             html.escape(_hf_text(row.get("paper_date"))),
             str(int(row.get("paper_count") or 0)),
             _hf_daily_top_papers_html(row),
+            _hf_daily_top_tags_html(row),
         ],
-    ) or "<tr><td>N/A</td><td>0</td><td>N/A</td></tr>"
+    ) or "<tr><td>N/A</td><td>0</td><td>N/A</td><td>N/A</td></tr>"
     week_rows = _hf_html_rows(
         (overview.get("weekly_hotspots") or [])[:8],
         lambda row: [
@@ -9957,8 +9985,9 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
               <col class="hf-date-col">
               <col class="hf-count-col">
               <col class="hf-top5-col">
+              <col class="hf-tags-col">
             </colgroup>
-            <thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th></tr></thead>
+            <thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th><th>标签</th></tr></thead>
             <tbody>{daily_rows}</tbody>
           </table>
         </div>
@@ -10744,11 +10773,12 @@ def _hf_render_grouped_report_html(
     .hf-heat-baseline {{ margin-top: 18px; overflow-x: auto; }}
     .hf-heat-secondary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 18px; }}
     .hf-heat-block {{ width: 100%; min-width: 0; }}
-    .hf-heat-daily table {{ width: 100%; min-width: 980px; table-layout: fixed; }}
+    .hf-heat-daily table {{ width: 100%; min-width: 1180px; table-layout: fixed; }}
     .hf-daily-table .hf-date-col {{ width: 132px; }}
     .hf-daily-table .hf-count-col {{ width: 96px; }}
     .hf-daily-table .hf-top5-col {{ width: auto; }}
-    .hf-daily-table th:nth-child(3), .hf-daily-table td:nth-child(3) {{ padding-left: 18px; }}
+    .hf-daily-table .hf-tags-col {{ width: 280px; }}
+    .hf-daily-table th:nth-child(3), .hf-daily-table td:nth-child(3), .hf-daily-table th:nth-child(4), .hf-daily-table td:nth-child(4) {{ padding-left: 18px; }}
     .hf-heat-baseline table {{ min-width: 720px; }}
     h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
     h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
@@ -10758,6 +10788,9 @@ def _hf_render_grouped_report_html(
     a {{ color: var(--accent); text-decoration: none; }}
     .hf-top-list {{ margin: 0; padding-left: 18px; }}
     .hf-top-list li + li {{ margin-top: 6px; }}
+    .hf-tag-list {{ margin: 0; padding-left: 18px; }}
+    .hf-tag-list li + li {{ margin-top: 8px; }}
+    .hf-tag {{ display: inline-block; margin: 0 6px 5px 0; padding: 3px 8px; border-radius: 999px; background: #f0e3d3; color: #6f3e1f; font-size: 12px; font-weight: 700; white-space: nowrap; }}
     ul {{ padding-left: 20px; }}
   </style>
 </head>
@@ -11152,11 +11185,12 @@ def _hf_render_public_report_html(
       margin-top: 18px;
     }}
     .hf-heat-block {{ width: 100%; min-width: 0; }}
-    .hf-heat-daily table {{ width: 100%; min-width: 980px; table-layout: fixed; }}
+    .hf-heat-daily table {{ width: 100%; min-width: 1180px; table-layout: fixed; }}
     .hf-daily-table .hf-date-col {{ width: 132px; }}
     .hf-daily-table .hf-count-col {{ width: 96px; }}
     .hf-daily-table .hf-top5-col {{ width: auto; }}
-    .hf-daily-table th:nth-child(3), .hf-daily-table td:nth-child(3) {{ padding-left: 18px; }}
+    .hf-daily-table .hf-tags-col {{ width: 280px; }}
+    .hf-daily-table th:nth-child(3), .hf-daily-table td:nth-child(3), .hf-daily-table th:nth-child(4), .hf-daily-table td:nth-child(4) {{ padding-left: 18px; }}
     .hf-heat-baseline table {{ min-width: 720px; }}
     table {{ width: 100%; border-collapse: collapse; }}
     th, td {{ padding: 12px 0; text-align: left; border-bottom: 1px solid var(--line); }}
@@ -11169,6 +11203,9 @@ def _hf_render_public_report_html(
     a {{ color: var(--accent); text-decoration: none; }}
     .hf-top-list {{ margin: 0; padding-left: 18px; }}
     .hf-top-list li + li {{ margin-top: 6px; }}
+    .hf-tag-list {{ margin: 0; padding-left: 18px; }}
+    .hf-tag-list li + li {{ margin-top: 8px; }}
+    .hf-tag {{ display: inline-block; margin: 0 6px 5px 0; padding: 3px 8px; border-radius: 999px; background: #f0e3d3; color: #6f3e1f; font-size: 12px; font-weight: 700; white-space: nowrap; }}
     @media (max-width: 820px) {{
       .hf-panels {{ grid-template-columns: 1fr; }}
       .hf-card-head {{ grid-template-columns: 1fr; }}
