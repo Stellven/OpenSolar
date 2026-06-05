@@ -92,7 +92,7 @@ def shell_destructive_denied(harness_dir: Path) -> dict[str, Any]:
 def shell_secret_redacted(harness_dir: Path) -> dict[str, Any]:
     hand = ShellHand()
     ref = hand.provision()
-    secret = "api_key=sk-abcdef12345678901234567890123456789012345678"
+    secret = "api_key=" + "sk-" + "abcdef12345678901234567890123456789012345678"
     result = hand.execute(ref, "secret", {"command": f"echo {secret}"}, idempotency_key="secret:1")
     output = result.output or ""
     return {

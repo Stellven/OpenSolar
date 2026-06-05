@@ -35,6 +35,11 @@ harness/config/remote-hosts.local.json
 harness/config/*.lock
 model-config.sh
 model-config.sh.*
+settings.json
+debug/
+ide/*.lock
+skills/**/data/browser_state/
+skills/**/browser_state/
 
 # 备份文件
 *.backup
