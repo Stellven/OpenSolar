@@ -41,15 +41,37 @@ def test_planner_uses_conference_insight_mode_for_conference_briefs():
     first_section = plan["report_ast"]["sections"][0]
     first_question = plan["questions"][0]
 
-    assert first_chapter["title"] == "问题定义与研究边界"
+    assert first_chapter["title"] == "会议信号与中心论点"
     assert "accepted papers" in first_chapter["objective"]
     assert "avoid generic methodology talk" in first_chapter["objective"]
     assert "Professor-Grade Survey" not in plan["report_ast"]["title"]
-    assert "会议主议题与问题迁移" in [chapter["title"] for chapter in plan["report_ast"]["chapters"]]
+    assert "议题迁移与关键变化" in [chapter["title"] for chapter in plan["report_ast"]["chapters"]]
     assert "会议在讨论什么问题" in first_section["title"]
     assert "conference tracks" in first_section["research_question"]
     assert any(section["title"].endswith("对 Solar 的启示") for section in plan["report_ast"]["sections"])
     assert "会议和论文信号" in first_question["text"]
+
+
+def test_planner_uses_generic_insight_shape_for_deepdive_hint():
+    plan = create_survey_plan(
+        "## 扩展研究 brief\n\n为什么 Agent runtime 会成为基础设施？",
+        target_chars=50000,
+        planner_mode_hint="insight",
+    )
+
+    assert plan["planner_mode"] == "insight"
+    assert plan["report_ast"]["title"].startswith("DeepDive 洞察报告")
+    chapter_titles = [chapter["title"] for chapter in plan["report_ast"]["chapters"]]
+    assert chapter_titles[:4] == [
+        "核心判断与中心论点",
+        "信号地图与证据强度",
+        "关键变化、分歧与机会",
+        "技术、产品与生态影响",
+    ]
+    assert "历史脉络与技术演进" not in chapter_titles
+    first_section = plan["report_ast"]["sections"][0]
+    assert "本节判断" in first_section["title"]
+    assert "中心论点" in first_section["research_question"]
 
 
 def test_planner_keeps_general_mode_for_non_conference_briefs():
@@ -91,4 +113,4 @@ def test_survey_plan_cli_prepares_deepdive_entry_before_plan(tmp_path):
     assert (tmp_path / "deepdive_requirement_contract.json").exists()
     assert (tmp_path / "deepdive_traceability.json").exists()
     ast = json.loads((tmp_path / "survey_report_ast.json").read_text())
-    assert "扩展研究 brief" in ast["title"]
+    assert ast["title"].startswith("DeepDive 洞察报告")

@@ -415,7 +415,9 @@ def compile_deepdive_brief(
 
     lowered = normalized.lower()
     insight_mode = (
-        "insight" in str(options.profile or "").lower()
+        str(options.profile or "").lower() in EXPLICIT_DEEPDIVE_PROFILES
+        or "insight" in str(options.profile or "").lower()
+        or str(options.source_channel or "").lower() in EXPLICIT_DEEPDIVE_PROFILES
         or "insight" in lowered
         or "洞察" in normalized
         or ("cais" in lowered and "solar" in lowered)
