@@ -2810,19 +2810,20 @@ h1{{margin:8px 0 8px;font-size:42px;line-height:1.08;color:var(--green);}}
 .month>summary{{font-size:16px;background:#fbf7ef;}}
 .date-block{{padding:0 18px 18px;}}
 .date-block h4{{margin:16px 0 10px;color:#5c674f;font-size:15px;}}
-.video-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;}}
-.video-card{{position:relative;display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;border:1px solid #eee1ce;border-radius:22px;background:#fff;padding:12px 12px 12px 42px;box-shadow:0 10px 26px rgba(49,42,31,.05);}}
+.video-grid{{display:grid;grid-template-columns:1fr;gap:14px;}}
+.video-card{{position:relative;display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;border:1px solid #eee1ce;border-radius:22px;background:#fff;padding:14px 18px 16px 46px;box-shadow:0 10px 26px rgba(49,42,31,.05);align-items:start;}}
 .check{{position:absolute;left:13px;top:13px;}}
 .check input{{width:18px;height:18px;accent-color:var(--green);}}
-.thumb{{width:150px;aspect-ratio:16/9;object-fit:cover;border-radius:16px;border:1px solid #eadfcd;background:#eee;}}
+.thumb{{width:220px;aspect-ratio:16/9;object-fit:cover;border-radius:16px;border:1px solid #eadfcd;background:#eee;}}
 .video-meta{{font-size:12px;color:var(--gold);font-weight:800;margin-bottom:4px;}}
 .video-body h3{{margin:0 0 7px;font-size:17px;line-height:1.32;color:var(--green);}}
 .video-body h3 a{{color:inherit;text-decoration:none;}}
-.video-body p{{margin:8px 0 0;color:#4f5b50;line-height:1.78;font-size:15px;}}
+.video-body{{min-width:0;display:grid;align-content:start;}}
+.video-body p{{margin:10px 0 0;color:#4f5b50;line-height:1.8;font-size:15px;max-width:none;}}
 .tag{{display:inline-block;margin:0 6px 6px 0;padding:4px 9px;border-radius:999px;background:#eaf2e5;color:#275545;font-size:12px;font-weight:800;}}
 .tag.muted{{background:#f4efe5;color:#887b68;}}
 .empty{{padding:28px;border:1px dashed var(--line);border-radius:22px;background:#fffdf8;color:var(--muted);}}
-@media(max-width:760px){{h1{{font-size:32px}}.video-grid{{grid-template-columns:1fr}}.video-card{{grid-template-columns:1fr;padding-left:42px}}.thumb{{width:100%}}}}
+@media(max-width:900px){{h1{{font-size:32px}}.video-card{{grid-template-columns:1fr;padding-left:42px}}.thumb{{width:100%;max-width:520px}}}}
 </style></head>
 <body><div class="wrap">
   <section class="hero">
