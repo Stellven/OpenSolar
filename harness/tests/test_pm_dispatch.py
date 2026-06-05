@@ -403,6 +403,115 @@ def test_cmd_submit_reads_task_graph_capsule_metadata(monkeypatch):
         assert envelope["task_type"] == "implementation"
 
 
+def test_cmd_submit_graph_eval_uses_verification_capsule(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setenv("SOLAR_PM_DISPATCH_ALLOW_DIRECT", "1")
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", tmp_path / "run" / "pm-inbox")
+    monkeypatch.setattr(pm_dispatch, "OPERATOR_INBOX_DIR", tmp_path / "run" / "operator-inbox")
+    monkeypatch.setattr(pm_dispatch, "OPERATOR_STATUS_DIR", tmp_path / "run" / "operator-status")
+    monkeypatch.setattr(pm_dispatch, "PERSONAS_DIR", tmp_path / "personas")
+    (tmp_path / "personas").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "personas" / "evaluator.md").write_text("# Evaluator\n", encoding="utf-8")
+    (tmp_path / "sprints").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sprints" / "sprint-graph-eval.task_graph.json").write_text(
+        json.dumps(
+            {
+                "nodes": [
+                    {
+                        "id": "S1",
+                        "goal": "Implementation node now needs graph eval.",
+                        "logical_operator": "ImplementationWorker",
+                        "capability_native": True,
+                        "capability_capsule_id": "cap.requirement-compiler-implementation",
+                        "dispatch_task_type": "implementation",
+                        "capsule_plan": {
+                            "capability_native": True,
+                            "capability_capsule_id": "cap.requirement-compiler-implementation",
+                            "dispatch_task_type": "implementation",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        pm_dispatch,
+        "load_registry",
+        lambda: {
+            "version": 1,
+            "operators": {
+                "gpt55-evaluator": {
+                    "enabled": True,
+                    "available": True,
+                    "roles": ["evaluator"],
+                    "launch_cmd_kind": "command",
+                    "task_classes": ["review", "verification", "graph_eval"],
+                    "profile": "evaluator",
+                    "preferred_for": ["evaluator"],
+                    "model": "gpt-5.5",
+                    "persona": "evaluator",
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(pm_dispatch, "is_dispatchable", lambda op: (True, ""))
+
+    sys.path.insert(0, str(ROOT / "lib"))
+    import capability_capsules as caps
+
+    resolved_requests: list[dict[str, object]] = []
+
+    def _resolve(task, operator_id=None, registry_path=None):
+        resolved_requests.append(dict(task))
+        return {
+            "capability_capsule_id": task["capability_capsule_id"],
+            "operator_constraints": {
+                "preferred": ["gpt55-evaluator"],
+                "forbidden": [],
+                "default_operator_profile": "gpt55-evaluator",
+            },
+        }
+
+    monkeypatch.setattr(caps, "resolve_capability_capsule_for_task", _resolve)
+    captured: dict[str, object] = {}
+    fake_operator_runtime = types.ModuleType("operator_runtime")
+
+    def _submit(envelope):
+        captured["envelope"] = dict(envelope)
+        return {
+            "lease_id": "lease-graph-eval",
+            "inbox_path": str(tmp_path / "run" / "operator-inbox" / "gpt55-evaluator" / "pm.json"),
+        }
+
+    fake_operator_runtime.submit = _submit  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "operator_runtime", fake_operator_runtime)
+
+    args = argparse.Namespace(
+        role="evaluator",
+        objective="Evaluate S1 handoff.",
+        operator="",
+        sprint="sprint-graph-eval",
+        node="S1",
+        task_type="graph_eval",
+        context="",
+        dry_run=False,
+    )
+    rc = pm_dispatch.cmd_submit(args)
+
+    assert rc == 0
+    assert resolved_requests[0]["capability_capsule_id"] == "cap.requirement-compiler-verification"
+    assert resolved_requests[0]["task_type"] == "graph_eval"
+    envelope = captured["envelope"]
+    assert envelope["capability_capsule_id"] == "cap.requirement-compiler-verification"
+    assert envelope["capsule_plan"]["capability_capsule_id"] == "cap.requirement-compiler-verification"
+    assert envelope["capsule_plan"]["dispatch_task_type"] == "graph_eval"
+    assert envelope["logical_operator"] == "Verifier"
+    assert envelope["task_type"] == "graph_eval"
+
+
 def test_cmd_compile_request_rejects_invalid_compiled_package(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     monkeypatch.setenv("SOLAR_PM_DISPATCH_ALLOW_DIRECT", "1")

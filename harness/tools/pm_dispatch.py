@@ -1958,6 +1958,21 @@ def cmd_submit(args: argparse.Namespace) -> int:
     context = str(args.context or "")
     task_graph_node = load_task_graph_node(sprint_id, node_id)
     capsule_submit = _capsule_submit_metadata(task_graph_node)
+    if normalize_role(role) == "evaluator" and str(task_type or "").strip().lower() == "graph_eval":
+        capsule_submit = {
+            **capsule_submit,
+            "capability_native": True,
+            "capability_capsule_id": "cap.requirement-compiler-verification",
+            "dispatch_task_type": "graph_eval",
+            "logical_operator": "Verifier",
+            "capsule_plan": {
+                **dict(capsule_submit.get("capsule_plan") or {}),
+                "capability_native": True,
+                "capability_capsule_id": "cap.requirement-compiler-verification",
+                "dispatch_task_type": "graph_eval",
+                "logical_operator": "Verifier",
+            },
+        }
     logical_operator = str(capsule_submit.get("logical_operator") or (task_graph_node or {}).get("logical_operator") or "")
     if not task_type:
         task_type = str(capsule_submit.get("dispatch_task_type") or (task_graph_node or {}).get("type") or "")
