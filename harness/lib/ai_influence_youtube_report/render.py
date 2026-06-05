@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
 from typing import Any
 
 from .source_mapping import render_source_mapping_html
@@ -32,12 +33,35 @@ def render_platform_svg(title: str = "AI Influence YouTube Report Flow") -> str:
 
 def render_report_html(markdown: str, evidence_pack: dict[str, Any], report_meta: dict[str, Any]) -> str:
     source_cards = "\n".join(render_source_mapping_html(entry) for entry in evidence_pack.get("entries", []))
+    figures_html = []
+    for figure in report_meta.get("figures") or []:
+        image_path = str(figure.get("image_path") or "").strip()
+        if not image_path:
+            continue
+        try:
+            image_uri = Path(image_path).expanduser().resolve().as_uri()
+        except Exception:
+            image_uri = escape(image_path)
+        title = escape(str(figure.get("title") or figure.get("figure_id") or "Figure"))
+        caption = escape(str(figure.get("caption") or "").strip())
+        figures_html.append(
+            "\n".join(
+                [
+                    '<figure class="report-figure">',
+                    f'<img src="{image_uri}" alt="{title}" style="max-width:100%;border-radius:12px;border:1px solid #e2e8f0;" />',
+                    f"<figcaption>{caption or title}</figcaption>",
+                    "</figure>",
+                ]
+            )
+        )
+    figures_block = f"<section class=\"figures\">{''.join(figures_html)}</section>" if figures_html else ""
     return f"""<!doctype html>
 <html lang="zh">
 <head><meta charset="utf-8"><title>{escape(str(report_meta.get('title') or 'AI Influence Report'))}</title></head>
 <body>
 {render_platform_svg(str(report_meta.get('title') or 'AI Influence Report'))}
 <main>{escape(markdown)}</main>
+{figures_block}
 <section class="sources">{source_cards}</section>
 </body>
 </html>"""

@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from ai_influence_youtube_report.archive import archive_writer_commit  # noqa: E402
 from ai_influence_youtube_report.browser_agent import BrowserAgentProvider  # noqa: E402
 from ai_influence_youtube_report.evidence_map import build_evidence_map  # noqa: E402
+from ai_influence_youtube_report.figures import build_figure_specs  # noqa: E402
 from ai_influence_youtube_report.render import render_report_html  # noqa: E402
 from ai_influence_youtube_report.runtime import generate_browser_agent_report_bundle  # noqa: E402
 from ai_influence_youtube_report.validator import validator_run  # noqa: E402
@@ -38,6 +39,51 @@ def test_runtime_minimal_report_bundle_passes_and_archives(tmp_path: Path) -> No
 
     assert verdict["overall"] == "PASS"
     assert manifest["schema_version"] == "archive_manifest.v1"
+
+
+def test_build_figure_specs_selects_grounded_report_and_chapter_figures() -> None:
+    evidence = build_evidence_map([
+        {
+            "evidence_ref": "E001",
+            "channel": "AI Engineer",
+            "title": "Agent Infra Stack",
+            "published_at": "2026-05-25T00:00:00Z",
+            "transcript_grade": "T1",
+            "citation_span": "agent stack and workflow pipeline",
+            "group_type": "conference",
+        }
+    ])
+    specs = build_figure_specs(
+        {
+            "trends": [
+                {
+                    "title": "Agent Platforms",
+                    "chapters": [
+                        {
+                            "chapter_id": "chapter-1",
+                            "title": "平台化趋势",
+                            "subsections": [{"title": "技术栈分层"}],
+                        }
+                    ],
+                }
+            ]
+        },
+        [
+            {
+                "chapter_id": "chapter-1",
+                "title": "平台化趋势",
+                "trend_title": "Agent Platforms",
+                "evidence_refs": ["E001"],
+                "text": "讨论 agent stack, workflow pipeline 与 infra layer。",
+            }
+        ],
+        evidence,
+        report_title="AI Influence 平台化报告",
+    )
+
+    assert specs
+    assert specs[0].figure_type == "architecture_overview"
+    assert all(spec.evidence_refs for spec in specs)
 
 
 class _FakeBrowserProvider(BrowserAgentProvider):
@@ -89,6 +135,19 @@ class _FakeBrowserProvider(BrowserAgentProvider):
         }
 
 
+def _fake_figure_runner(request: dict, task_dir: Path) -> dict:
+    image_path = task_dir / "generated_diagram.png"
+    image_path.write_bytes(b"fake-png")
+    return {
+        "status": "success",
+        "image_path": str(image_path),
+        "request_dir": str(task_dir / "tech-diagram-request"),
+        "url": "https://chatgpt.com/c/figure-1",
+        "browser_session_id": "figure-session-1",
+        "original_image_ok": True,
+    }
+
+
 def test_generate_browser_agent_report_bundle_emits_runtime_artifacts(tmp_path: Path) -> None:
     result = generate_browser_agent_report_bundle(
         [
@@ -109,6 +168,7 @@ def test_generate_browser_agent_report_bundle_emits_runtime_artifacts(tmp_path: 
         report_title="AI Influence 平台化报告",
         provider=_FakeBrowserProvider(),
         requested_model="chatgpt-5.5-thinking-high",
+        figure_operator_runner=_fake_figure_runner,
     )
 
     assert result["ok"] is True
@@ -117,7 +177,15 @@ def test_generate_browser_agent_report_bundle_emits_runtime_artifacts(tmp_path: 
     assert (runtime_dir / "report.md").exists()
     assert (runtime_dir / "report.html").exists()
     assert (runtime_dir / "plan.json").exists()
+    assert (runtime_dir / "figure_manifest.json").exists()
     assert (runtime_dir / "archive" / "archive_manifest.json").exists()
+    assert (runtime_dir / "archive" / "figures" / "figure-manifest.json").exists()
     report_md = (runtime_dir / "report.md").read_text(encoding="utf-8")
     assert "中心判断：Agent 平台化" in report_md
     assert "## 平台化趋势" in report_md
+    assert "关键图示" in report_md
+    figure_manifest = json.loads((runtime_dir / "figure_manifest.json").read_text(encoding="utf-8"))
+    assert figure_manifest["painted_count"] >= 1
+    assert result["painted_figure_count"] >= 1
+    report_html = (runtime_dir / "report.html").read_text(encoding="utf-8")
+    assert "<img src=" in report_html

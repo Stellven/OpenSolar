@@ -35,6 +35,25 @@ def archive_writer_commit(run_record: dict[str, Any], report_bundle: dict[str, A
             else:
                 path.write_text(str(value), encoding="utf-8")
             artifacts.append({"type": filename.rsplit(".", 1)[-1], "path": str(archive_dir / filename)})
+        figure_manifest = report_bundle.get("figure_manifest")
+        if isinstance(figure_manifest, dict) and figure_manifest:
+            figures_dir = tmp_dir / "figures"
+            figures_dir.mkdir(parents=True, exist_ok=True)
+            (figures_dir / "figure-manifest.json").write_text(
+                json.dumps(figure_manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            artifacts.append({"type": "json", "path": str(archive_dir / "figures" / "figure-manifest.json")})
+            for figure in figure_manifest.get("figures") or []:
+                image_path = str(figure.get("image_path") or "").strip()
+                if not image_path:
+                    continue
+                src = Path(image_path).expanduser()
+                if not src.exists() or not src.is_file():
+                    continue
+                dst = figures_dir / src.name
+                shutil.copy2(src, dst)
+                artifacts.append({"type": src.suffix.lstrip(".") or "bin", "path": str(archive_dir / "figures" / src.name)})
         manifest = {
             "schema_version": "archive_manifest.v1",
             "archive_dir": str(archive_dir),

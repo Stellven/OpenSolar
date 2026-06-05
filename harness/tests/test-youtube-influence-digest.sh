@@ -28,6 +28,8 @@ output:
     project_name: 杂项
     operator_script: "$TMPDIR/fake_chatgpt_report_operator.py"
     python_executable: "$(command -v python3)"
+    diagram_operator_script: "$TMPDIR/fake_technology_diagram_painter_operator.py"
+    diagram_python_executable: "$(command -v python3)"
 fetch:
   timeout_seconds: 1
   sleep_between_channels_seconds: 0
@@ -130,6 +132,32 @@ else:
 print(text)
 PY
 
+cat > "$TMPDIR/fake_technology_diagram_painter_operator.py" <<'PY'
+import json
+import os
+from pathlib import Path
+
+envelope_path = Path(os.environ["SOLAR_OPERATOR_ENVELOPE_JSON"])
+task_dir = Path(os.environ["TASK_DIR"])
+task_dir.mkdir(parents=True, exist_ok=True)
+envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+request = envelope.get("technology_diagram_request") or {}
+request_dir = Path(request.get("request_dir") or task_dir / "tech-diagram-request")
+request_dir.mkdir(parents=True, exist_ok=True)
+image_path = request_dir / "generated_diagram.png"
+image_path.write_bytes(b"fake-png")
+result = {
+    "status": "success",
+    "image_path": str(image_path),
+    "request_dir": str(request_dir),
+    "url": "https://chatgpt.com/c/fake-diagram",
+    "browser_session_id": "fake-diagram-session",
+    "original_image_ok": True,
+}
+(task_dir / "tech-diagram-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(json.dumps(result, ensure_ascii=False))
+PY
+
 python3 "$ROOT/scripts/youtube_influence_digest.py" \
   --config "$TMPDIR/config.yaml" \
   --fixture-feed "$TMPDIR/feed.xml" \
@@ -144,6 +172,9 @@ find "$TMPDIR/raw" -path '*/videos/*.md' -type f | grep -q .
 grep -R "Today we build an AI agent demo" "$TMPDIR/raw" >/dev/null
 find "$TMPDIR/raw" -path '*/browser-agent-report/report.md' -type f | grep -q .
 find "$TMPDIR/raw" -path '*/browser-agent-report/archive/archive_manifest.json' -type f | grep -q .
+find "$TMPDIR/raw" -path '*/browser-agent-report/figure_manifest.json' -type f | grep -q .
+find "$TMPDIR/raw" -path '*/browser-agent-report/archive/figures/figure-manifest.json' -type f | grep -q .
 grep -R "Agent workflow 正在从 demo 走向可复用基础设施" "$TMPDIR/raw" >/dev/null
+grep -R "关键图示" "$TMPDIR/raw" >/dev/null
 
 echo "ok: youtube influence digest fixture test passed"

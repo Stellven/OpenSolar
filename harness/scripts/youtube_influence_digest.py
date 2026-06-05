@@ -633,6 +633,7 @@ def maybe_write_browser_agent_report(
         "project_name": str(report_cfg.get("project_name") or "杂项"),
         "lineage_prefix": str(report_cfg.get("lineage_prefix") or "ai-influence-youtube-report"),
     }
+    figure_operator_options: dict[str, Any] = {}
     for key in (
         "target_account_email",
         "profile_directory",
@@ -644,6 +645,13 @@ def maybe_write_browser_agent_report(
     ):
         if report_cfg.get(key) is not None:
             provider_options[key] = report_cfg.get(key)
+    for key, target_key in (
+        ("diagram_operator_script", "operator_script"),
+        ("diagram_python_executable", "python_executable"),
+        ("diagram_timeout_seconds", "timeout_seconds"),
+    ):
+        if report_cfg.get(key) is not None:
+            figure_operator_options[target_key] = report_cfg.get(key)
 
     result = generate_browser_agent_report_bundle(
         report_sources,
@@ -653,6 +661,7 @@ def maybe_write_browser_agent_report(
         requested_model=str(report_cfg.get("requested_model") or "chatgpt-5.5-thinking-high"),
         sprint_id=f"youtube-influence-{run_id}",
         provider_options=provider_options,
+        figure_operator_options=figure_operator_options,
     )
     status_path = run_dir / "browser-agent-report-status.json"
     status_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

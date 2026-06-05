@@ -145,6 +145,60 @@ class ValidatorCheck:
 
 
 @dataclass(frozen=True)
+class FigureSpec:
+    figure_id: str
+    title: str
+    figure_type: str
+    placement: str
+    source_chapter_ids: list[str]
+    evidence_refs: list[str]
+    input_outline: list[str]
+    render_prompt: str
+    caption: str = ""
+    status: str = "queued"
+    schema_version: str = "figure_spec.v1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return to_json_dict(self)
+
+
+@dataclass(frozen=True)
+class FigureResult:
+    figure_id: str
+    title: str
+    figure_type: str
+    placement: str
+    source_chapter_ids: list[str]
+    evidence_refs: list[str]
+    status: str
+    image_path: str = ""
+    request_dir: str = ""
+    chatgpt_url: str = ""
+    browser_session_id: str = ""
+    original_image_ok: bool = False
+    error: str = ""
+    caption: str = ""
+    schema_version: str = "figure_result.v1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return to_json_dict(self)
+
+
+@dataclass(frozen=True)
+class FigureManifest:
+    run_id: str
+    figures: list[dict[str, Any]]
+    painted_count: int
+    skipped_count: int
+    failed_count: int
+    validator_overall: str = ""
+    schema_version: str = "figure_manifest.v1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return to_json_dict(self)
+
+
+@dataclass(frozen=True)
 class ValidatorReport:
     run_id: str
     overall: str

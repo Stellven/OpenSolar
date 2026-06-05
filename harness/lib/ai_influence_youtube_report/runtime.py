@@ -9,6 +9,7 @@ from typing import Any
 from .archive import archive_writer_commit
 from .browser_agent import BrowserAgentClient, BrowserAgentProvider, ChatGPTReportOperatorProvider
 from .evidence_map import build_evidence_map
+from .figures import build_figure_manifest, build_figure_specs, paint_figure, render_figure_markdown
 from .render import render_report_html
 from .validator import validator_run
 
@@ -134,6 +135,8 @@ def generate_browser_agent_report_bundle(
     sprint_id: str = "",
     provider: BrowserAgentProvider | None = None,
     provider_options: dict[str, Any] | None = None,
+    figure_operator_runner: Any = None,
+    figure_operator_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime_dir = _ensure_dir(Path(run_dir).expanduser() / "browser-agent-report")
     sources = _normalize_sources(source_items)
@@ -195,19 +198,70 @@ def generate_browser_agent_report_bundle(
     if not synthesis_text:
         raise RuntimeError("browser_agent_report_synthesis_empty")
 
+    evidence_map = build_evidence_map(safe_sources)
+    figure_specs = build_figure_specs(plan_json, chapter_outputs, evidence_map, report_title=report_title)
+    figures_dir = _ensure_dir(runtime_dir / "figures")
+    for spec in figure_specs:
+        (figures_dir / f"{spec.figure_id}.spec.json").write_text(
+            json.dumps(spec.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    figure_results = [
+        paint_figure(
+            spec,
+            run_dir=figures_dir,
+            operator_runner=figure_operator_runner,
+            **(figure_operator_options or {}),
+        )
+        for spec in figure_specs
+    ]
+    for figure in figure_results:
+        (figures_dir / f"{figure.figure_id}.result.json").write_text(
+            json.dumps(figure.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    figure_manifest = build_figure_manifest(run_id, figure_results).to_dict()
+
     sections = [synthesis_text]
+    lead_figure_blocks = [render_figure_markdown(item.to_dict()) for item in figure_results if item.placement == "report_lead" and item.status == "painted"]
+    lead_figure_blocks = [item for item in lead_figure_blocks if item.strip()]
+    if lead_figure_blocks:
+        sections.append("## 关键图示\n\n" + "\n\n".join(lead_figure_blocks))
     for chapter in chapter_outputs:
         chapter_text = str(chapter.get("text") or "").strip()
         if chapter_text:
-            sections.append(f"## {chapter['title']}\n\n{chapter_text}")
+            chapter_blocks = []
+            chapter_figures = [
+                render_figure_markdown(item.to_dict())
+                for item in figure_results
+                if item.placement == "chapter_inline"
+                and item.status == "painted"
+                and str(chapter.get("chapter_id") or "") in set(item.source_chapter_ids)
+            ]
+            chapter_figures = [item for item in chapter_figures if item.strip()]
+            if chapter_figures:
+                chapter_blocks.append("\n\n".join(chapter_figures))
+            chapter_blocks.append(chapter_text)
+            sections.append(f"## {chapter['title']}\n\n" + "\n\n".join(chapter_blocks))
+    appendix_figure_blocks = [render_figure_markdown(item.to_dict()) for item in figure_results if item.placement == "appendix" and item.status == "painted"]
+    appendix_figure_blocks = [item for item in appendix_figure_blocks if item.strip()]
+    if appendix_figure_blocks:
+        sections.append("## 附图\n\n" + "\n\n".join(appendix_figure_blocks))
     report_md = "\n\n".join(section for section in sections if section.strip()).strip()
-    evidence_map = build_evidence_map(safe_sources)
-    report_html = render_report_html(report_md, evidence_map, {"title": report_title})
+    report_html = render_report_html(
+        report_md,
+        evidence_map,
+        {
+            "title": report_title,
+            "figures": [item.to_dict() for item in figure_results if item.status == "painted"],
+        },
+    )
     report_bundle = {
         "run_id": run_id,
         "report_md": report_md,
         "report_html": report_html,
         "evidence_map": evidence_map,
+        "figure_manifest": figure_manifest,
         "plan_json": plan_json,
         "chapter_outputs": chapter_outputs,
         "plan_result": {
@@ -224,6 +278,11 @@ def generate_browser_agent_report_bundle(
         },
     }
     validator_report = validator_run(report_bundle).to_dict()
+    figure_manifest["validator_overall"] = str(validator_report.get("overall") or "")
+    (figures_dir / "figure-manifest.json").write_text(
+        json.dumps(figure_manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     archive_manifest = archive_writer_commit(
         {
             "archive_dir": str(runtime_dir / "archive"),
@@ -237,6 +296,7 @@ def generate_browser_agent_report_bundle(
     (runtime_dir / "report.md").write_text(report_md + "\n", encoding="utf-8")
     (runtime_dir / "report.html").write_text(report_html, encoding="utf-8")
     (runtime_dir / "chapter_outputs.json").write_text(json.dumps(chapter_outputs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (runtime_dir / "figure_manifest.json").write_text(json.dumps(figure_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (runtime_dir / "validator_report.json").write_text(json.dumps(validator_report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     result = {
         "ok": True,
@@ -247,12 +307,14 @@ def generate_browser_agent_report_bundle(
         "report_html_path": str(runtime_dir / "report.html"),
         "plan_json_path": str(runtime_dir / "plan.json"),
         "evidence_map_path": str(runtime_dir / "evidence_map.json"),
+        "figure_manifest_path": str(runtime_dir / "figure_manifest.json"),
         "validator_overall": str(validator_report.get("overall") or ""),
         "archive_dir": str(runtime_dir / "archive"),
         "archive_manifest": archive_manifest,
         "chatgpt_session_url": str(synthesis_result.get("chatgpt_url") or plan_result.get("chatgpt_url") or ""),
         "chapter_count": len(chapter_outputs),
         "source_count": len(safe_sources),
+        "painted_figure_count": int(figure_manifest.get("painted_count") or 0),
     }
     (runtime_dir / "runtime-result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result

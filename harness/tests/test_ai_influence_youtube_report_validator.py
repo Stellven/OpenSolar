@@ -31,7 +31,7 @@ def test_validator_outputs_eight_checks_and_passes_clean_bundle() -> None:
     report = validator_run(_bundle())
 
     assert report.overall == "PASS"
-    assert len(report.checks) == 8
+    assert len(report.checks) == 10
 
 
 def test_validator_fails_any_internal_token() -> None:
@@ -42,3 +42,22 @@ def test_validator_fails_any_internal_token() -> None:
 
     assert report.overall == "FAIL"
     assert any(check.status == "FAIL" for check in report.checks)
+
+
+def test_validator_fails_painted_figure_without_grounding() -> None:
+    bundle = _bundle()
+    bundle["figure_manifest"] = {
+        "figures": [
+            {
+                "figure_id": "fig_01",
+                "status": "painted",
+                "image_path": "/tmp/figure.png",
+                "evidence_refs": [],
+            }
+        ]
+    }
+
+    report = validator_run(bundle)
+
+    assert report.overall == "FAIL"
+    assert any(check.name == "painted_figures_grounded" and check.status == "FAIL" for check in report.checks)
