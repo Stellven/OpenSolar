@@ -49,6 +49,17 @@ def pm(tmp_path, monkeypatch):
     mod = _load("pm_dispatch", TOOLS_DIR / "pm_dispatch.py")
     monkeypatch.setattr(mod, "OPERATOR_STATUS_DIR", tmp_path / "run" / "operator-status")
     (tmp_path / "run" / "operator-status").mkdir(parents=True, exist_ok=True)
+
+    def _runtime_state(operator_id: str) -> str:
+        status_file = mod.OPERATOR_STATUS_DIR / f"{operator_id}.json"
+        if not status_file.exists():
+            return "idle"
+        try:
+            return str(json.loads(status_file.read_text(encoding="utf-8")).get("runtime_state", "idle"))
+        except Exception:
+            return "idle"
+
+    monkeypatch.setattr(mod, "get_operator_runtime_state", _runtime_state)
     return mod, tmp_path
 
 
@@ -239,11 +250,9 @@ class TestIsDispatchableReason:
 # ---------------------------------------------------------------------------
 
 class TestApplyFailureFlowControl:
-    def test_parse_try_again_at_reset_hint(self):
+    def test_parse_try_again_at_reset_hint(self, ofc):
         import datetime
         from zoneinfo import ZoneInfo
-
-        import operator_flow_control as ofc
 
         now = datetime.datetime(2026, 6, 4, 20, 33, tzinfo=ZoneInfo("America/Toronto"))
         reset = ofc.parse_rate_limit_reset_at(
@@ -253,6 +262,19 @@ class TestApplyFailureFlowControl:
         )
 
         assert reset == datetime.datetime(2026, 6, 5, 1, 25, tzinfo=datetime.timezone.utc)
+
+    def test_parse_try_again_at_full_date_reset_hint(self, ofc):
+        import datetime
+        from zoneinfo import ZoneInfo
+
+        now = datetime.datetime(2026, 6, 5, 4, 53, tzinfo=ZoneInfo("America/Toronto"))
+        reset = ofc.parse_rate_limit_reset_at(
+            "ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark. "
+            "Switch to another model now, or try again at Jun 10th, 2026 10:25 PM.",
+            now=now,
+        )
+
+        assert reset == datetime.datetime(2026, 6, 11, 2, 25, tzinfo=datetime.timezone.utc)
 
     def test_quota_text_sets_cooldown_state(self, tmp_path, monkeypatch):
         import operator_flow_control as ofc
@@ -271,7 +293,7 @@ class TestApplyFailureFlowControl:
         import operator_runtime as rt
         monkeypatch.setattr(rt, "set_operator_status", _fake_set_status)
 
-        quota_text = "You've hit your limit · resets 1:40pm (America/Toronto)"
+        quota_text = "RESOURCE_EXHAUSTED: quota exceeded"
         result = ofc.apply_failure_flow_control(
             task_dir,
             operator_id="op-planner",
