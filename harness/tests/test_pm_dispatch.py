@@ -533,6 +533,41 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
     }
 
 
+def test_eval_backlog_ignores_failed_graphs_and_failed_sprint_eval(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    _write_eval_ready_graph(sprints, "sprint-failed-node")
+    (sprints / "sprint-failed-node.status.json").write_text(
+        json.dumps({"status": "reviewing", "phase": "handoff_ready", "handoff_to": "evaluator"}),
+        encoding="utf-8",
+    )
+    failed_node_graph = json.loads((sprints / "sprint-failed-node.task_graph.json").read_text(encoding="utf-8"))
+    failed_node_graph["nodes"].append({"id": "E2", "status": "failed"})
+    (sprints / "sprint-failed-node.task_graph.json").write_text(json.dumps(failed_node_graph), encoding="utf-8")
+
+    _write_eval_ready_graph(sprints, "sprint-failed-eval")
+    (sprints / "sprint-failed-eval.status.json").write_text(
+        json.dumps({"status": "reviewing", "phase": "handoff_ready", "handoff_to": "evaluator"}),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-failed-eval.eval.json").write_text(json.dumps({"verdict": "FAIL"}), encoding="utf-8")
+
+    assert pm_dispatch._builder_pool_backlog_breakdown() == {
+        "pending_pm": 0,
+        "latent_builder_ready": 0,
+        "planner_prd_ready": 0,
+        "builder_planning_complete": 0,
+        "evaluator_handoff_ready": 0,
+        "total": 0,
+    }
+
+
 def test_operator_health_watchdog_status_projects_latest_and_legacy_pruner(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     root = tmp_path / "harness"

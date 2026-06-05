@@ -1535,6 +1535,21 @@ def _sprint_has_actionable_eval_backlog(sprint_id: str) -> bool:
     nodes = graph.get("nodes")
     if not isinstance(nodes, list):
         return False
+    if any(
+        isinstance(node, dict)
+        and str(node.get("status") or "").strip().lower() in {"failed", "cancelled", "canceled"}
+        for node in nodes
+    ):
+        return False
+    eval_path = SPRINTS_DIR / f"{sprint_id}.eval.json"
+    if eval_path.exists():
+        try:
+            sprint_eval = json.loads(eval_path.read_text(encoding="utf-8"))
+        except Exception:
+            sprint_eval = {}
+        verdict = str(sprint_eval.get("verdict") or "").strip().upper() if isinstance(sprint_eval, dict) else ""
+        if verdict == "FAIL":
+            return False
     results = graph.get("node_results")
     if not isinstance(results, dict):
         results = {}
