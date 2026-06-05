@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from pathlib import Path
@@ -377,6 +378,38 @@ def _evidence_callouts(root: Path, evidence_ids: list[str], *, max_items: int = 
     return callouts
 
 
+def _short_text(value: str, *, max_chars: int = 120) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
+
+
+def _figure_nodes(thesis: list[str], evidence_callouts: list[dict[str, str]], takeaways: list[str]) -> list[dict[str, str]]:
+    nodes: list[dict[str, str]] = []
+    for index, item in enumerate(thesis[:2], start=1):
+        nodes.append({"node_id": f"thesis_{index}", "kind": "thesis", "label": _short_text(item)})
+    for index, callout in enumerate(evidence_callouts[:3], start=1):
+        summary = str(callout.get("summary") or callout.get("source_title") or "")
+        nodes.append({"node_id": f"evidence_{index}", "kind": "evidence", "label": _short_text(summary)})
+    for index, item in enumerate(takeaways[:2], start=1):
+        nodes.append({"node_id": f"takeaway_{index}", "kind": "takeaway", "label": _short_text(item)})
+    return nodes
+
+
+def _figure_edges(nodes: list[dict[str, str]]) -> list[dict[str, str]]:
+    thesis_nodes = [node for node in nodes if node.get("kind") == "thesis"]
+    evidence_nodes = [node for node in nodes if node.get("kind") == "evidence"]
+    takeaway_nodes = [node for node in nodes if node.get("kind") == "takeaway"]
+    edges: list[dict[str, str]] = []
+    for thesis in thesis_nodes[:1]:
+        for evidence in evidence_nodes:
+            edges.append({"from": thesis["node_id"], "to": evidence["node_id"], "relation": "supported_by"})
+        for takeaway in takeaway_nodes:
+            edges.append({"from": thesis["node_id"], "to": takeaway["node_id"], "relation": "leads_to"})
+    return edges
+
+
 def _build_section_render_card(root: Path, section: dict, row: dict) -> dict[str, Any]:
     section_id = str(section.get("section_id") or row.get("section_id") or "")
     text = _section_final(root, section_id)
@@ -404,10 +437,21 @@ def _build_section_render_card(root: Path, section: dict, row: dict) -> dict[str
 
     evidence_callouts = _evidence_callouts(root, evidence_ids, max_items=4)
     title = str(section.get("title") or row.get("title") or section_id)
+    figure_nodes = _figure_nodes(thesis_candidates, evidence_callouts, takeaways)
     figure_spec = {
         "figure_id": re.sub(r"[^a-zA-Z0-9_-]+", "_", section_id).strip("_"),
         "type": "section_render_card",
         "title": title,
+        "render_rule": "draw_when_section_render_card_has_thesis_and_evidence",
+        "content_sources": {
+            "thesis": thesis_candidates[:3],
+            "evidence_callout_ids": [str(callout.get("evidence_id") or "") for callout in evidence_callouts[:4]],
+            "takeaways": takeaways[:5],
+            "claim_ids": claim_ids[:5],
+            "evidence_ids": evidence_ids[:5],
+        },
+        "nodes": figure_nodes,
+        "edges": _figure_edges(figure_nodes),
         "claim_ids": claim_ids[:5],
         "evidence_ids": evidence_ids[:5],
     }
@@ -583,6 +627,243 @@ def _build_insight_human_final(root: Path, ast: dict, contribution: dict, sectio
     return summary
 
 
+def _h(value: Any) -> str:
+    return html_lib.escape(str(value or ""), quote=True)
+
+
+def _source_type_label(value: str) -> str:
+    return {
+        "paper": "论文",
+        "official_doc": "官方材料",
+        "code": "代码",
+        "benchmark": "评测",
+        "web": "网页",
+        "youtube": "视频",
+        "social": "社交",
+        "unknown": "来源",
+    }.get(str(value or "unknown"), "来源")
+
+
+def _html_paragraphs(items: list[Any], *, empty: str = "暂无可发布内容。") -> str:
+    cleaned = [str(item).strip() for item in items if str(item).strip()]
+    if not cleaned:
+        return f"<p>{_h(empty)}</p>"
+    return "\n".join(f"<p>{_h(item)}</p>" for item in cleaned)
+
+
+def _render_evidence_sidebar(callouts: list[dict[str, Any]]) -> str:
+    if not callouts:
+        return """
+        <aside class="evidence-sidebar">
+          <div class="eyebrow">证据侧栏</div>
+          <p class="muted">本节尚无可展示证据。</p>
+        </aside>
+        """
+    items: list[str] = []
+    for callout in callouts[:4]:
+        title = str(callout.get("source_title") or "未命名来源")
+        summary = str(callout.get("summary") or title)
+        label = _source_type_label(str(callout.get("source_type") or "unknown"))
+        url = str(callout.get("url") or "")
+        source_html = f'<a href="{_h(url)}" target="_blank" rel="noreferrer">{_h(title)}</a>' if url else _h(title)
+        items.append(
+            "\n".join([
+                '<li class="evidence-item">',
+                f'  <span class="source-badge">{_h(label)}</span>',
+                f'  <strong>{source_html}</strong>',
+                f'  <p>{_h(_short_text(summary, max_chars=240))}</p>',
+                "</li>",
+            ])
+        )
+    return "\n".join([
+        '<aside class="evidence-sidebar">',
+        '  <div class="eyebrow">证据侧栏</div>',
+        '  <ul class="evidence-list">',
+        *items,
+        "  </ul>",
+        "</aside>",
+    ])
+
+
+def _render_takeaway_box(takeaways: list[Any]) -> str:
+    cleaned = [str(item).strip() for item in takeaways if str(item).strip()]
+    if not cleaned:
+        return ""
+    items = "\n".join(f"<li>{_h(item)}</li>" for item in cleaned[:5])
+    return "\n".join([
+        '<div class="takeaway-box">',
+        '  <div class="eyebrow">影响与行动</div>',
+        f"  <ul>{items}</ul>",
+        "</div>",
+    ])
+
+
+def _render_figure_block(card: dict[str, Any]) -> str:
+    figure = card.get("figure_spec") if isinstance(card.get("figure_spec"), dict) else {}
+    nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
+    if not figure or not nodes:
+        return ""
+    lanes = {
+        "thesis": ("中心判断", [node for node in nodes if node.get("kind") == "thesis"]),
+        "evidence": ("支撑证据", [node for node in nodes if node.get("kind") == "evidence"]),
+        "takeaway": ("行动/观察", [node for node in nodes if node.get("kind") == "takeaway"]),
+    }
+    lane_html: list[str] = []
+    for kind, (label, lane_nodes) in lanes.items():
+        if not lane_nodes:
+            continue
+        cards = "\n".join(f'<div class="figure-node {kind}">{_h(node.get("label"))}</div>' for node in lane_nodes)
+        lane_html.append(f'<div class="figure-lane"><span>{_h(label)}</span>{cards}</div>')
+    return "\n".join([
+        '<div class="figure-block">',
+        f'  <div class="figure-title">{_h(figure.get("title") or card.get("title") or "图示")}</div>',
+        '  <div class="figure-flow">',
+        *lane_html,
+        "  </div>",
+        '  <p class="figure-note">图由本节材料生成：中心判断 → 证据 → 行动/观察，不引入本节之外的信息。</p>',
+        "</div>",
+    ])
+
+
+def _render_section_card_html(card: dict[str, Any]) -> str:
+    title = str(card.get("title") or "未命名小节")
+    thesis = card.get("thesis") if isinstance(card.get("thesis"), list) else []
+    callouts = card.get("evidence_callouts") if isinstance(card.get("evidence_callouts"), list) else []
+    takeaways = card.get("takeaways") if isinstance(card.get("takeaways"), list) else []
+    return "\n".join([
+        '<article class="section-card">',
+        '  <div class="section-main">',
+        f"    <h3>{_h(title)}</h3>",
+        '    <div class="section-block">',
+        '      <h4>本节判断</h4>',
+        f"      {_html_paragraphs(thesis, empty='本节尚无明确判断。')}",
+        "    </div>",
+        f"    {_render_figure_block(card)}",
+        f"    {_render_takeaway_box(takeaways)}",
+        "  </div>",
+        f"  {_render_evidence_sidebar(callouts)}",
+        "</article>",
+    ])
+
+
+def _render_insight_html(root: Path, ast: dict, contribution: dict, section_render: dict[str, Any]) -> dict:
+    cards = section_render.get("cards", []) if isinstance(section_render.get("cards"), list) else []
+    cards_by_chapter: dict[str, list[dict[str, Any]]] = {}
+    for card in cards:
+        cards_by_chapter.setdefault(str(card.get("chapter_id") or ""), []).append(card)
+
+    chapters = ast.get("chapters", []) if isinstance(ast.get("chapters"), list) else []
+    source_counts = contribution.get("source_type_counts") if isinstance(contribution.get("source_type_counts"), dict) else {}
+    source_summary = "、".join(f"{_source_type_label(key)} {value}" for key, value in sorted(source_counts.items())) or "N/A"
+    figure_count = sum(1 for card in cards if card.get("figure_spec"))
+    title = str(ast.get("title") or "DeepDive 洞察报告")
+
+    chapter_html: list[str] = []
+    for chapter in chapters:
+        chapter_id = str(chapter.get("chapter_id") or "")
+        chapter_cards = cards_by_chapter.get(chapter_id, [])
+        card_html = "\n".join(_render_section_card_html(card) for card in chapter_cards)
+        if not card_html:
+            card_html = '<p class="muted">该章尚无可发布卡片。</p>'
+        chapter_html.append("\n".join([
+            '<section class="chapter-section">',
+            f"  <h2>{_h(chapter.get('title') or '未命名章节')}</h2>",
+            f"  <p class=\"chapter-objective\">{_h(chapter.get('objective') or '')}</p>",
+            card_html,
+            "</section>",
+        ]))
+
+    html = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{_h(title)}</title>
+  <style>
+    :root {{
+      --bg: #f3efe6;
+      --paper: #fffaf0;
+      --ink: #17211a;
+      --muted: #667064;
+      --line: #d7cbb7;
+      --accent: #b7532a;
+      --accent-2: #174c43;
+      --soft: #efe2cc;
+    }}
+    body {{
+      margin: 0;
+      background: radial-gradient(circle at 15% 0%, #fff5d6 0, transparent 34%), linear-gradient(135deg, #f7f0df 0%, #e8eee6 100%);
+      color: var(--ink);
+      font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      line-height: 1.72;
+    }}
+    .page {{ max-width: 1180px; margin: 0 auto; padding: 44px 24px 72px; }}
+    .hero {{ border: 1px solid var(--line); background: rgba(255, 250, 240, .92); border-radius: 28px; padding: 34px; box-shadow: 0 24px 70px rgba(61, 45, 22, .12); }}
+    h1 {{ margin: 0 0 16px; font-size: clamp(34px, 5vw, 64px); line-height: 1.05; letter-spacing: -.04em; }}
+    h2 {{ margin: 46px 0 18px; font-size: clamp(25px, 3vw, 38px); letter-spacing: -.025em; color: var(--accent-2); }}
+    h3 {{ margin: 0 0 18px; font-size: 24px; line-height: 1.28; }}
+    h4 {{ margin: 0 0 10px; color: var(--accent); font-size: 17px; }}
+    .stats {{ display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }}
+    .pill {{ padding: 9px 13px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: #42382b; font-size: 14px; }}
+    .chapter-objective {{ color: var(--muted); max-width: 860px; }}
+    .section-card {{ display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; margin: 22px 0; padding: 24px; background: rgba(255, 250, 240, .96); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 16px 48px rgba(55, 39, 18, .08); }}
+    .section-block p {{ margin: 0 0 12px; text-indent: 1.4em; }}
+    .evidence-sidebar {{ background: #f7ead6; border: 1px solid #e1c8a6; border-radius: 20px; padding: 18px; align-self: start; }}
+    .eyebrow {{ font-size: 13px; font-weight: 800; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }}
+    .evidence-list {{ list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }}
+    .evidence-item strong {{ display: block; margin: 8px 0 5px; line-height: 1.35; }}
+    .evidence-item p {{ margin: 0; color: #554a3c; font-size: 14px; line-height: 1.55; }}
+    .source-badge {{ display: inline-flex; padding: 3px 8px; border-radius: 999px; background: #153f38; color: #fff9ee; font-size: 12px; }}
+    .takeaway-box {{ margin-top: 18px; padding: 18px 20px; border-radius: 20px; background: #173f38; color: #fff9ee; }}
+    .takeaway-box ul {{ margin: 0; padding-left: 20px; }}
+    .figure-block {{ margin: 18px 0; padding: 18px; border-radius: 22px; border: 1px dashed #bc855e; background: #fff3df; }}
+    .figure-title {{ font-weight: 800; margin-bottom: 14px; color: var(--accent-2); }}
+    .figure-flow {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
+    .figure-lane {{ min-height: 120px; padding: 12px; border-radius: 18px; background: rgba(255,255,255,.62); border: 1px solid #ead6bd; }}
+    .figure-lane span {{ display: block; font-size: 13px; font-weight: 800; color: var(--accent); margin-bottom: 8px; }}
+    .figure-node {{ margin: 8px 0; padding: 10px; border-radius: 14px; font-size: 13px; line-height: 1.45; background: #fffaf0; border-left: 4px solid var(--accent); }}
+    .figure-node.evidence {{ border-left-color: #316a5f; }}
+    .figure-node.takeaway {{ border-left-color: #d59a2f; }}
+    .figure-note, .muted {{ color: var(--muted); font-size: 14px; }}
+    a {{ color: #94451f; text-decoration-thickness: 1px; text-underline-offset: 3px; }}
+    @media (max-width: 860px) {{
+      .section-card {{ grid-template-columns: 1fr; }}
+      .figure-flow {{ grid-template-columns: 1fr; }}
+      .page {{ padding: 24px 14px 52px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="eyebrow">深度洞察报告</div>
+      <h1>{_h(title)}</h1>
+      <p>本报告按章节组织：每个小节都保留中心判断、证据侧栏、行动框和图示块。图示只来自本节材料中的判断、证据和行动项。</p>
+      <div class="stats">
+        <span class="pill">章节小节 {len(cards)}</span>
+        <span class="pill">图示块 {figure_count}</span>
+        <span class="pill">已审阅 section {int(contribution.get('finalized_sections') or 0)}/{int(contribution.get('section_count') or 0)}</span>
+        <span class="pill">来源覆盖 { _h(source_summary) }</span>
+      </div>
+    </header>
+    {''.join(chapter_html)}
+  </main>
+</body>
+</html>
+"""
+    html_path = root / "final.html"
+    html_path.write_text(html, encoding="utf-8")
+    summary = {
+        "ok": True,
+        "final_html": str(html_path),
+        "section_render_card_count": len(cards),
+        "figure_count": figure_count,
+        "publisher": "section_render_card_html",
+    }
+    (root / "survey_insight_html_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return summary
+
+
 def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> dict:
     evidence_numbers: dict[str, int] = {}
     source_counts = contribution.get("source_type_counts") if isinstance(contribution.get("source_type_counts"), dict) else {}
@@ -740,11 +1021,14 @@ def compile_survey(output_dir: str | Path) -> dict:
         if insight_mode
         else _build_human_readable_final(root, ast, contribution)
     )
+    html_summary = _render_insight_html(root, ast, contribution, section_render) if insight_mode else {}
     return {
         "ok": True,
         "final_md": str(final_path),
+        "final_html": html_summary.get("final_html", "") if insight_mode else "",
         "human_final_md": human_summary.get("human_final_md"),
         "section_render_cards": str(root / "section_render_cards.json") if insight_mode else "",
+        "insight_html_summary": str(root / "survey_insight_html_summary.json") if insight_mode else "",
         "finalized_sections": finalized,
         "total_sections": len(ast.get("sections", [])),
         "contribution_matrix": str(root / "survey_contribution_matrix.json"),

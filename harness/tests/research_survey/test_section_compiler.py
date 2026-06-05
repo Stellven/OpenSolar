@@ -144,6 +144,20 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert first_card["thesis"]
     assert first_card["evidence_callouts"]
     assert first_card["figure_spec"]["type"] == "section_render_card"
+    assert first_card["figure_spec"]["render_rule"] == "draw_when_section_render_card_has_thesis_and_evidence"
+    assert first_card["figure_spec"]["content_sources"]["thesis"]
+    assert first_card["figure_spec"]["nodes"]
+    assert first_card["figure_spec"]["edges"]
+    assert compiled["final_html"].endswith("final.html")
+    assert compiled["insight_html_summary"].endswith("survey_insight_html_summary.json")
+    assert (tmp_path / "final.html").exists()
+    assert (tmp_path / "survey_insight_html_summary.json").exists()
+    html = (tmp_path / "final.html").read_text(encoding="utf-8")
+    assert 'class="section-card"' in html
+    assert 'class="evidence-sidebar"' in html
+    assert 'class="takeaway-box"' in html
+    assert 'class="figure-block"' in html
+    assert "图由本节材料生成" in html
     human_text = (tmp_path / "human_final.md").read_text(encoding="utf-8")
     assert "## 信号地图与证据强度" in human_text
     assert "#### 本节判断" in human_text
