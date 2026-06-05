@@ -1259,6 +1259,50 @@ def _load_graph_scheduler_module() -> Any | None:
         return None
 
 
+def _load_task_graph_state_io_module() -> Any | None:
+    for lib_dir in (HARNESS_DIR / "lib", REPO_HARNESS_DIR / "lib"):
+        if str(lib_dir) not in sys.path:
+            sys.path.insert(0, str(lib_dir))
+    try:
+        import task_graph_state_io  # type: ignore
+
+        return task_graph_state_io
+    except Exception:
+        return None
+
+
+def _sync_task_dag_state_node(
+    sprint_id: str,
+    node_id: str,
+    status: str,
+    *,
+    assigned_to: str = "",
+    dispatch_id: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    state_io = _load_task_graph_state_io_module()
+    if state_io is None:
+        return {"ok": False, "reason": "task_graph_state_io_unavailable"}
+    try:
+        state = state_io.load_state(sprint_id, SPRINTS_DIR)
+        if state is None:
+            state = state_io.make_empty_state(sprint_id, f"{sprint_id}.task_graph.json")
+        state_io.set_node_result(
+            state,
+            node_id,
+            status,
+            note=note,
+            assigned_to=assigned_to,
+            dispatch_id=dispatch_id,
+        )
+        if not dispatch_id and isinstance(state.get("dispatch_ids"), dict):
+            state["dispatch_ids"].pop(node_id, None)
+        state_io.save_state(sprint_id, state, SPRINTS_DIR)
+        return {"ok": True, "sprint_id": sprint_id, "node_id": node_id, "status": status}
+    except Exception as exc:
+        return {"ok": False, "reason": f"state_sync_failed:{type(exc).__name__}", "error": str(exc)}
+
+
 def _planning_complete_status_files() -> list[Path]:
     files: list[Path] = []
     for path in sorted(SPRINTS_DIR.glob("*.status.json"), key=lambda item: item.stat().st_mtime):
@@ -2419,7 +2463,22 @@ def _mark_graph_node_pm_dispatched(item: dict[str, Any], submitted: dict[str, An
         graph_scheduler.save_graph(graph_path, graph)
     except Exception as exc:
         return {"ok": False, "reason": f"mark_failed:{type(exc).__name__}", "error": str(exc), "sprint_id": sprint_id, "node_id": node_id}
-    return {"ok": True, "sprint_id": sprint_id, "node_id": node_id, "task_id": task_id, "operator_id": operator_id}
+    state_sync = _sync_task_dag_state_node(
+        sprint_id,
+        node_id,
+        "dispatched",
+        assigned_to=operator_id,
+        dispatch_id=task_id,
+        note="pm_dispatch builder dispatch",
+    )
+    return {
+        "ok": True,
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+        "task_id": task_id,
+        "operator_id": operator_id,
+        "state_sync": state_sync,
+    }
 
 
 def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) -> dict[str, Any]:
@@ -2464,7 +2523,16 @@ def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) ->
     dispatch_ids.add(str(result_entry.get("dispatch_id") or ""))
     dispatch_ids.add(str(result_entry.get("pm_task_id") or ""))
     if task_id not in dispatch_ids:
-        return {"ok": False, "released": False, "reason": "dispatch_mismatch", "node_id": node_id}
+        record_operator = str(record.get("operator_id") or "").strip()
+        graph_operator_ids = {
+            str(target.get("operator_id") or "").strip(),
+            str(target.get("assigned_to") or "").strip().removeprefix("operator:"),
+            str(result_entry.get("operator_id") or "").strip(),
+            str(result_entry.get("assigned_to") or "").strip().removeprefix("operator:"),
+        }
+        graph_operator_ids.discard("")
+        if not record_operator or record_operator not in graph_operator_ids:
+            return {"ok": False, "released": False, "reason": "dispatch_mismatch", "node_id": node_id}
 
     now = _now()
     previous = {
@@ -2502,7 +2570,13 @@ def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) ->
             result_entry.pop(key, None)
 
     graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
+    state_sync = _sync_task_dag_state_node(
+        sprint_id,
+        node_id,
+        "pending",
+        note="transient operator failure requeue",
+    )
+    return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id, "state_sync": state_sync}
 
 
 def release_builder_assignment_on_transient_failure(record: dict[str, Any]) -> dict[str, Any]:
@@ -2568,7 +2642,14 @@ def _mark_graph_node_evaluation_dispatched(record: dict[str, Any]) -> dict[str, 
     result_entry["updated_at"] = now
 
     graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"ok": True, "marked": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
+    state_sync = _sync_task_dag_state_node(
+        sprint_id,
+        node_id,
+        "reviewing",
+        dispatch_id=task_id,
+        note="pm_dispatch evaluator dispatch",
+    )
+    return {"ok": True, "marked": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id, "state_sync": state_sync}
 
 
 def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) -> dict[str, Any]:

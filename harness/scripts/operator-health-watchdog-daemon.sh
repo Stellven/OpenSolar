@@ -105,7 +105,7 @@ PLIST_EOF
 run_once() {
   mkdir -p "$LOG_DIR"
   printf '[%s] operator-health-watchdog start\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  "${HARNESS_DIR}/solar-harness.sh" pm-fleet health-watchdog --json --apply
+  python3 "${HARNESS_DIR}/tools/operator_health_watchdog.py" run --once --json --apply
   printf '[%s] operator-health-watchdog end\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 

@@ -36,6 +36,21 @@ def test_penalties():
     assert "StaleContextPenalty" in p3
     print("PASS: penalties")
 
+def test_penalty_overrides():
+    total, _, penalties = compute_score(
+        "a1",
+        recent_failure=True,
+        stale_context=True,
+        penalty_overrides={
+            "RecentFailurePenalty": 0.05,
+            "StaleContextPenalty": 0.20,
+        },
+    )
+    assert abs(penalties["RecentFailurePenalty"] - 0.05) < 0.001
+    assert abs(penalties["StaleContextPenalty"] - 0.20) < 0.001
+    assert total < 0.5
+    print("PASS: penalty_overrides")
+
 def test_historical_success_by_dimensions():
     ev = TaskEvidence([
         {"actor_id": "a1", "repo": "r1", "task_type": "CODE_IMPL", "outcome": "success"},
@@ -73,7 +88,8 @@ if __name__ == "__main__":
     test_factor_weights_sum_to_one()
     test_score_factors()
     test_penalties()
+    test_penalty_overrides()
     test_historical_success_by_dimensions()
     test_rank_actors()
     test_explanation_output()
-    print("\n6/6 passed")
+    print("\n7/7 passed")

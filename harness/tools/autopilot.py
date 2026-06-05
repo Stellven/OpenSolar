@@ -553,6 +553,26 @@ def activate_graph(
     }
 
 
+def autopilot_select_ready(sprint_id: str) -> dict:
+    """Return state-first ready-node selection from the real graph scheduler."""
+    graph_scheduler = _script_lib_module("graph_scheduler")
+    graph_path = _graph_path_for_sprint(sprint_id)
+    graph = graph_scheduler.load_graph(graph_path)
+    decision = graph_scheduler.autopilot_ready_decision(graph, graph_path=graph_path, emit_shadow=True)
+    return {
+        "sprint_id": sprint_id,
+        "ready_nodes": decision.get("ready_node_ids", []),
+        "source": decision.get("source", "state"),
+        "inline_ready": decision.get("inline_ready", []),
+        "state_ready": decision.get("state_ready", []),
+        "diff_added": decision.get("diff_added", []),
+        "diff_removed": decision.get("diff_removed", []),
+        "decision_taken": decision.get("decision_taken", "state"),
+        "shadow_enabled": decision.get("shadow_enabled", True),
+        "ts": _now(),
+    }
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -586,6 +606,9 @@ def main() -> int:
     ag.add_argument("--workers")
     ag.add_argument("--max-parallel", type=int)
     ag.add_argument("--dry-run", action="store_true")
+
+    sr = sub.add_parser("select-ready")
+    sr.add_argument("--sprint", required=True)
 
     args = ap.parse_args()
 
@@ -635,6 +658,10 @@ def main() -> int:
             max_parallel=args.max_parallel,
             dry_run=bool(args.dry_run),
         )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    elif args.cmd == "select-ready":
+        result = autopilot_select_ready(args.sprint)
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
     else:

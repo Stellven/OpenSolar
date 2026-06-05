@@ -193,6 +193,10 @@ from graph_scheduler import (  # noqa: E402
     mark_node_result,
     parent_ready_check,
 )
+try:
+    import task_graph_state_io  # noqa: E402
+except Exception:  # pragma: no cover - state sync is best-effort in partial installs
+    task_graph_state_io = None  # type: ignore
 from pane_lease import acquire as acquire_lease, release as release_lease, read_lease, list_leases  # noqa: E402
 from task_queue import enqueue  # noqa: E402
 try:
@@ -236,6 +240,37 @@ except Exception:  # pragma: no cover - hygiene helpers are additive
 
 def _json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False)
+
+
+def _sync_state_node(
+    sprint_id: str,
+    node_id: str,
+    status: str,
+    *,
+    dispatch_id: str = "",
+    assigned_to: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    if task_graph_state_io is None:
+        return {"ok": False, "reason": "task_graph_state_io_unavailable"}
+    try:
+        state = task_graph_state_io.load_state(sprint_id, SPRINTS_DIR)
+        if state is None:
+            state = task_graph_state_io.make_empty_state(sprint_id, f"{sprint_id}.task_graph.json")
+        task_graph_state_io.set_node_result(
+            state,
+            node_id,
+            status,
+            dispatch_id=dispatch_id,
+            assigned_to=assigned_to,
+            note=note,
+        )
+        if not dispatch_id and isinstance(state.get("dispatch_ids"), dict):
+            state["dispatch_ids"].pop(node_id, None)
+        task_graph_state_io.save_state(sprint_id, state, SPRINTS_DIR)
+        return {"ok": True, "sprint_id": sprint_id, "node_id": node_id, "status": status}
+    except Exception as exc:
+        return {"ok": False, "reason": f"state_sync_failed:{type(exc).__name__}", "error": str(exc)}
 
 
 def _dispatch_role_for_pane(pane: str, title: str | None = None) -> str:
@@ -2353,7 +2388,13 @@ def _proof_obligations_block(obligations: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _store_eval_assignments(node: dict[str, Any], assignments: list[dict[str, Any]], dispatched_at: str) -> None:
+def _store_eval_assignments(
+    node: dict[str, Any],
+    assignments: list[dict[str, Any]],
+    dispatched_at: str,
+    *,
+    sprint_id: str = "",
+) -> None:
     normalized = [
         {
             "pane": str(item.get("pane") or ""),
@@ -2370,6 +2411,16 @@ def _store_eval_assignments(node: dict[str, Any], assignments: list[dict[str, An
     node["eval_assigned_to"] = str(primary.get("pane") or "")
     node["eval_dispatch_id"] = str(primary.get("dispatch_id") or "")
     node["eval_dispatched_at"] = dispatched_at
+    node_id = str(node.get("id") or node.get("node_id") or "")
+    if sprint_id and node_id:
+        _sync_state_node(
+            sprint_id,
+            node_id,
+            "reviewing",
+            dispatch_id=str(primary.get("dispatch_id") or ""),
+            assigned_to=str(primary.get("pane") or ""),
+            note="graph_node_dispatcher evaluator dispatch",
+        )
 
 
 def _clear_eval_assignments(node: dict[str, Any]) -> None:
@@ -5371,8 +5422,6 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
             or pane.startswith("solar-harness-multi-task:")
         ):
             continue
-        if dispatch_role != "builder":
-            continue
         models = _models_for_pane(pane, title)
         tail = _pane_tail(pane)
         health = _pane_health(pane)
@@ -5538,7 +5587,7 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
         if recovered:
             if recovered:
                 recovered[0]["role"] = "primary"
-            _store_eval_assignments(node, recovered, recovered_at or _utc_now())
+            _store_eval_assignments(node, recovered, recovered_at or _utc_now(), sprint_id=sid)
             node["eval_recovered_from_lease"] = True
             return False
     if node.get("eval_dispatched_at") and not force:
@@ -5829,7 +5878,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
 
         node["status"] = "reviewing"
         node["eval_dispatch_group_id"] = dispatch_group_id
-        _store_eval_assignments(node, planned_assignments, _utc_now())
+        _store_eval_assignments(node, planned_assignments, _utc_now(), sprint_id=sid)
         for item in sent_records:
             dispatched.append(item)
 
@@ -6003,6 +6052,12 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node.pop("dispatch_id", None)
     node.pop("eval_dispatch_group_id", None)
     _clear_eval_assignments(node)
+    state_sync = _sync_state_node(
+        sid,
+        node_id,
+        status,
+        note="; ".join(note_parts) or f"graph_node_dispatcher node_verdict:{status}",
+    )
     save_graph(graph_path, graph)
 
     worker_lease_released = False
@@ -6042,6 +6097,7 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         "worker_lease_released": worker_lease_released,
         "eval_lease_released": eval_lease_released,
         "parent_status_updated": parent_status_updated,
+        "state_sync": state_sync,
         "capability_effect": effect_result,
         "proof_gate": proof_gate,
         "research_quality_gate": research_quality_gate,

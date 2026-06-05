@@ -645,6 +645,19 @@ def test_cmd_fail_requeues_transient_operator_failure_graph_node(monkeypatch, tm
         ),
         encoding="utf-8",
     )
+    (sprints / "sprint-requeue.task_dag.state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "solar.task_graph_state.v1",
+                "sprint_id": "sprint-requeue",
+                "node_results": {"B1": {"status": "dispatched", "dispatch_id": task_id}},
+                "gate_results": {},
+                "dispatch_ids": {"B1": task_id},
+                "events": [],
+            }
+        ),
+        encoding="utf-8",
+    )
     pm_dispatch.write_pm_task_record(
         task_id,
         {
@@ -671,6 +684,9 @@ def test_cmd_fail_requeues_transient_operator_failure_graph_node(monkeypatch, tm
     assert node["requeue_reason"] == "transient_operator_failure"
     assert "dispatch_id" not in node
     assert node["dispatch_requeue_history"][0]["previous_dispatch"]["dispatch_id"] == task_id
+    state = json.loads((sprints / "sprint-requeue.task_dag.state.json").read_text(encoding="utf-8"))
+    assert state["node_results"]["B1"]["status"] == "pending"
+    assert "B1" not in state["dispatch_ids"]
     record = json.loads((inbox / f"{task_id}.json").read_text(encoding="utf-8"))
     assert record["graph_requeue"]["released"] is True
 
@@ -717,6 +733,59 @@ def test_transient_builder_release_reads_operator_log_tail(monkeypatch, tmp_path
     node = graph["nodes"][0]
     assert node["status"] == "pending"
     assert node["requeue_reason"] == "transient_operator_failure"
+
+
+def test_transient_builder_release_allows_pm_graph_dispatch_id_skew(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+
+    pm_task_id = "pm-sprint-skew-B1-test"
+    graph_dispatch_id = "graph-sprint-skew-B1-20260605T081430Z"
+    graph_path = sprints / "sprint-skew.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-skew",
+                "nodes": [
+                    {
+                        "id": "B1",
+                        "status": "dispatched",
+                        "assigned_to": "operator:mini-codex-gpt53-spark-builder-4",
+                        "dispatch_id": graph_dispatch_id,
+                    }
+                ],
+                "node_results": {
+                    "B1": {
+                        "status": "dispatched",
+                        "dispatch_id": graph_dispatch_id,
+                        "operator_id": "mini-codex-gpt53-spark-builder-4",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = pm_dispatch.release_builder_assignment_on_transient_failure(
+        {
+            "task_id": pm_task_id,
+            "sprint_id": "sprint-skew",
+            "node_id": "B1",
+            "operator_id": "mini-codex-gpt53-spark-builder-4",
+            "status": "failed_quota_cooldown",
+            "failure_reason": "GPT-5.3-Codex-Spark usage limit; runtime_state=cooldown",
+        }
+    )
+
+    assert result["released"] is True
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert node["status"] == "pending"
+    assert node["requeue_reason"] == "transient_operator_failure"
+    assert node["dispatch_requeue_history"][0]["previous_dispatch"]["dispatch_id"] == graph_dispatch_id
+    assert "dispatch_id" not in node
 
 
 def test_cmd_complete_marks_builder_graph_node_reviewing(monkeypatch, tmp_path):
@@ -808,6 +877,19 @@ def test_evaluator_dispatch_marks_graph_assignment(monkeypatch, tmp_path):
         ),
         encoding="utf-8",
     )
+    (sprints / "sprint-eval.task_dag.state.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "solar.task_graph_state.v1",
+                "sprint_id": "sprint-eval",
+                "node_results": {"E1": {"status": "failed"}},
+                "gate_results": {},
+                "dispatch_ids": {},
+                "events": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     result = pm_dispatch._mark_graph_node_evaluation_dispatched(
         {
@@ -825,6 +907,9 @@ def test_evaluator_dispatch_marks_graph_assignment(monkeypatch, tmp_path):
     assert node["eval_dispatch_id"] == "pm-sprint-eval-E1-test"
     assert node["eval_assignments"][0]["operator_id"] == "mini-claude-opus-evaluator"
     assert graph["node_results"]["E1"]["eval_dispatch_id"] == "pm-sprint-eval-E1-test"
+    state = json.loads((sprints / "sprint-eval.task_dag.state.json").read_text(encoding="utf-8"))
+    assert state["node_results"]["E1"]["status"] == "reviewing"
+    assert state["node_results"]["E1"]["dispatch_id"] == "pm-sprint-eval-E1-test"
 
 
 def test_transient_evaluator_failure_releases_graph_assignment(monkeypatch, tmp_path):

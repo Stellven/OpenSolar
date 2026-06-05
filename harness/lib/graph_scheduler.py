@@ -1376,6 +1376,111 @@ def ready_nodes(graph: dict[str, Any]) -> list[dict[str, Any]]:
     return ready
 
 
+def _raw_inline_graph(graph: dict[str, Any], graph_path: str | Path | None) -> dict[str, Any]:
+    if not graph_path:
+        return deepcopy(graph)
+    try:
+        payload = json.loads(Path(graph_path).read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and isinstance(payload.get("nodes"), list):
+            return payload
+        return deepcopy(graph)
+    except Exception:
+        return deepcopy(graph)
+
+
+def _ready_ids_from_graph(graph: dict[str, Any]) -> list[str]:
+    return [str(node.get("id") or "") for node in ready_nodes(deepcopy(graph)) if str(node.get("id") or "")]
+
+
+def _append_autopilot_cutover_event(
+    sid: str,
+    base_dir: Path,
+    *,
+    state_ready: list[str],
+    inline_ready: list[str],
+    diff_added: list[str],
+    diff_removed: list[str],
+    source: str,
+) -> None:
+    if not sid:
+        return
+    event = {
+        "ts": _now(),
+        "event": "autopilot_cutover_diff",
+        "by": "graph_scheduler",
+        "sprint_id": sid,
+        "state_ready": state_ready,
+        "inline_ready": inline_ready,
+        "diff_added": diff_added,
+        "diff_removed": diff_removed,
+        "source": source,
+        # Shadow evidence is always state-based; rollback only changes source.
+        "decision_taken": "state",
+    }
+    try:
+        event_path = base_dir / f"{sid}.events.jsonl"
+        event_path.parent.mkdir(parents=True, exist_ok=True)
+        with event_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+    try:
+        trace_path = base_dir / f"{sid}.traceability.json"
+        trace = json.loads(trace_path.read_text(encoding="utf-8")) if trace_path.exists() else {}
+        if not isinstance(trace, dict):
+            trace = {}
+        trace.setdefault("s04_orchestration_ui:autopilot_drift", []).append(event)
+        tmp = trace_path.with_suffix(trace_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(trace, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, trace_path)
+    except Exception:
+        pass
+
+
+def autopilot_ready_decision(
+    graph: dict[str, Any],
+    graph_path: str | Path | None = None,
+    *,
+    emit_shadow: bool = False,
+) -> dict[str, Any]:
+    """State-first ready-node selector used by autopilot and real dispatch."""
+    state_ready = _ready_ids_from_graph(graph)
+    raw_graph = _raw_inline_graph(graph, graph_path)
+    inline_ready = _ready_ids_from_graph(raw_graph)
+    diff_added = sorted(set(state_ready) - set(inline_ready))
+    diff_removed = sorted(set(inline_ready) - set(state_ready))
+    source = str(os.environ.get("SOLAR_AUTOPILOT_DECISION", "state")).strip().lower()
+    if source not in {"state", "inline"}:
+        source = "state"
+    selected_ids = inline_ready if source == "inline" else state_ready
+    if emit_shadow and str(os.environ.get("SOLAR_AUTOPILOT_SHADOW", "1")).lower() not in {"0", "false", "off", "no"}:
+        if diff_added or diff_removed:
+            sid = _sprint_id_for_graph(graph, graph_path)
+            base_dir = Path(graph_path).expanduser().parent if graph_path else SPRINTS_DIR
+            _append_autopilot_cutover_event(
+                sid,
+                base_dir,
+                state_ready=state_ready,
+                inline_ready=inline_ready,
+                diff_added=diff_added,
+                diff_removed=diff_removed,
+                source=source,
+            )
+    ids = _node_map(graph)
+    selected_nodes = [deepcopy(ids[node_id]) for node_id in selected_ids if node_id in ids]
+    return {
+        "ready_nodes": selected_nodes,
+        "ready_node_ids": selected_ids,
+        "source": source,
+        "inline_ready": inline_ready,
+        "state_ready": state_ready,
+        "diff_added": diff_added,
+        "diff_removed": diff_removed,
+        "decision_taken": "state",
+        "shadow_enabled": str(os.environ.get("SOLAR_AUTOPILOT_SHADOW", "1")).lower() not in {"0", "false", "off", "no"},
+    }
+
+
 def _scope_list(node: dict[str, Any]) -> list[str]:
     scopes = node.get("write_scope")
     if not scopes:
@@ -1873,7 +1978,7 @@ def assign_ready(graph: dict[str, Any], workers: list[dict[str, Any]],
     blocked = blocked_external_prerequisites(graph)
     if blocked:
         return {"ok": True, "assigned": [], "queued": [], "batch": [], "blocked_prerequisites": blocked}
-    ready = ready_nodes(graph)
+    ready = autopilot_ready_decision(graph, graph_path=graph_path, emit_shadow=True)["ready_nodes"]
     try:
         from apo_plan_compiler import compile_execution_plan_for_node  # noqa: WPS433
 
@@ -2430,7 +2535,19 @@ def activation_route_decision(
         validation = {"ok": False, "errors": [str(exc)], "warnings": []}
     parent_blockers = [] if not validation.get("ok") else child_sprint_dependency_blockers(sprint_id, epic_graph)
     external_blockers = [] if not validation.get("ok") else blocked_external_prerequisites(graph)
-    ready = [] if not validation.get("ok") or parent_blockers or external_blockers else ready_nodes(graph)
+    if not validation.get("ok") or parent_blockers or external_blockers:
+        ready = []
+        ready_decision = {
+            "source": "state",
+            "inline_ready": [],
+            "state_ready": [],
+            "diff_added": [],
+            "diff_removed": [],
+            "decision_taken": "state",
+        }
+    else:
+        ready_decision = autopilot_ready_decision(graph, graph_path=graph_path, emit_shadow=True)
+        ready = ready_decision["ready_nodes"]
     phase = str(child_status.get("phase") or "").strip()
     target_role = str(child_status.get("target_role") or child_status.get("handoff_to") or "").strip()
     if not target_role and phase == "planning_complete":
@@ -2456,6 +2573,14 @@ def activation_route_decision(
         "target_role": target_role,
         "ready_nodes": [str(node.get("id") or "") for node in ready],
         "ready_count": len(ready),
+        "autopilot_ready": {
+            "source": ready_decision.get("source", "state"),
+            "inline_ready": ready_decision.get("inline_ready", []),
+            "state_ready": ready_decision.get("state_ready", []),
+            "diff_added": ready_decision.get("diff_added", []),
+            "diff_removed": ready_decision.get("diff_removed", []),
+            "decision_taken": ready_decision.get("decision_taken", "state"),
+        },
         "can_dispatch": bool(ready) and not blocked_reason and target_role == "builder_main",
         "blocked_reason": blocked_reason,
         "validation": {
