@@ -63,6 +63,47 @@ def test_select_operator_by_role_prefers_capsule_operator_constraints(monkeypatc
     assert operator_id == "builder-b"
 
 
+def test_select_operator_by_role_rejects_write_denied_planner(monkeypatch):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setattr(
+        pm_dispatch,
+        "load_registry",
+        lambda: {
+            "version": 1,
+            "operators": {
+                "deepseek-advisory": {
+                    "enabled": True,
+                    "available": True,
+                    "role": "evaluator",
+                    "roles": ["planner", "evaluator"],
+                    "launch_cmd_kind": "print_once",
+                    "task_classes": ["analysis", "review", "advisory"],
+                    "profile": "deepseek-advisory",
+                    "preferred_for": ["architecture-review"],
+                    "policy": {"write_files": "denied"},
+                },
+                "gpt-planner": {
+                    "enabled": True,
+                    "available": True,
+                    "role": "planner",
+                    "roles": ["planner"],
+                    "launch_cmd_kind": "command",
+                    "task_classes": ["planning"],
+                    "profile": "gpt-planner",
+                    "preferred_for": [],
+                    "policy": {"write_files": "allowed"},
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(pm_dispatch, "is_dispatchable", lambda op: (True, ""))
+
+    operator_id, _, reason = pm_dispatch.select_operator_by_role(role="planner", task_type="planning")
+
+    assert reason == ""
+    assert operator_id == "gpt-planner"
+
+
 def test_cmd_submit_reads_task_graph_capsule_metadata(monkeypatch):
     pm_dispatch = _load_pm_dispatch()
     with tempfile.TemporaryDirectory() as td:

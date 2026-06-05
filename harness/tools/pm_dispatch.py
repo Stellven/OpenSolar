@@ -674,6 +674,10 @@ def _operator_reject_reason_for_task(op: dict[str, Any], role: str, task_type: s
     """
     norm_role = normalize_role(role)
     task = str(task_type or "").strip().lower()
+    policy = op.get("policy") if isinstance(op.get("policy"), dict) else {}
+    if norm_role == "planner" and str(policy.get("write_files") or "").strip().lower() == "denied":
+        return "operator_cannot_write_planner_artifacts"
+
     requested_code_exec = norm_role in CODE_EXEC_ROLES or task in CODE_EXEC_TASK_TYPES
     if not requested_code_exec:
         return ""
