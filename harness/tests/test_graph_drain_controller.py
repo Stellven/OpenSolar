@@ -174,3 +174,6 @@ def test_graph_drain_apply_does_not_count_unavailable_builder_retry(monkeypatch,
     assert payload["counters"]["builder_candidates"] == 1
     assert payload["counters"]["builders_dispatched"] == 0
     assert payload["counters"]["drain_submitted"] == 0
+    assert payload["counters"]["skipped"] == 1
+    assert payload["skipped"][0]["reason"] == "builder_drain_no_dispatch"
+    assert payload["skipped"][0]["drain_reasons"] == ["assigned_pane_unavailable_retry_later"]
