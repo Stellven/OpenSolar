@@ -5226,6 +5226,26 @@ PY
     esac
     ;;
 
+  operator-health-watchdog|health-watchdog|watchdog)
+    shift
+    _ohw_watchdog_candidates=(
+      "$HARNESS_DIR/tools/operator_health_watchdog.py"
+      "${SOLAR_REPO_DIR:-$HOME/Solar}/harness/tools/operator_health_watchdog.py"
+    )
+    _ohw_watchdog_py=""
+    for _ohw_path in "${_ohw_watchdog_candidates[@]}"; do
+      if [[ -f "$_ohw_path" ]]; then
+        _ohw_watchdog_py="$_ohw_path"
+        break
+      fi
+    done
+    if [[ -z "$_ohw_watchdog_py" ]]; then
+      err "operator_health_watchdog.py not found under $HARNESS_DIR/tools or $HOME/Solar/harness/tools"
+      exit 1
+    fi
+    python3 "$_ohw_watchdog_py" "$@"
+    ;;
+
   runtime)
     # Managed Agent Runtime — session log, projection, activity, doctor
     shift

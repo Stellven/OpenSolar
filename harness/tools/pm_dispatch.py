@@ -79,6 +79,7 @@ TRANSIENT_OPERATOR_FAILURE_RE = re.compile(
     re.I,
 )
 RATE_LIMIT_PRUNER_LABEL = os.environ.get("SOLAR_RATE_LIMIT_PRUNER_LABEL", "com.solar.harness-rate-limit-pruner")
+OPERATOR_HEALTH_WATCHDOG_LABEL = os.environ.get("SOLAR_OPERATOR_HEALTH_WATCHDOG_LABEL", "com.solar.harness.operator-health-watchdog")
 CODE_EXEC_TASK_TYPES = {
     "implementation",
     "code-edit",
@@ -342,6 +343,80 @@ def _rate_limit_pruner_status() -> dict[str, Any]:
         payload["last_exit_code"] = int(exit_match.group(1))
     if interval_match:
         payload["run_interval_seconds"] = int(interval_match.group(1))
+    return payload
+
+
+def _operator_health_watchdog_status() -> dict[str, Any]:
+    """Return additive status for the operator health watchdog daemon/report."""
+    library_plist_path = HOME / "Library" / "LaunchAgents" / f"{OPERATOR_HEALTH_WATCHDOG_LABEL}.plist"
+    run_plist_path = HARNESS_DIR / "run" / "operator-health-watchdog" / f"{OPERATOR_HEALTH_WATCHDOG_LABEL}.plist"
+    plist_candidates = [library_plist_path, run_plist_path]
+    plist_path = next((path for path in plist_candidates if path.exists()), library_plist_path)
+    stdout_log = HARNESS_DIR / "logs" / "operator-health-watchdog.out.log"
+    stderr_log = HARNESS_DIR / "logs" / "operator-health-watchdog.err.log"
+    latest_path = HARNESS_DIR / "run" / "operator-health-watchdog" / "latest.json"
+    payload: dict[str, Any] = {
+        "label": OPERATOR_HEALTH_WATCHDOG_LABEL,
+        "plist_path": str(plist_path),
+        "plist_candidates": [str(path) for path in plist_candidates],
+        "installed": any(path.exists() for path in plist_candidates),
+        "launchd_loaded": False,
+        "last_run_at": None,
+        "last_exit_code": None,
+        "last_actions": {
+            "expired_blocks_pruned": 0,
+            "pm_failures_reconciled": 0,
+            "graph_nodes_released": 0,
+            "stale_leases_released": 0,
+            "drain_submitted": 0,
+        },
+        "blockers": [],
+        "degraded_reason": None,
+        "latest_report": str(latest_path),
+        "stdout_log": str(stdout_log),
+        "stderr_log": str(stderr_log),
+        "legacy_pruner": _rate_limit_pruner_status(),
+    }
+    if latest_path.exists():
+        try:
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+        except Exception:
+            latest = {}
+            payload["degraded_reason"] = "latest report unreadable"
+            payload["blockers"].append("latest report parse failed")
+        if isinstance(latest, dict) and latest:
+            summary = latest.get("summary") if isinstance(latest.get("summary"), dict) else {}
+            counters = latest.get("counters") if isinstance(latest.get("counters"), dict) else {}
+            payload["last_run_at"] = latest.get("finished_at") or latest.get("started_at")
+            payload["last_exit_code"] = latest.get("last_exit_code", 0 if latest.get("ok") else None)
+            payload["last_actions"] = {
+                "expired_blocks_pruned": counters.get("expired_blocks_pruned", summary.get("pruned_blocks", 0)),
+                "pm_failures_reconciled": counters.get("pm_failures_reconciled", summary.get("reconcile_count", 0)),
+                "graph_nodes_released": counters.get("graph_nodes_released", summary.get("releases", 0)),
+                "stale_leases_released": counters.get("stale_leases_released", 0),
+                "drain_submitted": counters.get("drain_submitted", summary.get("drain_submitted", 0)),
+            }
+            blockers = latest.get("blockers")
+            if isinstance(blockers, list):
+                payload["blockers"] = blockers
+            payload["degraded_reason"] = latest.get("degraded_reason")
+    else:
+        payload["degraded_reason"] = "watchdog latest report missing"
+        payload["blockers"].append("missing latest report")
+
+    if shutil.which("launchctl") is None:
+        return payload
+    try:
+        result = subprocess.run(
+            ["launchctl", "print", f"{_launchd_domain()}/{OPERATOR_HEALTH_WATCHDOG_LABEL}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return payload
+    payload["launchd_loaded"] = result.returncode == 0
     return payload
 
 
@@ -2152,6 +2227,7 @@ def builder_pool_snapshot(recover: bool = False) -> dict[str, Any]:
         "recommended_action": recommended_action,
         "recovery_actions": recovery_actions,
         "rate_limit_pruner": _rate_limit_pruner_status(),
+        "operator_health_watchdog": _operator_health_watchdog_status(),
         "rate_limit_blocks": rate_limit_blocks,
         "groups": groups,
         "operators": rows,
@@ -2181,6 +2257,14 @@ def cmd_builder_pool_status(args: argparse.Namespace) -> int:
         f"interval={pruner.get('run_interval_seconds') or 'N/A'}s "
         f"runs={pruner.get('runs') if pruner.get('runs') is not None else 'N/A'} "
         f"last_exit={pruner.get('last_exit_code') if pruner.get('last_exit_code') is not None else 'N/A'}"
+    )
+    watchdog = snapshot.get("operator_health_watchdog") if isinstance(snapshot.get("operator_health_watchdog"), dict) else {}
+    print(
+        "operator_health_watchdog "
+        f"installed={watchdog.get('installed', 'N/A')} loaded={watchdog.get('launchd_loaded', 'N/A')} "
+        f"last_run={watchdog.get('last_run_at') or 'N/A'} "
+        f"last_exit={watchdog.get('last_exit_code') if watchdog.get('last_exit_code') is not None else 'N/A'} "
+        f"degraded={watchdog.get('degraded_reason') or 'N/A'}"
     )
     print(
         f"{'group':<34} {'desired':>7} {'configured':>10} {'available':>9} "

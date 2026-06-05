@@ -142,9 +142,13 @@ def test_main_dispatches_loop_with_same_paths_as_once(monkeypatch):
 
 def test_main_invalid_loop_interval_exits_with_error(monkeypatch):
     watchdog = _load_watchdog()
-    rc, _, err = _run_main(monkeypatch, ["operator-health-watchdog", "run", "--loop", "--interval", "0", "--json"], watchdog)
+    rc, out, err = _run_main(monkeypatch, ["operator-health-watchdog", "run", "--loop", "--interval", "0", "--json"], watchdog)
     assert rc == 1
-    assert "requires --interval > 0" in err
+    assert err == ""
+    payload = json.loads(out.strip())
+    assert payload["ok"] is False
+    assert payload["degraded_reason"] == "--loop requires --interval > 0"
+    assert payload["run_once"]["mode"] == "loop"
 
 
 def test_main_dispatches_status_install_launchagent_routes(monkeypatch):
@@ -182,3 +186,16 @@ def test_main_dispatches_status_install_launchagent_routes(monkeypatch):
     assert got.get("install") is True
     assert got.get("dry_run") is True
     assert "degraded_reason" in json.loads(out_install)
+
+
+def test_install_launchagent_dry_run_uses_daemon_script():
+    watchdog = _load_watchdog()
+
+    payload = watchdog.command_install_launchagent(dry_run=True)
+
+    assert payload["ok"] is True
+    assert payload["dry_run"] is True
+    assert payload["label"] == "com.solar.harness.operator-health-watchdog"
+    assert payload["daemon_script"].endswith("operator-health-watchdog-daemon.sh")
+    assert payload["out_log"].endswith("operator-health-watchdog.out.log")
+    assert payload["err_log"].endswith("operator-health-watchdog.err.log")

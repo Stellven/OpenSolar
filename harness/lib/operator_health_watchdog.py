@@ -203,6 +203,84 @@ def _read_pm_backlog(pm_mod: Any) -> int:
     return count
 
 
+def _run_safe_drain_phase(pm_mod: Any, *, apply: bool, capacity: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    if not bool(capacity.get("ok", True)):
+        return (
+            _phase_entry(
+                "drain_if_capacity_available",
+                "skipped",
+                skipped=[{"reason": "capacity_unavailable", "capacity": capacity}],
+            ),
+            0,
+        )
+    if int(capacity.get("operators_usable", 0) or 0) <= 0:
+        return (
+            _phase_entry(
+                "drain_if_capacity_available",
+                "skipped",
+                skipped=[{"reason": "no_usable_operators", "capacity": capacity}],
+            ),
+            0,
+        )
+    if not hasattr(pm_mod, "cmd_drain_builder_ready"):
+        return (
+            _phase_entry(
+                "drain_if_capacity_available",
+                "skipped",
+                skipped=[{"reason": "pm_drain_unavailable"}],
+            ),
+            0,
+        )
+
+    allow_apply = os.environ.get("SOLAR_OHW_ENABLE_DRAIN_APPLY", "").strip() == "1"
+    dry_run = not (apply and allow_apply)
+    args = argparse.Namespace(sprint="", max_items=3, dry_run=dry_run, json=True)
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        rc = pm_mod.cmd_drain_builder_ready(args)
+    raw = stdout.getvalue().strip()
+    try:
+        payload = json.loads(raw) if raw else {}
+    except Exception:
+        payload = {"raw_stdout": raw}
+    if stderr.getvalue().strip():
+        payload["stderr"] = stderr.getvalue().strip()
+    submitted_count = len(payload.get("submitted") or []) if isinstance(payload.get("submitted"), list) else 0
+    skipped_count = len(payload.get("skipped") or []) if isinstance(payload.get("skipped"), list) else 0
+    phase_status = "ok" if rc == 0 or dry_run else "blocked"
+    actions = []
+    if submitted_count:
+        actions.append(
+            _action(
+                "drain_builder_ready",
+                "pm_dispatch",
+                "applied",
+                f"submitted={submitted_count}",
+                reason="capacity_available",
+                meta={"payload": payload},
+            )
+        )
+    skipped = [
+        {
+            "reason": "dry_run" if dry_run else "drain_returned_nonzero",
+            "returncode": rc,
+            "payload": payload,
+        }
+    ]
+    return (
+        _phase_entry(
+            "drain_if_capacity_available",
+            phase_status,
+            actions=actions,
+            skipped=skipped,
+            counters={"submitted": submitted_count, "skipped": skipped_count, "dry_run": int(dry_run)},
+            details={"payload": payload, "allow_apply": allow_apply},
+        ),
+        submitted_count,
+    )
+
+
 def _iter_pm_records(pm_mod: Any) -> Iterable[tuple[Path, dict[str, Any]]]:
     inbox_dir = getattr(pm_mod, "PM_INBOX_DIR", HARNESS_DIR / "run" / "pm-inbox")
     if not inbox_dir.exists():
@@ -673,7 +751,10 @@ def run_watchdog(
             )
         else:
             phases.append(_phase_entry("repair_status_projection", "skipped", skipped=[{"reason": "adapter_missing"}]))
-        phases.append(_phase_entry("drain_if_capacity_available", "skipped", skipped=[{"reason": "not_implemented_in_b1"}]))
+        drain_phase, drain_submitted = _run_safe_drain_phase(pm_mod, apply=apply, capacity=capacity)
+        counters["drain_submitted"] += drain_submitted
+        summary["drain_submitted"] = drain_submitted
+        phases.append(drain_phase)
         backlog_after = _read_pm_backlog(pm_mod)
     finally:
         if release is not None:
