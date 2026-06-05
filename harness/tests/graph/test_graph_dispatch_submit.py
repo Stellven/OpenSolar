@@ -185,6 +185,20 @@ class TestSendToPaneLiteral:
         assert repaired == []
         assert graph["nodes"][1]["status"] == "pending"
 
+    def test_existing_handoff_uses_node_artifacts_handoff_md(self, tmp_harness):
+        """Evaluator dispatch should honor handoff paths stored in node artifacts."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        handoff_name = f"{sid}.N1-handoff.md"
+        (sprints / handoff_name).write_text("# Node handoff\n", encoding="utf-8")
+        node = graph["nodes"][0]
+        node["artifacts"] = {"handoff_md": handoff_name}
+
+        handoff = gnd._existing_node_handoff(sid, node, graph)
+
+        assert handoff == sprints / handoff_name
+
     def test_stale_submit_ack_without_live_lease_does_not_resurrect_dispatch(self, tmp_harness, monkeypatch):
         """Old ack files are not proof of a current dispatch after the lease expired."""
         tmp_path, sprints, sid, graph = tmp_harness

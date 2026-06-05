@@ -1377,9 +1377,27 @@ def _strict_dependencies_passed(graph: dict[str, Any], node: dict[str, Any]) -> 
     return True
 
 
+def _resolve_handoff_artifact_path(value: Any) -> Path | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return path
+    parts = path.parts
+    if parts and parts[0] == "sprints":
+        return HARNESS_DIR / path
+    return SPRINTS_DIR / path
+
+
 def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
     node_id = str(node.get("id") or "")
     candidates = [_handoff_file(sid, node_id)]
+    artifacts = node.get("artifacts") if isinstance(node.get("artifacts"), dict) else {}
+    for key in ("handoff_md", "handoff", "handoff_path"):
+        artifact_path = _resolve_handoff_artifact_path(artifacts.get(key))
+        if artifact_path is not None:
+            candidates.append(artifact_path)
     for alias in _legacy_handoff_aliases(node_id):
         candidates.append(_handoff_file(sid, alias))
     parent_handoff = f"sprints/{sid}.handoff.md"
@@ -1388,7 +1406,15 @@ def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, An
             if _strict_dependencies_passed(graph, node):
                 candidates.append(SPRINTS_DIR / f"{sid}.handoff.md")
             break
-    return candidates
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    return deduped
 
 
 def _existing_node_handoff(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> Path | None:
