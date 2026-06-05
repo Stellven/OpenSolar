@@ -376,6 +376,14 @@ def rewrite_from_requirement_writer(raw_text: str, enhancement: dict[str, Any]) 
     return rewritten
 
 
+def requirement_source_for_raw_intent(raw_intent: dict[str, Any]) -> str:
+    source = raw_intent.get("source", {}) if isinstance(raw_intent.get("source"), dict) else {}
+    channel = str(source.get("channel") or "").strip()
+    if channel == "antigravity_app":
+        return "antigravity-app"
+    return "verbal"
+
+
 def build_requirement_ir(
     intent_id: str,
     raw_intent: dict[str, Any],
@@ -407,7 +415,8 @@ def build_requirement_ir(
     return {
         "schema_version": "solar.requirement_ir.v1",
         "intent_id": intent_id,
-        "source": raw_intent.get("source", {}),
+        "source": requirement_source_for_raw_intent(raw_intent),
+        "source_details": raw_intent.get("source", {}),
         "source_inputs": source_inputs,
         "title": rewritten.get("title", ""),
         "problem": rewritten.get("problem", ""),

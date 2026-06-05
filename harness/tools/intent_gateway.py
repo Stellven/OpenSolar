@@ -161,11 +161,20 @@ def model_rewrite(raw_intent: dict[str, Any], prompt_path: Path) -> tuple[dict[s
     return fallback, meta
 
 
+def requirement_source_for_raw_intent(raw_intent: dict[str, Any]) -> str:
+    source = raw_intent.get("source", {}) if isinstance(raw_intent.get("source"), dict) else {}
+    channel = str(source.get("channel") or "").strip()
+    if channel == "antigravity_app":
+        return "antigravity-app"
+    return "verbal"
+
+
 def build_requirement_ir(intent_id: str, raw_intent: dict[str, Any], rewritten: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "solar.requirement_ir.v1",
         "intent_id": intent_id,
-        "source": raw_intent.get("source", {}),
+        "source": requirement_source_for_raw_intent(raw_intent),
+        "source_details": raw_intent.get("source", {}),
         "title": rewritten.get("title", ""),
         "problem": rewritten.get("problem", ""),
         "objective": rewritten.get("objective", ""),

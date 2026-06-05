@@ -44,8 +44,39 @@ def test_capture_writes_raw_rewritten_ir_and_trace(tmp_path):
     assert raw["source"]["channel"] == "codex_macbook"
     assert rewritten["schema_version"] == "solar.rewritten_intent.v1"
     assert ir["schema_version"] == "solar.requirement_ir.v1"
+    assert ir["source"] == "verbal"
+    assert ir["source_details"]["channel"] == "codex_macbook"
     assert ir["compiler_next"] == "pm_planner_task_graph"
     assert trace["stages"][-1]["stage"] == "requirement_ir_compile"
+
+
+def test_capture_maps_antigravity_channel_to_requirement_source(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "capture",
+            "--text",
+            "从 Antigravity Desktop App 捕获需求，并进入 Solar Requirement IR。",
+            "--source-channel",
+            "antigravity_app",
+            "--source-trust",
+            "antigravity_app_file",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    ir = json.loads((tmp_path / "intents" / payload["intent_id"] / "requirement_ir.json").read_text())
+
+    assert ir["source"] == "antigravity-app"
+    assert ir["source_details"]["channel"] == "antigravity_app"
 
 
 def test_bind_copies_intent_artifacts_to_sprint(tmp_path):
