@@ -423,6 +423,67 @@ def _extract_text_from_status_payload(status_payload: dict[str, Any]) -> str:
     return ""
 
 
+def _conversation_fields_from_status_payload(status_payload: dict[str, Any]) -> tuple[str, str]:
+    latest_result = status_payload.get("latest_result") if isinstance(status_payload.get("latest_result"), dict) else {}
+    active_manifest = status_payload.get("active_manifest") if isinstance(status_payload.get("active_manifest"), dict) else {}
+    result_file = Path(str(latest_result.get("result_file") or "")).expanduser()
+    result_json: dict[str, Any] = {}
+    nested: dict[str, Any] = {}
+    if result_file.exists():
+        try:
+            result_json = json.loads(result_file.read_text(encoding="utf-8"))
+            nested = _parse_json_object(str(result_json.get("text") or ""))
+        except Exception:
+            result_json = {}
+            nested = {}
+    conversation_url = (
+        str(result_json.get("url") or "").strip()
+        or str(nested.get("url") or "").strip()
+        or str(latest_result.get("conversation_url") or "").strip()
+        or str(active_manifest.get("conversation_url") or "").strip()
+    )
+    conversation_id = (
+        str(result_json.get("conversation_id") or "").strip()
+        or str(nested.get("conversation_id") or "").strip()
+        or str(latest_result.get("conversation_id") or "").strip()
+        or str(active_manifest.get("conversation_id") or "").strip()
+    )
+    return conversation_url, conversation_id
+
+
+def _write_request_dir_artifacts(request_dir: str, *, status_payload: dict[str, Any]) -> None:
+    request_path = Path(request_dir).expanduser()
+    request_path.mkdir(parents=True, exist_ok=True)
+    text = _extract_text_from_status_payload(status_payload)
+    status = str(status_payload.get("status") or "").strip().lower()
+    conversation_url, conversation_id = _conversation_fields_from_status_payload(status_payload)
+    if text:
+        (request_path / "assistant-response.txt").write_text(text + "\n", encoding="utf-8")
+    collect_payload = {
+        "ok": status != "failed",
+        "status": status or "unknown",
+        "url": conversation_url,
+        "conversation_id": conversation_id,
+    }
+    (request_path / "collect-state.json").write_text(
+        json.dumps(collect_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    if conversation_url or conversation_id:
+        page_payload = {
+            "url": conversation_url,
+            "conversation_id": conversation_id,
+        }
+        (request_path / "page.json").write_text(
+            json.dumps(page_payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (request_path / "conversation.json").write_text(
+            json.dumps(page_payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+
 def _run_via_session_control(
     *,
     prompt: str,
@@ -498,6 +559,9 @@ def _run_via_session_control(
             poll_interval_seconds=2.0,
             terminal_statuses={"completed", "failed"},
         )
+        if request_dir:
+            _write_submitted_run(request_dir, task_id=task_id, status_payload=status_payload)
+            _write_request_dir_artifacts(request_dir, status_payload=status_payload)
         output = _extract_text_from_status_payload(status_payload)
         return rc, output or str((status_payload.get("latest_result") or {}).get("error") or "")
     rc, status_payload = collect_request(
@@ -506,6 +570,10 @@ def _run_via_session_control(
         poll_interval_seconds=2.0,
         terminal_statuses={"completed", "failed"} if action == "collect" else {"submitted", "running", "completed", "failed"},
     )
+    if request_dir:
+        _write_submitted_run(request_dir, task_id=task_id, status_payload=status_payload)
+        if action == "collect" or str(status_payload.get("status") or "").strip().lower() == "completed":
+            _write_request_dir_artifacts(request_dir, status_payload=status_payload)
     output = _extract_text_from_status_payload(status_payload)
     if action == "poll":
         if str(status_payload.get("status") or "").strip().lower() == "failed":

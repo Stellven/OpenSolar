@@ -526,3 +526,54 @@ def test_report_operator_submit_accepts_running_session_status(monkeypatch, tmp_
     assert submitted["url"] == "https://chatgpt.com/c/demo"
     assert submitted["conversation_id"] == "demo"
     assert json.loads(capsys.readouterr().out)["status"] == "running"
+
+
+def test_report_operator_collect_backfills_request_dir_from_completed_result(monkeypatch, tmp_path, capsys):
+    request_dir = tmp_path / "request"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    (request_dir / "chatgpt-mode-state.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    (request_dir / "submitted-run.json").write_text(
+        json.dumps({"task_id": "task-completed"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    result_file = tmp_path / "result.json"
+    result_file.write_text(
+        json.dumps(
+            {
+                "text": json.dumps(
+                    {"chapters": [{"chapter_id": "ch_01", "text": "body"}]},
+                    ensure_ascii=False,
+                )
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", raising=False)
+    monkeypatch.setenv("BROWSER_AGENT_REQUEST_DIR", str(request_dir))
+    monkeypatch.setenv("BROWSER_AGENT_PURPOSE", "ai-influence-report-phase2-batch")
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED", "1")
+    monkeypatch.setenv("CHATGPT_REPORT_ACTION", "collect")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(
+        cro,
+        "collect_request",
+        lambda *args, **kwargs: (
+            0,
+            {
+                "status": "completed",
+                "active_manifest": {
+                    "conversation_url": "https://chatgpt.com/c/completed",
+                    "conversation_id": "completed",
+                },
+                "latest_result": {"result_file": str(result_file)},
+            },
+        ),
+    )
+
+    assert cro.main() == 0
+    assert json.loads(capsys.readouterr().out)["chapters"][0]["chapter_id"] == "ch_01"
+    assert json.loads((request_dir / "collect-state.json").read_text(encoding="utf-8"))["status"] == "completed"
+    assert (request_dir / "assistant-response.txt").read_text(encoding="utf-8").strip().startswith("{\"chapters\"")
+    assert json.loads((request_dir / "page.json").read_text(encoding="utf-8"))["conversation_id"] == "completed"
