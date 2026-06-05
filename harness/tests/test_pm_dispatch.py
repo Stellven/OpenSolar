@@ -104,6 +104,53 @@ def test_select_operator_by_role_rejects_write_denied_planner(monkeypatch):
     assert operator_id == "gpt-planner"
 
 
+def test_multi_role_operator_uses_requested_role_persona(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    monkeypatch.setattr(pm_dispatch, "PERSONAS_DIR", tmp_path)
+    (tmp_path / "builder.md").write_text("# Builder\n", encoding="utf-8")
+    (tmp_path / "evaluator.md").write_text("# Evaluator\n", encoding="utf-8")
+    monkeypatch.setattr(
+        pm_dispatch,
+        "load_registry",
+        lambda: {
+            "version": 1,
+            "operators": {
+                "gpt55-multi": {
+                    "enabled": True,
+                    "available": True,
+                    "role": "builder",
+                    "roles": ["builder", "evaluator"],
+                    "persona": "builder",
+                    "launch_cmd_kind": "command",
+                    "task_classes": ["implementation", "review", "verification"],
+                    "profile": "codex-builder",
+                    "preferred_for": ["evaluator"],
+                    "model": "gpt-5.5",
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(pm_dispatch, "is_dispatchable", lambda op: (True, ""))
+
+    operator_id, operator, reason = pm_dispatch.select_operator_by_role(role="evaluator", task_type="review")
+
+    assert reason == ""
+    assert operator_id == "gpt55-multi"
+    assert operator["selected_for_role"] == "evaluator"
+    dispatch_text = pm_dispatch.build_pm_dispatch_text(
+        "task-1",
+        operator_id,
+        operator,
+        "review the handoff",
+        "sprint-1",
+        "N1",
+        "/tmp/result.md",
+    )
+    assert "Persona file: `" + str(tmp_path / "evaluator.md") + "`" in dispatch_text
+    assert "# Evaluator" in dispatch_text
+    assert "# Builder" not in dispatch_text
+
+
 def test_cmd_submit_reads_task_graph_capsule_metadata(monkeypatch):
     pm_dispatch = _load_pm_dispatch()
     with tempfile.TemporaryDirectory() as td:

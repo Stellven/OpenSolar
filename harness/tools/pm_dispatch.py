@@ -993,6 +993,8 @@ def select_operator_by_role(
         op_roles = _operator_roles(op)
         if norm_role not in op_roles:
             continue
+        if normalize_role(str(op.get("role") or "")) != norm_role:
+            op["selected_for_role"] = norm_role
         if pool_mode and op_id not in pool_member_ids:
             continue
         # Hard-reject: operators may declare task types they will not accept.
@@ -1069,7 +1071,7 @@ def build_pm_dispatch_text(
     result_path: str,
     context: str = "",
 ) -> str:
-    persona_name = str(operator.get("persona") or operator.get("role") or "builder")
+    persona_name = str(operator.get("borrowed_for_role") or operator.get("selected_for_role") or operator.get("persona") or operator.get("role") or "builder")
     persona_path, persona_body = persona_text(persona_name)
     harness = HARNESS_DIR / "solar-harness.sh"
     borrow_block = ""
