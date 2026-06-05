@@ -1572,6 +1572,88 @@ def _latest_pm_task_record_for(sid: str, node_id: str, operator_id: str = "") ->
     return newest[1] if newest else None
 
 
+def _pm_task_has_active_runtime(record: dict[str, Any]) -> bool:
+    task_id = str(record.get("task_id") or record.get("id") or "").strip()
+    if not task_id:
+        return False
+    inbox_path = str(record.get("inbox_path") or "").strip()
+    if inbox_path and Path(inbox_path).expanduser().exists():
+        return True
+
+    operator_id = str(record.get("operator_id") or "").strip()
+    lease_dir = HARNESS_DIR / "run" / "operator-leases"
+    candidates: list[Path] = []
+    if operator_id:
+        candidates.append(lease_dir / f"{operator_id}.json")
+    if lease_dir.exists():
+        candidates.extend(sorted(lease_dir.glob("*.json")))
+    seen: set[str] = set()
+    for lease_path in candidates:
+        key = str(lease_path)
+        if key in seen:
+            continue
+        seen.add(key)
+        lease = _read_json_file_safe(lease_path)
+        if not lease:
+            continue
+        if str(lease.get("task_id") or "") != task_id:
+            continue
+        state = str(lease.get("state") or lease.get("status") or "").strip().lower()
+        if state in {"completed", "failed", "cancelled", "canceled", "error", "expired", "released"}:
+            continue
+        expires_at = str(lease.get("expires_at") or "")
+        parsed = _parse_utc(expires_at) if expires_at else None
+        if parsed is not None and parsed <= datetime.datetime.now(datetime.timezone.utc):
+            continue
+        return True
+    return False
+
+
+def _active_pm_evaluator_task_record_for(sid: str, node_id: str) -> dict[str, Any] | None:
+    """Return the newest active PM evaluator task for a graph node."""
+    root = HARNESS_DIR / "run" / "pm-inbox"
+    if not root.exists():
+        return None
+    active_statuses = {
+        "submitted",
+        "submitted_fallback",
+        "running",
+        "in_progress",
+        "active",
+        "assigned",
+        "queued",
+    }
+    evaluator_roles = {"evaluator", "reviewer", "verification", "verifier", "eval"}
+    newest: tuple[str, dict[str, Any]] | None = None
+    for record_json in root.glob("pm-*.json"):
+        data = _read_json_file_safe(record_json)
+        if str(data.get("sprint_id") or "") != sid:
+            continue
+        if str(data.get("node_id") or "") != node_id:
+            continue
+        role = str(data.get("requested_role") or data.get("role") or "").strip().lower()
+        is_graph_eval = bool(data.get("graph_eval_dispatch"))
+        if role and role not in evaluator_roles and not is_graph_eval:
+            continue
+        status = str(data.get("status") or "").strip().lower()
+        if status not in active_statuses:
+            continue
+        if not _pm_task_has_active_runtime(data):
+            continue
+        stamp = str(
+            data.get("submitted_at")
+            or data.get("started_at")
+            or data.get("updated_at")
+            or data.get("created_at")
+            or ""
+        )
+        item = dict(data)
+        item["_pm_task_json"] = str(record_json)
+        if newest is None or stamp > newest[0]:
+            newest = (stamp, item)
+    return newest[1] if newest else None
+
+
 def _operator_terminal_result_closeout(
     sid: str,
     node_id: str,
@@ -2221,6 +2303,9 @@ def _node_eval_assignments(node: dict[str, Any]) -> list[dict[str, Any]]:
                 {
                     "pane": pane,
                     "dispatch_id": dispatch_id,
+                    "task_id": str(item.get("task_id") or item.get("pm_task_id") or ""),
+                    "graph_dispatch_id": str(item.get("graph_dispatch_id") or ""),
+                    "operator_id": str(item.get("operator_id") or ""),
                     "role": str(item.get("role") or "secondary"),
                     "eval_md_path": str(item.get("eval_md_path") or ""),
                     "eval_json_path": str(item.get("eval_json_path") or ""),
@@ -2235,6 +2320,9 @@ def _node_eval_assignments(node: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "pane": pane,
                 "dispatch_id": dispatch_id,
+                "task_id": str(node.get("eval_task_id") or ""),
+                "graph_dispatch_id": str(node.get("eval_graph_dispatch_id") or ""),
+                "operator_id": str(node.get("eval_operator_id") or ""),
                 "role": "primary",
                 "eval_md_path": str(node.get("eval_md_path") or ""),
                 "eval_json_path": str(node.get("eval_json") or ""),
@@ -2455,6 +2543,9 @@ def _store_eval_assignments(
         {
             "pane": str(item.get("pane") or ""),
             "dispatch_id": str(item.get("dispatch_id") or ""),
+            "task_id": str(item.get("task_id") or item.get("pm_task_id") or ""),
+            "graph_dispatch_id": str(item.get("graph_dispatch_id") or ""),
+            "operator_id": str(item.get("operator_id") or ""),
             "role": str(item.get("role") or "secondary"),
             "eval_md_path": str(item.get("eval_md_path") or ""),
             "eval_json_path": str(item.get("eval_json_path") or ""),
@@ -2465,7 +2556,15 @@ def _store_eval_assignments(
     node["eval_assignments"] = normalized
     primary = next((item for item in normalized if item.get("role") == "primary"), normalized[0] if normalized else {})
     node["eval_assigned_to"] = str(primary.get("pane") or "")
-    node["eval_dispatch_id"] = str(primary.get("dispatch_id") or "")
+    durable_dispatch_id = str(primary.get("task_id") or primary.get("dispatch_id") or "")
+    graph_dispatch_id = str(primary.get("graph_dispatch_id") or primary.get("dispatch_id") or "")
+    node["eval_dispatch_id"] = durable_dispatch_id
+    if str(primary.get("task_id") or ""):
+        node["eval_task_id"] = str(primary.get("task_id") or "")
+    if graph_dispatch_id and graph_dispatch_id != durable_dispatch_id:
+        node["eval_graph_dispatch_id"] = graph_dispatch_id
+    if str(primary.get("operator_id") or ""):
+        node["eval_operator_id"] = str(primary.get("operator_id") or "")
     node["eval_dispatched_at"] = dispatched_at
     if str(node.get("eval_retry_reason") or "") == "eval_dispatch_send_failed":
         node.pop("eval_retry_reason", None)
@@ -2476,7 +2575,7 @@ def _store_eval_assignments(
             sprint_id,
             node_id,
             "reviewing",
-            dispatch_id=str(primary.get("dispatch_id") or ""),
+            dispatch_id=durable_dispatch_id,
             assigned_to=str(primary.get("pane") or ""),
             note="graph_node_dispatcher evaluator dispatch",
         )
@@ -2486,6 +2585,9 @@ def _clear_eval_assignments(node: dict[str, Any]) -> None:
     node.pop("eval_assignments", None)
     node.pop("eval_assigned_to", None)
     node.pop("eval_dispatch_id", None)
+    node.pop("eval_task_id", None)
+    node.pop("eval_graph_dispatch_id", None)
+    node.pop("eval_operator_id", None)
     node.pop("eval_dispatched_at", None)
 
 
@@ -5759,6 +5861,47 @@ def _node_eval_needed(graph: dict[str, Any], sid: str, node: dict[str, Any], for
             _store_eval_assignments(node, recovered, recovered_at or _utc_now(), sprint_id=sid)
             node["eval_recovered_from_lease"] = True
             return False
+        active_pm_task = _active_pm_evaluator_task_record_for(sid, node_id)
+        if active_pm_task:
+            task_id = str(active_pm_task.get("task_id") or active_pm_task.get("id") or "").strip()
+            operator_id = str(active_pm_task.get("operator_id") or "").strip()
+            graph_dispatch_id = str(
+                active_pm_task.get("graph_dispatch_id")
+                or active_pm_task.get("graph_eval_dispatch_id")
+                or active_pm_task.get("dispatch_id")
+                or ""
+            ).strip()
+            pane = str(active_pm_task.get("pane") or "").strip()
+            if not pane and operator_id:
+                pane = f"operator:{operator_id}"
+            if task_id and pane:
+                _store_eval_assignments(
+                    node,
+                    [
+                        {
+                            "pane": pane,
+                            "dispatch_id": task_id,
+                            "task_id": task_id,
+                            "graph_dispatch_id": graph_dispatch_id,
+                            "operator_id": operator_id,
+                            "role": "primary",
+                            "eval_md_path": str(_eval_md_file(sid, node_id)),
+                            "eval_json_path": str(_eval_json_file(sid, node_id)),
+                        }
+                    ],
+                    str(
+                        active_pm_task.get("submitted_at")
+                        or active_pm_task.get("started_at")
+                        or active_pm_task.get("updated_at")
+                        or _utc_now()
+                    ),
+                    sprint_id=sid,
+                )
+                node["eval_recovered_from_pm_task"] = True
+                node["eval_recovered_pm_task_json"] = str(active_pm_task.get("_pm_task_json") or "")
+                node.pop("eval_retry_reason", None)
+                node.pop("eval_retry_detail", None)
+                return False
     if node.get("eval_dispatched_at") and not force:
         assignments = _node_eval_assignments(node)
         dispatched_at = _parse_utc(str(node.get("eval_dispatched_at") or ""))
@@ -6015,6 +6158,19 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 if sent:
                     pane = str(submit_result.get("pane") or pane)
                     assignment["pane"] = pane
+                    pm_dispatch = submit_result.get("pm_dispatch") if isinstance(submit_result.get("pm_dispatch"), dict) else {}
+                    pm_task_id = str(pm_dispatch.get("pm_task_id") or "").strip()
+                    if pm_task_id:
+                        assignment["task_id"] = pm_task_id
+                        assignment["graph_dispatch_id"] = str(assignment["dispatch_id"])
+                        assignment["operator_id"] = str(submit_result.get("operator_id") or "")
+                    elif not dry_run:
+                        sent = False
+                        submit_result = {
+                            **submit_result,
+                            "ok": False,
+                            "reason": "operator_pool_eval_missing_pm_task_id",
+                        }
             else:
                 submit_result = {}
                 sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=str(assignment["dispatch_id"]))
@@ -6036,7 +6192,9 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             sent_records.append({
                 "node": node_id,
                 "pane": pane,
-                "dispatch_id": str(assignment["dispatch_id"]),
+                "dispatch_id": str(assignment.get("task_id") or assignment["dispatch_id"]),
+                "graph_dispatch_id": str(assignment.get("graph_dispatch_id") or assignment["dispatch_id"]),
+                "pm_task_id": str(assignment.get("task_id") or ""),
                 "instruction_file": str(instruction_file),
                 "evaluation_plan": runtime_plan,
                 "role": assignment["role"],

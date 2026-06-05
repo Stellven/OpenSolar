@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 
@@ -202,6 +203,146 @@ def test_dispatch_node_evals_operator_pool_send_failed_records_submit_detail(mon
     assert node["eval_retry_detail"]["reason"] == "operator_pool_eval_submit_failed"
     assert "no_dispatchable_operator_for_role" in node["eval_retry_detail"]["stderr"]
     assert saved["graph"] is graph
+
+
+def test_dispatch_node_evals_operator_pool_uses_pm_task_id_as_durable_eval_dispatch(monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid-eval-pool-success",
+        "nodes": [
+            {
+                "id": "N2",
+                "goal": "needs operator-pool eval",
+                "status": "reviewing",
+            }
+        ],
+    }
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(gnd, "load_graph", lambda path: graph)
+    monkeypatch.setattr(gnd, "save_graph", lambda path, data: saved.setdefault("graph", data))
+    monkeypatch.setattr(gnd, "_node_eval_needed", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: Path("/tmp/handoff.md"))
+    monkeypatch.setattr(gnd, "_node_handoff_candidates", lambda sid, node, graph: [Path("/tmp/handoff.md")])
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: Path("/tmp/eval.md"))
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_member_file", lambda sid, node_id, idx: Path(f"/tmp/eval-dispatch-{idx}.md"))
+    monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_sync_state_node", lambda *args, **kwargs: {"ok": True})
+    monkeypatch.setattr(
+        gnd,
+        "_submit_eval_to_operator_pool",
+        lambda **kwargs: {
+            "ok": True,
+            "pane": "operator:mini-codex-gpt55-medium-builder-1",
+            "operator_id": "mini-codex-gpt55-medium-builder-1",
+            "pm_dispatch": {
+                "pm_task_id": "pm-sid-eval-pool-success-N2-test",
+                "pm_dispatch_file": "/tmp/pm-dispatch.md",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        gnd,
+        "_discover_evaluators",
+        lambda dry_run=False: [
+            {"pane": "operator-pool:evaluator.0", "busy": False, "models": ["operator-pool"], "skills": ["review"]},
+        ],
+    )
+
+    result = gnd.dispatch_node_evals("/tmp/sid-eval-pool-success.task_graph.json", dry_run=False)
+
+    node = graph["nodes"][0]
+    assignment = node["eval_assignments"][0]
+    assert result["ok"] is True
+    assert result["skipped"] == []
+    assert result["dispatched"][0]["dispatch_id"] == "pm-sid-eval-pool-success-N2-test"
+    assert result["dispatched"][0]["pm_task_id"] == "pm-sid-eval-pool-success-N2-test"
+    assert result["dispatched"][0]["graph_dispatch_id"].startswith("graph-eval-sid-eval-pool-success-N2-")
+    assert node["eval_dispatch_id"] == "pm-sid-eval-pool-success-N2-test"
+    assert node["eval_task_id"] == "pm-sid-eval-pool-success-N2-test"
+    assert node["eval_graph_dispatch_id"].startswith("graph-eval-sid-eval-pool-success-N2-")
+    assert assignment["task_id"] == "pm-sid-eval-pool-success-N2-test"
+    assert assignment["dispatch_id"].startswith("graph-eval-sid-eval-pool-success-N2-")
+    assert assignment["graph_dispatch_id"] == assignment["dispatch_id"]
+    assert assignment["operator_id"] == "mini-codex-gpt55-medium-builder-1"
+    assert saved["graph"] is graph
+
+
+def test_node_eval_needed_recovers_active_pm_evaluator_task(monkeypatch, tmp_path) -> None:
+    sid = "sid-eval-pm-recover"
+    node_id = "N2"
+    task_id = "pm-sid-eval-pm-recover-N2-active"
+    operator_id = "mini-codex-gpt55-medium-builder-2"
+    graph_dispatch_id = "graph-eval-sid-eval-pm-recover-N2-20260605T211102Z-q1"
+    graph = {
+        "sprint_id": sid,
+        "nodes": [
+            {
+                "id": node_id,
+                "goal": "recover active PM evaluator task",
+                "status": "reviewing",
+            }
+        ],
+    }
+    node = graph["nodes"][0]
+    inbox_path = tmp_path / "run" / "operator-inbox" / operator_id / f"{task_id}.json"
+    inbox_path.parent.mkdir(parents=True, exist_ok=True)
+    inbox_path.write_text("{}", encoding="utf-8")
+    pm_inbox = tmp_path / "run" / "pm-inbox"
+    pm_inbox.mkdir(parents=True, exist_ok=True)
+    (pm_inbox / f"{task_id}.json").write_text(
+        json.dumps(
+            {
+                "task_id": task_id,
+                "sprint_id": sid,
+                "node_id": node_id,
+                "operator_id": operator_id,
+                "requested_role": "evaluator",
+                "status": "submitted",
+                "graph_eval_dispatch": True,
+                "graph_eval_dispatch_id": graph_dispatch_id,
+                "inbox_path": str(inbox_path),
+                "submitted_at": "2026-06-05T21:11:21Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    operator_lease = tmp_path / "run" / "operator-leases" / f"{operator_id}.json"
+    operator_lease.parent.mkdir(parents=True, exist_ok=True)
+    operator_lease.write_text(
+        json.dumps(
+            {
+                "operator_id": operator_id,
+                "task_id": task_id,
+                "sprint_id": sid,
+                "node_id": node_id,
+                "state": "running",
+                "expires_at": "2999-01-01T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(gnd, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: tmp_path / f"{sid}.{node_id}-eval.md")
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: tmp_path / f"{sid}.{node_id}-eval.json")
+    monkeypatch.setattr(gnd, "_sync_state_node", lambda *args, **kwargs: {"ok": True})
+    monkeypatch.setattr(gnd, "list_leases", lambda: [])
+
+    needed = gnd._node_eval_needed(graph, sid, node, force=False)
+
+    assignment = node["eval_assignments"][0]
+    assert needed is False
+    assert node["eval_dispatch_id"] == task_id
+    assert node["eval_task_id"] == task_id
+    assert node["eval_graph_dispatch_id"] == graph_dispatch_id
+    assert node["eval_operator_id"] == operator_id
+    assert node["eval_recovered_from_pm_task"] is True
+    assert assignment["pane"] == f"operator:{operator_id}"
+    assert assignment["dispatch_id"] == task_id
+    assert assignment["task_id"] == task_id
+    assert assignment["graph_dispatch_id"] == graph_dispatch_id
 
 
 def test_force_dispatch_node_evals_archives_stale_eval_sidecars(monkeypatch, tmp_path) -> None:

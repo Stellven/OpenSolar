@@ -128,7 +128,7 @@ def _clear_builder_assignment_fields(item: dict[str, Any]) -> None:
 def _clear_evaluator_assignment_fields(item: dict[str, Any]) -> None:
     if not isinstance(item, dict):
         return
-    for key in ("eval_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
+    for key in ("eval_dispatch_id", "eval_task_id", "eval_graph_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
         item.pop(key, None)
 
 
@@ -254,7 +254,7 @@ def release_evaluator_assignment_on_transient_provider_failure(record: dict[str,
     eval_dispatch_id = str(target.get("eval_dispatch_id") or "")
     if eval_dispatch_id == task_id:
         had_assignment = True
-        for key in ("eval_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
+        for key in ("eval_dispatch_id", "eval_task_id", "eval_graph_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
             target.pop(key, None)
 
     if not had_assignment:

@@ -2837,7 +2837,7 @@ def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) ->
             target.pop("eval_assignments", None)
     if str(target.get("eval_dispatch_id") or "") == task_id:
         had_assignment = True
-        for key in ("eval_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
+        for key in ("eval_dispatch_id", "eval_task_id", "eval_graph_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
             target.pop(key, None)
     if not had_assignment:
         return {"ok": True, "released": False, "reason": "dispatch_mismatch", "graph": str(graph_path), "node_id": node_id}
@@ -2855,7 +2855,7 @@ def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) ->
     result_entry = (graph.get("node_results") or {}).get(node_id)
     if isinstance(result_entry, dict):
         if str(result_entry.get("eval_dispatch_id") or "") == task_id:
-            for key in ("eval_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
+            for key in ("eval_dispatch_id", "eval_task_id", "eval_graph_dispatch_id", "eval_dispatched_at", "eval_operator_id"):
                 result_entry.pop(key, None)
         result_entry["updated_at"] = now
 
