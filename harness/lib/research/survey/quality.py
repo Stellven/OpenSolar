@@ -54,16 +54,16 @@ def _required_types_from_source_matrix(root: Path) -> set[str]:
 def _chapter_axis(chapter_title: str) -> str:
     text = str(chapter_title or "")
     rules = [
+        ("risk", r"风险|安全|可解释"),
         ("definition", r"定义|边界|术语"),
         ("history", r"历史|演进|脉络"),
-        ("evaluation", r"评估|基准|评价"),
+        ("evaluation", r"评估|基准|评价|证据强度|证据链|信号地图"),
         ("contradiction", r"争议|反证|失败"),
-        ("architecture", r"架构|范式|系统"),
-        ("method_taxonomy", r"分类|方法|代表系统"),
-        ("engineering", r"工程|部署|实现"),
-        ("risk", r"风险|安全|可解释"),
+        ("architecture", r"架构|范式|系统|技术|设计映射"),
+        ("method_taxonomy", r"分类|方法|代表系统|关键变化|分歧|机会"),
+        ("engineering", r"工程|部署|实现|行动路线|行动"),
         ("ecosystem", r"产业|生态|开源"),
-        ("roadmap", r"未来|路线图|开放问题"),
+        ("roadmap", r"未来|路线图|开放问题|预测|观察指标|下一步"),
     ]
     for axis, pattern in rules:
         if re.search(pattern, text):

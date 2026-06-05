@@ -185,6 +185,10 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert "#### 本节判断" in human_text
     assert "#### 影响与行动" in human_text
     assert "2026 年的 Agentic Runtime" not in human_text
+    assert "official_doc" not in human_text
+    assert "Execution Metrics" not in human_text
+    assert "estimated_from_report_artifacts" not in human_text
+    assert "官方材料" in human_text
 
 
 def test_compile_insight_survey_can_render_premium_figure_with_svg_fallback(tmp_path):
