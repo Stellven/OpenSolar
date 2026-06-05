@@ -544,7 +544,8 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     assert "本周持续热点" in markdown
     assert "本月持续热点" in markdown
     assert "新晋爆发候选" in markdown
-    assert "hf-heat-grid" in html
+    assert "hf-heat-daily" in html
+    assert "hf-heat-secondary" in html
     assert "hf-top-list" in html
 
 
