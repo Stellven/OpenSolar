@@ -218,6 +218,27 @@ def _active_run_path(task_id: str) -> Path:
     return _active_runs_dir() / f"{task_id}.json"
 
 
+def _collect_backoff_seconds(attempts: int, status: str) -> float:
+    clean_status = str(status or "").strip().lower()
+    count = max(int(attempts or 0), 0)
+    if clean_status == "submitted":
+        return min(18.0, 4.0 * max(1, min(count + 1, 4)))
+    return min(24.0, 6.0 * max(1, min(count + 1, 4)))
+
+
+def _schedule_next_collect(manifest: dict[str, Any], *, status: str) -> None:
+    attempts = int(manifest.get("collect_attempts") or 0)
+    manifest["next_collect_after_ts"] = time.time() + _collect_backoff_seconds(attempts, status)
+
+
+def _collect_due(manifest: dict[str, Any]) -> bool:
+    try:
+        due_at = float(manifest.get("next_collect_after_ts") or 0.0)
+    except Exception:
+        due_at = 0.0
+    return due_at <= 0.0 or time.time() >= due_at
+
+
 def _write_active_run(manifest: dict[str, Any]) -> Path:
     path = _active_run_path(str(manifest["task_id"]))
     tmp = path.with_suffix(".json.tmp")
@@ -483,7 +504,7 @@ def _active_run_manifest(
     request = dict(envelope.get(_request_field(str(envelope.get("logical_operator") or ""))) or {})
     request["request_dir"] = request_dir
     request["action"] = "submit"
-    return {
+    manifest = {
         "task_id": str(envelope.get("task_id") or ""),
         "logical_operator": str(envelope.get("logical_operator") or ""),
         "task_dir": str(task_dir),
@@ -499,6 +520,8 @@ def _active_run_manifest(
         "updated_at": _now_iso(),
         "collect_attempts": 0,
     }
+    _schedule_next_collect(manifest, status=str(manifest.get("status") or "submitted"))
+    return manifest
 
 
 def process_task_file(
@@ -653,6 +676,8 @@ def process_active_runs_once(
             continue
         if task_id in skip_task_ids:
             continue
+        if not _collect_due(manifest):
+            continue
         task_dir = Path(str(manifest.get("task_dir") or "")).expanduser()
         envelope_path = task_dir / "envelope.json"
         if not envelope_path.exists():
@@ -700,6 +725,7 @@ def process_active_runs_once(
             manifest["status"] = str(status_json.get("status") or manifest.get("status") or "running")
             manifest["updated_at"] = _now_iso()
             manifest["collect_attempts"] = int(manifest.get("collect_attempts") or 0) + 1
+            _schedule_next_collect(manifest, status=str(manifest.get("status") or "running"))
             _write_active_run(manifest)
             broker.transition(actor_id, READY)
             mailbox.write_heartbeat("idle", {"task_id": task_id, "status": manifest["status"]})

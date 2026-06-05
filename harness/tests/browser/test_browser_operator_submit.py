@@ -111,7 +111,9 @@ def test_submit_chatgpt_operator_request_uses_explicit_submit_poll_collect(monke
             {"status": "completed", "latest_result": {}},
         ]
     )
+    sleep_calls: list[float] = []
     monkeypatch.setattr("browser_operator_submit.poll_request", lambda task_id: next(statuses))
+    monkeypatch.setattr("browser_operator_submit.time.sleep", lambda seconds: sleep_calls.append(seconds))
     result = submit_chatgpt_operator_request(
         cmd=[sys.executable, str(operator)],
         prompt="demo prompt",
@@ -127,6 +129,7 @@ def test_submit_chatgpt_operator_request_uses_explicit_submit_poll_collect(monke
     assert len(payload["body"]) == 1200
     assert (tmp_path / "request" / "submit-stdout.txt").exists()
     assert (tmp_path / "request" / "poll-status.json").exists()
+    assert sleep_calls == [0.4]
 
 
 def test_submit_gemini_operator_request_writes_stdout(tmp_path):

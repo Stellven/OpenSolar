@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 sys.path.append(str(ROOT / "tools"))
 
 from actor_mailbox import ActorMailbox
-from browser_agent_session_control import main as control_main, submit_request
+from browser_agent_session_control import _collect_poll_sleep_seconds, main as control_main, submit_request
 
 
 def _run_cli(args: list[str]) -> tuple[int, dict]:
@@ -174,3 +174,10 @@ def test_submit_request_retries_when_browser_agent_session_lease_is_busy(monkeyp
         assert runtime.calls == 2
         assert sleep_calls == [0.5]
         assert payload["inbox_task_file"]
+
+
+def test_collect_poll_sleep_seconds_backs_off_for_running_states():
+    assert _collect_poll_sleep_seconds(2.0, 1, "submitted") == 2.0
+    assert _collect_poll_sleep_seconds(2.0, 3, "submitted") == 6.0
+    assert _collect_poll_sleep_seconds(2.0, 1, "running") == 4.0
+    assert _collect_poll_sleep_seconds(2.0, 4, "running") == 8.0

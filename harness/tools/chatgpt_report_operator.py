@@ -474,7 +474,7 @@ def _run_via_session_control(
         rc, status_payload = collect_request(
             task_id,
             timeout_seconds=min(timeout, 60),
-            poll_interval_seconds=1.0,
+            poll_interval_seconds=2.0,
             terminal_statuses={"submitted", "running", "failed"},
         )
         if request_dir:
@@ -495,7 +495,7 @@ def _run_via_session_control(
         rc, status_payload = collect_request(
             task_id,
             timeout_seconds=timeout,
-            poll_interval_seconds=1.0,
+            poll_interval_seconds=2.0,
             terminal_statuses={"completed", "failed"},
         )
         output = _extract_text_from_status_payload(status_payload)
@@ -503,7 +503,7 @@ def _run_via_session_control(
     rc, status_payload = collect_request(
         task_id,
         timeout_seconds=timeout,
-        poll_interval_seconds=1.0,
+        poll_interval_seconds=2.0,
         terminal_statuses={"completed", "failed"} if action == "collect" else {"submitted", "running", "completed", "failed"},
     )
     output = _extract_text_from_status_payload(status_payload)

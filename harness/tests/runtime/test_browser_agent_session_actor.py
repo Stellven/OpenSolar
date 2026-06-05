@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +16,7 @@ from actor_mailbox import ActorMailbox
 from actor_lease import LeaseBroker
 from browser.profile_lease import ProfileLease
 from browser_agent_session_actor import (
+    _active_run_path,
     drain_once,
     ensure_supervisor_running,
     recover_stale_supervisor_runtime,
@@ -150,6 +152,9 @@ def test_browser_agent_session_actor_submit_then_collect(monkeypatch):
         assert len(manifests) == 1
         second_results = mailbox.read_results("task-async")
         assert not any(item["status"] == "completed" for item in second_results)
+        manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+        manifest["next_collect_after_ts"] = 0
+        manifests[0].write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         rc3 = drain_once(
             actor_id="browser_agent_session",
@@ -158,9 +163,75 @@ def test_browser_agent_session_actor_submit_then_collect(monkeypatch):
         )
         assert rc3 == 0
         manifests = sorted(active_dir.glob("*.json"))
+        assert len(manifests) == 1
+        manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
+        manifest["next_collect_after_ts"] = 0
+        manifests[0].write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        rc4 = drain_once(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert rc4 == 0
+        manifests = sorted(active_dir.glob("*.json"))
         assert manifests == []
         final_results = mailbox.read_results("task-async")
         assert any(item["status"] == "completed" for item in final_results)
+
+
+def test_browser_agent_session_actor_respects_next_collect_backoff(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        base = td_path / "actors"
+        lease_dir = td_path / "run" / "actor-leases"
+        mailbox = ActorMailbox("browser_agent_session", base)
+        task_dir = mailbox.logs / "task-backoff"
+        task_dir.mkdir(parents=True, exist_ok=True)
+        envelope = {
+            "task_id": "task-backoff",
+            "logical_operator": "DeepResearchBrowser",
+            "chatgpt_browser_agent_request": {
+                "prompt": "collect later",
+                "expected_output": "markdown",
+                "action": "submit",
+                "request_dir": str(td_path / "request"),
+            },
+        }
+        (task_dir / "envelope.json").write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        monkeypatch.setenv("HARNESS_DIR", str(td_path))
+        _active_run_path("task-backoff").parent.mkdir(parents=True, exist_ok=True)
+        _active_run_path("task-backoff").write_text(
+            json.dumps(
+                {
+                    "task_id": "task-backoff",
+                    "logical_operator": "DeepResearchBrowser",
+                    "task_dir": str(task_dir),
+                    "request": envelope["chatgpt_browser_agent_request"],
+                    "slot": {"slot_id": "slot-01", "session_lineage": "browser-agent-session:chatgpt:slot-01"},
+                    "conversation_url": "https://chatgpt.com/c/test",
+                    "conversation_id": "test",
+                    "status": "running",
+                    "submitted_at": "2026-06-05T00:00:00Z",
+                    "updated_at": "2026-06-05T00:00:00Z",
+                    "collect_attempts": 2,
+                    "next_collect_after_ts": time.time() + 600,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        rc = drain_once(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert rc == 0
+        assert mailbox.read_results("task-backoff") == []
+        manifest = json.loads(_active_run_path("task-backoff").read_text(encoding="utf-8"))
+        assert manifest["collect_attempts"] == 2
 
 
 def test_browser_agent_session_actor_processes_gemini_task(monkeypatch):

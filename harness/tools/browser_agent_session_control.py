@@ -48,6 +48,17 @@ def _task_id(prefix: str = "browser-agent-session") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
+def _collect_poll_sleep_seconds(base_interval: float, attempt: int, status: str) -> float:
+    clean_status = str(status or "").strip().lower()
+    base = max(0.2, float(base_interval or 0.2))
+    if clean_status in {"completed", "failed"}:
+        return base
+    multiplier = min(max(int(attempt or 1), 1), 4)
+    if clean_status == "submitted":
+        return min(8.0, base * multiplier)
+    return min(12.0, base * max(2, multiplier))
+
+
 def _find_inbox_task(mailbox: ActorMailbox, task_id: str) -> str:
     for path in sorted(mailbox.inbox.glob(f"task-{task_id}-*.json")):
         return str(path)
@@ -153,13 +164,15 @@ def collect_request(
     terminal_statuses = {str(item).lower() for item in (terminal_statuses or {"completed", "failed"})}
     deadline = time.time() + max(1.0, float(timeout_seconds))
     last_payload: dict[str, Any] = {}
+    attempts = 0
     while time.time() <= deadline:
         payload = poll_request(task_id, actor_id=actor_id)
         status = str(payload.get("status") or "").strip().lower()
         last_payload = payload
         if status in terminal_statuses:
             return (1 if status == "failed" else 0), payload
-        time.sleep(max(0.2, float(poll_interval_seconds)))
+        attempts += 1
+        time.sleep(_collect_poll_sleep_seconds(float(poll_interval_seconds), attempts, status))
     last_payload["timeout"] = True
     return 2, last_payload
 

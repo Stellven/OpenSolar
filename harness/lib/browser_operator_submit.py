@@ -185,7 +185,7 @@ def submit_chatgpt_operator_request(
     request_dir: str | Path,
     expected: str,
     use_session_control: bool = False,
-    poll_interval_seconds: float = 1.0,
+    poll_interval_seconds: float = 2.0,
 ) -> dict[str, Any]:
     request_path = Path(request_dir).expanduser()
     request_path.mkdir(parents=True, exist_ok=True)
@@ -248,6 +248,7 @@ def submit_chatgpt_operator_request(
         raise RuntimeError("browser_agent_chatgpt submit did not provide task_id")
 
     poll_deadline = time.time() + max(1, timeout)
+    poll_attempts = 0
     while time.time() <= poll_deadline:
         status_payload = poll_request(task_id)
         status = str(status_payload.get("status") or "").strip().lower()
@@ -260,10 +261,16 @@ def submit_chatgpt_operator_request(
             raise RuntimeError(
                 "browser_agent_chatgpt session task failed: "
                 + str((latest or {}).get("error") or status_payload)
-            )
+        )
         if status == "completed":
             break
-        time.sleep(max(0.2, float(poll_interval_seconds)))
+        poll_attempts += 1
+        multiplier = min(max(poll_attempts, 1), 4)
+        if status == "submitted":
+            sleep_seconds = min(8.0, max(0.2, float(poll_interval_seconds)) * multiplier)
+        else:
+            sleep_seconds = min(12.0, max(0.2, float(poll_interval_seconds)) * max(2, multiplier))
+        time.sleep(sleep_seconds)
     else:
         raise TimeoutError(f"browser_agent_chatgpt session task timed out waiting for completion: task_id={task_id}")
 
