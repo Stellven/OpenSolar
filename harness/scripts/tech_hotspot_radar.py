@@ -60,6 +60,13 @@ from browser_operator_submit import env_override_bool as runtime_env_override_bo
 from browser_operator_submit import env_override_text as runtime_env_override_text
 from browser_operator_submit import strip_browser_agent_noise as runtime_strip_browser_agent_noise
 from browser_operator_submit import submit_chatgpt_operator_request as runtime_submit_chatgpt_operator_request
+from ai_influence_youtube_report.figures import (
+    build_figure_manifest as runtime_build_figure_manifest,
+)
+from ai_influence_youtube_report.figures import (
+    paint_figure as runtime_paint_technology_diagram_figure,
+)
+from ai_influence_youtube_report.schema import FigureSpec as RuntimeFigureSpec
 
 try:
     import yaml
@@ -9643,6 +9650,376 @@ def hf_call_grouped_report_flow(
     }
 
 
+_HF_FIGURE_ARCHITECTURE_HINTS = (
+    "architecture",
+    "架构",
+    "system",
+    "系统",
+    "platform",
+    "平台",
+    "infra",
+    "component",
+    "模块",
+    "ecosystem",
+    "生态",
+)
+_HF_FIGURE_FLOW_HINTS = (
+    "flow",
+    "流程",
+    "pipeline",
+    "route",
+    "路径",
+    "trend",
+    "趋势",
+    "演进",
+    "转化",
+    "project",
+    "规划",
+)
+_HF_FIGURE_STACK_HINTS = (
+    "stack",
+    "技术栈",
+    "layer",
+    "分层",
+    "toolchain",
+    "模型",
+    "数据",
+    "benchmark",
+    "sdk",
+)
+
+
+def browser_agent_technology_diagram_cmd(config: dict[str, Any]) -> list[str]:
+    figure_cfg = (((config.get("hf_paper_insight") or {}).get("figure_bundle") or {}))
+    cmd = (
+        os.environ.get("TECH_HOTSPOT_BROWSER_TECH_DIAGRAM_CMD")
+        or os.environ.get("BROWSER_AGENT_TECH_DIAGRAM_OPERATOR_CMD")
+        or os.environ.get("BROWSER_AGENT_TECH_DIAGRAM_CMD")
+        or str(figure_cfg.get("cmd") or "")
+    ).strip()
+    if cmd:
+        return shlex.split(cmd)
+    operator = HARNESS_TOOLS_DIR / "technology_diagram_painter_operator.py"
+    browser_use_python = Path.home() / ".claude" / "mcp-servers" / "browser-use" / ".venv" / "bin" / "python"
+    if operator.exists() and browser_use_python.exists():
+        return [str(browser_use_python), str(operator)]
+    if operator.exists():
+        return [sys.executable, str(operator)]
+    return []
+
+
+def hf_figure_bundle_config(config: dict[str, Any]) -> dict[str, Any]:
+    base = ((config.get("hf_paper_insight") or {}).get("figure_bundle") or {})
+    return {
+        "enabled": bool(base.get("enabled", True)),
+        "timeout_seconds": int(base.get("timeout_seconds") or 900),
+        "max_figures": max(0, int(base.get("max_figures") or 3)),
+        "operator_script": str(base.get("operator_script") or "").strip(),
+        "python_executable": str(base.get("python_executable") or "").strip(),
+    }
+
+
+def _hf_grouped_report_signal_text(section: dict[str, Any]) -> str:
+    parts = [
+        str(section.get("title") or ""),
+        str(section.get("section_summary") or ""),
+        str(section.get("trend_description") or ""),
+        str(section.get("insight_analysis") or ""),
+        " ".join(_hf_list(section.get("planning_recommendations"))),
+    ]
+    for item in section.get("paper_commentary") or []:
+        if not isinstance(item, dict):
+            continue
+        parts.extend(
+            [
+                str(item.get("title") or ""),
+                str(item.get("role") or ""),
+                str(item.get("takeaway") or ""),
+            ]
+        )
+    return " ".join(parts).lower()
+
+
+def _hf_pick_figure_type(signal_text: str) -> str:
+    if any(token in signal_text for token in _HF_FIGURE_STACK_HINTS):
+        return "technology_stack"
+    if any(token in signal_text for token in _HF_FIGURE_FLOW_HINTS):
+        return "trend_flow"
+    return "architecture_overview"
+
+
+def _hf_figure_prompt(spec: RuntimeFigureSpec) -> str:
+    outline = "\n".join(f"- {item}" for item in spec.input_outline if str(item).strip())
+    evidence = ", ".join(spec.evidence_refs) if spec.evidence_refs else "N/A"
+    sections = ", ".join(spec.source_chapter_ids) if spec.source_chapter_ids else "N/A"
+    return "\n".join(
+        [
+            f"Figure Type: {spec.figure_type}",
+            f"Figure Title: {spec.title}",
+            f"Placement: {spec.placement}",
+            f"Source Sections: {sections}",
+            f"Evidence Refs: {evidence}",
+            "",
+            "请只基于以下结构化要点绘制技术洞察图，不得引入正文中不存在的模块、流程或层级：",
+            outline or "- N/A",
+            "",
+            "输出一张适合嵌入 Hugging Face paper insight 报告正文的正式 Figure。",
+        ]
+    ).strip()
+
+
+def hf_build_grouped_report_figure_specs(
+    public_records: list[dict[str, Any]],
+    grouped_report: dict[str, Any],
+    *,
+    max_figures: int = 3,
+) -> list[RuntimeFigureSpec]:
+    if max_figures <= 0:
+        return []
+    plan = grouped_report.get("plan") or {}
+    sections = grouped_report.get("sections") or []
+    record_by_id = {
+        str(item.get("paper_id") or "").strip(): item
+        for item in public_records
+        if str(item.get("paper_id") or "").strip()
+    }
+    specs: list[RuntimeFigureSpec] = []
+    lead_refs: list[str] = []
+    lead_outline: list[str] = []
+    for idx, section in enumerate(sections[:3], start=1):
+        title = _hf_text(section.get("title"), default=f"趋势部分 {idx}")
+        summary = hf_clean_public_text(_hf_text(section.get("section_summary"), default=""))
+        lead_outline.append(f"Section: {title}")
+        if summary:
+            lead_outline.append(f"Summary: {summary}")
+        for ref in _hf_list(section.get("evidence_ids")):
+            clean = str(ref or "").strip()
+            if clean and clean not in lead_refs:
+                lead_refs.append(clean)
+        for item in section.get("paper_commentary") or []:
+            if not isinstance(item, dict):
+                continue
+            paper_id = str(item.get("paper_id") or "").strip()
+            if paper_id and paper_id not in lead_refs:
+                lead_refs.append(paper_id)
+    if lead_refs:
+        lead = RuntimeFigureSpec(
+            figure_id="fig_01",
+            title=f"{_hf_text(plan.get('headline'), default='HF Paper Insight')} - Overview",
+            figure_type="architecture_overview",
+            placement="report_lead",
+            source_chapter_ids=[
+                str(section.get("section_id") or f"section-{idx}")
+                for idx, section in enumerate(sections[:3], start=1)
+            ],
+            evidence_refs=lead_refs[:8],
+            input_outline=lead_outline[:8] or ["HF paper insight grouped overview"],
+            render_prompt="",
+            caption="图 1：基于本期 grouped report 章节归纳出的整体结构图。",
+        )
+        specs.append(lead)
+
+    seen_types = {item.figure_type for item in specs}
+    for idx, section in enumerate(sections, start=1):
+        if len(specs) >= max_figures:
+            break
+        refs: list[str] = []
+        for ref in _hf_list(section.get("evidence_ids")):
+            clean = str(ref or "").strip()
+            if clean and clean not in refs:
+                refs.append(clean)
+        paper_ids: list[str] = []
+        for item in section.get("paper_commentary") or []:
+            if not isinstance(item, dict):
+                continue
+            paper_id = str(item.get("paper_id") or "").strip()
+            if paper_id and paper_id not in paper_ids:
+                paper_ids.append(paper_id)
+            for ref in _hf_list(item.get("evidence_ids")):
+                clean = str(ref or "").strip()
+                if clean and clean not in refs:
+                    refs.append(clean)
+        if not refs:
+            refs = paper_ids[:]
+        if not refs:
+            continue
+        signal_text = _hf_grouped_report_signal_text(section)
+        figure_type = _hf_pick_figure_type(signal_text)
+        if figure_type in seen_types:
+            continue
+        outline = [
+            f"Section: {_hf_text(section.get('title'), default=f'趋势部分 {idx}')}",
+            f"Trend Type: {hf_public_trend_label(section.get('trend_type'))}",
+            f"Summary: {hf_clean_public_text(_hf_text(section.get('section_summary'), default='待补'))}",
+        ]
+        for rec in _hf_list(section.get("planning_recommendations"))[:3]:
+            outline.append(f"Recommendation: {hf_clean_public_text(rec)}")
+        for paper_id in paper_ids[:3]:
+            record = record_by_id.get(paper_id) or {}
+            title = str(record.get("title") or paper_id)
+            route = str(((record.get("taxonomy") or {}).get("research_route")) or "")
+            stack = str(((record.get("taxonomy") or {}).get("stack_layer")) or "")
+            outline.append(f"Paper: {title} | Route: {route or 'N/A'} | Layer: {stack or 'N/A'}")
+        spec = RuntimeFigureSpec(
+            figure_id=f"fig_{len(specs) + 1:02d}",
+            title=_hf_text(section.get("title"), default=f"趋势部分 {idx}"),
+            figure_type=figure_type,
+            placement="section_inline",
+            source_chapter_ids=[str(section.get("section_id") or f"section-{idx}")],
+            evidence_refs=refs[:8],
+            input_outline=outline[:10],
+            render_prompt="",
+            caption=f"图 {len(specs) + 1}：{_hf_text(section.get('title'), default=f'趋势部分 {idx}')} 的 {figure_type} 图示。",
+        )
+        specs.append(spec)
+        seen_types.add(figure_type)
+
+    rendered: list[RuntimeFigureSpec] = []
+    for spec in specs:
+        rendered.append(
+            RuntimeFigureSpec(
+                figure_id=spec.figure_id,
+                title=spec.title,
+                figure_type=spec.figure_type,
+                placement=spec.placement,
+                source_chapter_ids=list(spec.source_chapter_ids),
+                evidence_refs=list(spec.evidence_refs),
+                input_outline=list(spec.input_outline),
+                render_prompt=_hf_figure_prompt(spec),
+                caption=spec.caption,
+                status=spec.status,
+            )
+        )
+    return rendered
+
+
+def hf_generate_grouped_report_figure_bundle(
+    public_records: list[dict[str, Any]],
+    grouped_report: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    out_dir: str | Path,
+) -> dict[str, Any]:
+    bundle_cfg = hf_figure_bundle_config(config)
+    figures_dir = Path(out_dir).expanduser() / "hf-paper-figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    operator_script = bundle_cfg["operator_script"] or None
+    python_executable = bundle_cfg["python_executable"] or None
+    resolved_cmd = browser_agent_technology_diagram_cmd(config)
+    if (not operator_script or not python_executable) and len(resolved_cmd) >= 2:
+        python_executable = python_executable or resolved_cmd[0]
+        operator_script = operator_script or resolved_cmd[1]
+    if not bundle_cfg["enabled"]:
+        manifest = runtime_build_figure_manifest("hf-paper-figure-bundle", [], validator_overall="SKIPPED").to_dict()
+        (figures_dir / "hf-paper-figure-manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return {"enabled": False, "figures": [], "manifest": manifest, "figures_dir": str(figures_dir)}
+
+    specs = hf_build_grouped_report_figure_specs(
+        public_records,
+        grouped_report,
+        max_figures=int(bundle_cfg["max_figures"]),
+    )
+    for spec in specs:
+        (figures_dir / f"{spec.figure_id}.spec.json").write_text(
+            json.dumps(spec.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    if not specs:
+        manifest = runtime_build_figure_manifest("hf-paper-figure-bundle", [], validator_overall="SKIPPED").to_dict()
+        manifest_path = figures_dir / "hf-paper-figure-manifest.json"
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {
+            "enabled": True,
+            "figures": [],
+            "manifest": manifest,
+            "manifest_path": str(manifest_path),
+            "figures_dir": str(figures_dir),
+            "painted_count": 0,
+            "failed_count": 0,
+            "skipped_count": 0,
+        }
+    figure_results = [
+        runtime_paint_technology_diagram_figure(
+            spec,
+            run_dir=figures_dir,
+            operator_script=operator_script,
+            python_executable=python_executable,
+            timeout_seconds=int(bundle_cfg["timeout_seconds"]),
+        )
+        for spec in specs
+    ]
+    for figure in figure_results:
+        (figures_dir / f"{figure.figure_id}.result.json").write_text(
+            json.dumps(figure.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    manifest = runtime_build_figure_manifest(
+        "hf-paper-figure-bundle",
+        figure_results,
+        validator_overall="PASS" if all(item.status != "failed" for item in figure_results) else "WARN",
+    ).to_dict()
+    manifest_path = figures_dir / "hf-paper-figure-manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "enabled": True,
+        "figures": [item.to_dict() for item in figure_results],
+        "manifest": manifest,
+        "manifest_path": str(manifest_path),
+        "figures_dir": str(figures_dir),
+        "painted_count": int(manifest.get("painted_count") or 0),
+        "failed_count": int(manifest.get("failed_count") or 0),
+        "skipped_count": int(manifest.get("skipped_count") or 0),
+    }
+
+
+def _hf_render_grouped_report_figure_markdown(figure: dict[str, Any]) -> str:
+    image_path = str(figure.get("image_path") or "").strip()
+    if not image_path:
+        return ""
+    title = str(figure.get("title") or figure.get("figure_id") or "Figure")
+    caption = str(figure.get("caption") or "").strip()
+    evidence = ", ".join(str(ref) for ref in figure.get("evidence_refs") or [])
+    parts = [f"![{title}]({image_path})"]
+    if caption:
+        parts.append(caption)
+    if evidence:
+        parts.append(f"证据引用：{evidence}")
+    return "\n\n".join(parts).strip()
+
+
+def _hf_render_grouped_report_figure_html(figure: dict[str, Any]) -> str:
+    image_path = str(figure.get("image_path") or "").strip()
+    if not image_path:
+        return ""
+    title = html.escape(str(figure.get("title") or figure.get("figure_id") or "Figure"))
+    caption = html.escape(str(figure.get("caption") or "").strip())
+    evidence = ", ".join(html.escape(str(ref)) for ref in figure.get("evidence_refs") or [])
+    return (
+        '<figure class="hf-figure-card">'
+        f'<img src="{html.escape(image_path)}" alt="{title}">'
+        f"<figcaption><strong>{title}</strong>"
+        + (f"<br><span>{caption}</span>" if caption else "")
+        + (f'<br><span class="hf-figure-evidence">证据引用：{evidence}</span>' if evidence else "")
+        + "</figcaption></figure>"
+    )
+
+
+def _hf_grouped_figures_for_section(figures: list[dict[str, Any]], section_id: str) -> list[dict[str, Any]]:
+    target = str(section_id or "").strip()
+    if not target:
+        return []
+    return [
+        item
+        for item in figures
+        if str(item.get("placement") or "") == "section_inline"
+        and target in {str(ref) for ref in item.get("source_chapter_ids") or []}
+        and str(item.get("status") or "") == "painted"
+    ]
+
+
 def _hf_render_grouped_report_markdown(
     *,
     date_str: str,
@@ -9651,11 +10028,13 @@ def _hf_render_grouped_report_markdown(
     fallback_count: int,
     public_records: list[dict[str, Any]],
     grouped_report: dict[str, Any],
+    figures: list[dict[str, Any]] | None = None,
     report_context: dict[str, Any] | None = None,
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     plan = grouped_report.get("plan") or {}
     sections = grouped_report.get("sections") or []
+    figure_rows = figures or []
     public_variant = hf_public_report_variant_label(report_variant)
     lines = [
         f"# {hf_public_headline(plan.get('headline'), context, premium=True)}",
@@ -9683,9 +10062,30 @@ def _hf_render_grouped_report_markdown(
         f"| 周期 | {context.get('window_label') or date_str} |",
         "",
     ])
+    lead_figures = [
+        _hf_render_grouped_report_figure_markdown(item)
+        for item in figure_rows
+        if str(item.get("placement") or "") == "report_lead" and str(item.get("status") or "") == "painted"
+    ]
+    lead_figures = [item for item in lead_figures if item.strip()]
+    if lead_figures:
+        lines.extend([
+            "## 关键图示",
+            "",
+            *lead_figures,
+            "",
+        ])
     for idx, section in enumerate(sections, 1):
         recommendations = _hf_list(section.get("planning_recommendations"))
         commentary = section.get("paper_commentary") if isinstance(section.get("paper_commentary"), list) else []
+        section_figures = [
+            _hf_render_grouped_report_figure_markdown(item)
+            for item in _hf_grouped_figures_for_section(
+                figure_rows,
+                str(section.get("section_id") or f"section-{idx}"),
+            )
+        ]
+        section_figures = [item for item in section_figures if item.strip()]
         lines.extend([
             f"## {idx:02d}. {_hf_text(section.get('title'), default=f'趋势部分 {idx}')}",
             "",
@@ -9693,6 +10093,11 @@ def _hf_render_grouped_report_markdown(
             "",
             f"- 趋势判断：`{hf_public_trend_label(section.get('trend_type'))}`",
             "",
+        ])
+        if section_figures:
+            lines.extend(section_figures)
+            lines.append("")
+        lines.extend([
             "### 趋势描述",
             "",
             hf_clean_public_text(_hf_text(section.get("trend_description"), default="待补")),
@@ -9739,11 +10144,13 @@ def _hf_render_grouped_report_html(
     fallback_count: int,
     public_records: list[dict[str, Any]],
     grouped_report: dict[str, Any],
+    figures: list[dict[str, Any]] | None = None,
     report_context: dict[str, Any] | None = None,
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     plan = grouped_report.get("plan") or {}
     sections = grouped_report.get("sections") or []
+    figure_rows = figures or []
     public_variant = hf_public_report_variant_label(report_variant)
     metric_cards = [
         ("报告类型", public_variant),
@@ -9754,6 +10161,11 @@ def _hf_render_grouped_report_html(
     metric_html = "\n".join(
         f'<div class="hf-metric"><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>'
         for label, value in metric_cards
+    )
+    lead_figures_html = "".join(
+        _hf_render_grouped_report_figure_html(item)
+        for item in figure_rows
+        if str(item.get("placement") or "") == "report_lead" and str(item.get("status") or "") == "painted"
     )
     section_html = []
     for idx, section in enumerate(sections, 1):
@@ -9770,6 +10182,13 @@ def _hf_render_grouped_report_html(
                 "</li>"
             )
         commentary_html = "".join(commentary_items) or "<li>待补</li>"
+        section_figures_html = "".join(
+            _hf_render_grouped_report_figure_html(item)
+            for item in _hf_grouped_figures_for_section(
+                figure_rows,
+                str(section.get("section_id") or f"section-{idx}"),
+            )
+        )
         section_html.append(
             f"""
             <article class="hf-card">
@@ -9784,6 +10203,7 @@ def _hf_render_grouped_report_html(
                 <div><span>趋势判断</span><strong>{html.escape(hf_public_trend_label(section.get('trend_type')))}</strong></div>
                 <div><span>章节定位</span><strong>{html.escape(_hf_text(section.get('title'), default=f'趋势部分 {idx}'))}</strong></div>
               </div>
+              {section_figures_html}
               <section><h3>趋势描述</h3><p>{html.escape(hf_clean_public_text(_hf_text(section.get('trend_description'), default='待补')))}</p></section>
               <section><h3>洞察分析</h3><p>{html.escape(hf_clean_public_text(_hf_text(section.get('insight_analysis'), default='待补')))}</p></section>
               <section><h3>规划建议</h3><ul>{recommendations}</ul></section>
@@ -9826,6 +10246,10 @@ def _hf_render_grouped_report_html(
     .hf-rank {{ width: 64px; height: 64px; display: grid; place-items: center; border-radius: 18px; background: linear-gradient(135deg, #8a4b22, #c98950); color: white; font: 700 22px/1 "Avenir Next", sans-serif; }}
     .hf-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin: 18px 0; padding: 16px; background: #fbf6ef; border-radius: 18px; border: 1px solid var(--line); }}
     .hf-panel {{ padding: 22px; margin-top: 24px; }}
+    .hf-figure-card {{ margin: 18px 0; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: #fcf8f1; }}
+    .hf-figure-card img {{ display: block; width: 100%; border-radius: 14px; border: 1px solid var(--line); background: white; }}
+    .hf-figure-card figcaption {{ margin-top: 12px; color: var(--muted); }}
+    .hf-figure-evidence {{ font-family: "Avenir Next", sans-serif; font-size: 12px; }}
     h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
     h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
     ul {{ padding-left: 20px; }}
@@ -9840,6 +10264,7 @@ def _hf_render_grouped_report_html(
       <p>{html.escape('报告周期：' + str(context.get('window_label') or date_str))}</p>
       <div class="hf-metrics">{metric_html}</div>
     </section>
+    {f'<section class="hf-panel"><h3>关键图示</h3>{lead_figures_html}</section>' if lead_figures_html else ''}
     {''.join(section_html)}
     <section class="hf-panel">
       <h3>后续观察点</h3>
@@ -10253,6 +10678,7 @@ def hf_write_public_report(
     base_report_variant = "premium_insight_report" if public_records and premium_count == len(public_records) else "fallback_report"
     grouped_report: dict[str, Any] | None = None
     grouped_report_error_kind = ""
+    figure_bundle: dict[str, Any] | None = None
     if public_records:
         try:
             grouped_report = hf_call_grouped_report_flow(public_records, config, date_str=date_str, report_context=report_context)
@@ -10293,7 +10719,14 @@ def hf_write_public_report(
         report_context=report_context,
     )
     if grouped_report:
+        figure_bundle = hf_generate_grouped_report_figure_bundle(
+            public_records,
+            grouped_report,
+            config,
+            out_dir=out_dir,
+        )
         render_kwargs["grouped_report"] = grouped_report
+        render_kwargs["figures"] = list((figure_bundle or {}).get("figures") or [])
     lines.append(
         render_markdown(
             **render_kwargs,
@@ -10310,6 +10743,7 @@ def hf_write_public_report(
     pack_path = out_dir / "hf-paper-insight-pack.json"
     plan_path = out_dir / "hf-paper-report-plan.json"
     sections_path = out_dir / "hf-paper-report-sections.json"
+    figure_manifest_path = out_dir / "hf-paper-figures" / "hf-paper-figure-manifest.json"
     report_path.write_text(report_md, encoding="utf-8")
     report_html_path.write_text(report_html, encoding="utf-8")
     if grouped_report:
@@ -10330,6 +10764,12 @@ def hf_write_public_report(
         "grouped_report_ok": bool(grouped_report),
         "grouped_report_model": (grouped_report or {}).get("model") or "",
         "grouped_report_error": grouped_report_error_kind,
+        "figure_bundle_ok": bool((figure_bundle or {}).get("enabled")),
+        "figure_bundle_manifest": str((figure_bundle or {}).get("manifest_path") or ""),
+        "figure_bundle_painted_count": int((figure_bundle or {}).get("painted_count") or 0),
+        "figure_bundle_failed_count": int((figure_bundle or {}).get("failed_count") or 0),
+        "figure_bundle_skipped_count": int((figure_bundle or {}).get("skipped_count") or 0),
+        "figures": list((figure_bundle or {}).get("figures") or []),
         "report_context": report_context,
         "grouped_report_plan": (grouped_report or {}).get("plan") or {},
         "grouped_report_sections": (grouped_report or {}).get("sections") or [],
@@ -10362,6 +10802,8 @@ def hf_write_public_report(
         "grouped_report_ok": bool(grouped_report),
         "plan_json": str(plan_path) if grouped_report else "",
         "sections_json": str(sections_path) if grouped_report else "",
+        "figure_manifest_json": str(figure_manifest_path) if figure_manifest_path.exists() else "",
+        "painted_figure_count": int((figure_bundle or {}).get("painted_count") or 0),
     }
 
 

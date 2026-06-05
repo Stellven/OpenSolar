@@ -43,6 +43,16 @@ def test_browser_agent_notebooklm_cmd_falls_back_to_bundled_wrapper(monkeypatch)
     assert "browser-use/.venv/bin/python" in cmd[0]
 
 
+def test_browser_agent_technology_diagram_cmd_falls_back_to_operator(monkeypatch):
+    monkeypatch.delenv("TECH_HOTSPOT_BROWSER_TECH_DIAGRAM_CMD", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_TECH_DIAGRAM_OPERATOR_CMD", raising=False)
+    monkeypatch.delenv("BROWSER_AGENT_TECH_DIAGRAM_CMD", raising=False)
+    ns = _load_namespace()
+    cmd = ns["browser_agent_technology_diagram_cmd"]({})
+    assert cmd, "expected bundled technology diagram operator command"
+    assert cmd[-1].endswith("technology_diagram_painter_operator.py")
+
+
 def test_call_browser_agent_chatgpt_text_prefers_process_env_over_config(monkeypatch, tmp_path):
     wrapper = tmp_path / "fake_wrapper.py"
     wrapper.write_text(
@@ -302,6 +312,41 @@ def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
             },
         ],
     }
+    def _fake_figure_bundle(public_records, grouped_report, config, *, out_dir):
+        manifest_path = Path(out_dir) / "hf-paper-figures" / "hf-paper-figure-manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "run_id": "hf-paper-figure-bundle",
+            "painted_count": 1,
+            "failed_count": 0,
+            "skipped_count": 0,
+            "validator_overall": "PASS",
+            "figures": [
+                {
+                    "figure_id": "fig_01",
+                    "title": "本期 HF 结构总览",
+                    "figure_type": "architecture_overview",
+                    "placement": "report_lead",
+                    "source_chapter_ids": ["doc-intel"],
+                    "evidence_refs": ["p1", "pkt-1"],
+                    "status": "painted",
+                    "image_path": "/tmp/hf-figure-01.png",
+                    "caption": "图 1：HF grouped report 结构总览。",
+                }
+            ],
+        }
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return {
+            "enabled": True,
+            "figures": manifest["figures"],
+            "manifest": manifest,
+            "manifest_path": str(manifest_path),
+            "figures_dir": str(manifest_path.parent),
+            "painted_count": 1,
+            "failed_count": 0,
+            "skipped_count": 0,
+        }
+    ns["hf_generate_grouped_report_figure_bundle"] = _fake_figure_bundle
     result = ns["hf_write_public_report"](
         {"output": {"raw_dir": str(tmp_path)}},
         date_str="2026-06-01",
@@ -318,16 +363,72 @@ def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
     pack = json.loads(Path(result["pack_json"]).read_text(encoding="utf-8"))
     assert "## 01. 文档智能自动化" in markdown
     assert "## 02. 基础模型接口化" in markdown
+    assert "## 关键图示" in markdown
+    assert "![本期 HF 结构总览](/tmp/hf-figure-01.png)" in markdown
     assert "### 该部分论文分工" in markdown
     assert "后续观察点" in markdown
     assert "<!doctype html>" in html
+    assert "hf-figure-card" in html
     assert "文档智能自动化" in html
     assert "该部分论文分工" in html
     assert pack["grouped_report_ok"] is True
+    assert pack["figure_bundle_ok"] is True
+    assert pack["figure_bundle_painted_count"] == 1
     assert pack["report_variant"] == "premium_insight_report"
     assert pack["grouped_report_plan"]["headline"] == "AI Influence HF Paper 高级洞察周报 — 2026-05-26 ~ 2026-06-01"
     assert pack["report_context"]["cadence"] == "weekly"
     assert len(pack["grouped_report_sections"]) == 2
+    assert Path(result["figure_manifest_json"]).exists()
+    assert result["painted_figure_count"] == 1
+
+
+def test_hf_build_grouped_report_figure_specs_generates_grounded_specs():
+    ns = _load_namespace()
+    public_records = [
+        {
+            "paper_id": "p1",
+            "title": "MinerU2.5",
+            "taxonomy": {"research_route": "applied_research", "stack_layer": "inference"},
+        },
+        {
+            "paper_id": "p2",
+            "title": "Kronos",
+            "taxonomy": {"research_route": "model_system", "stack_layer": "foundation_model"},
+        },
+    ]
+    grouped_report = {
+        "plan": {"headline": "HF 周报标题"},
+        "sections": [
+            {
+                "section_id": "doc-intel",
+                "title": "文档智能自动化",
+                "trend_type": "real_trend",
+                "section_summary": "文档理解开始从 OCR 升级为工作流入口。",
+                "trend_description": "流程正在从解析走向编排。",
+                "insight_analysis": "关键是前置层和下游 agent 的连接方式。",
+                "planning_recommendations": ["做最小 PDF 解析基准"],
+                "paper_commentary": [{"paper_id": "p1", "title": "MinerU2.5"}],
+                "evidence_ids": ["p1", "pkt-1"],
+            },
+            {
+                "section_id": "foundation-interfaces",
+                "title": "基础模型接口化",
+                "trend_type": "real_trend",
+                "section_summary": "时间序列基础模型开始争夺统一生态接口。",
+                "trend_description": "接口竞争会影响整个技术栈分层。",
+                "insight_analysis": "谁先形成 SDK 与 benchmark，谁更容易占位。",
+                "planning_recommendations": ["观察 benchmark 与 SDK 节奏"],
+                "paper_commentary": [{"paper_id": "p2", "title": "Kronos"}],
+                "evidence_ids": ["p2", "pkt-2"],
+            },
+        ],
+    }
+    specs = ns["hf_build_grouped_report_figure_specs"](public_records, grouped_report, max_figures=3)
+    assert len(specs) >= 2
+    assert specs[0].placement == "report_lead"
+    assert specs[0].evidence_refs
+    assert "Figure Type:" in specs[0].render_prompt
+    assert any(spec.placement == "section_inline" for spec in specs)
 
 
 def test_hf_weekly_priority_score_prefers_persistent_high_rank_signals():

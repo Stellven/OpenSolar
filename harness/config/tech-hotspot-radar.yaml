@@ -1226,6 +1226,10 @@ hf_paper_insight:
     merge_daily_hotspots: true
     core_paper_limit: 12
     supporting_paper_limit: 24
+  figure_bundle:
+    enabled: true
+    max_figures: 3
+    timeout_seconds: 900
   high_reasoning:
     mode: browser_agent
     model: chatgpt-5.5
