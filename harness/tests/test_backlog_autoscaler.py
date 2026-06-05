@@ -11,8 +11,10 @@ import backlog_autoscaler as ba  # noqa: E402
 import concurrency_policy as cp  # noqa: E402
 
 
-def _write_status(root: Path, name: str, status: str, phase: str) -> None:
+def _write_status(root: Path, name: str, status: str, phase: str, handoff_to: str = "") -> None:
     payload = {"status": status, "phase": phase}
+    if handoff_to:
+        payload["handoff_to"] = handoff_to
     (root / f"{name}.status.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -25,7 +27,9 @@ def test_build_snapshot_scales_from_backlog(monkeypatch, tmp_path):
     for idx in range(5):
         _write_status(sprints_dir, f"draft-{idx}", "drafting", "spec")
     for idx in range(7):
-        _write_status(sprints_dir, f"prd-{idx}", "active", "prd_ready")
+        _write_status(sprints_dir, f"prd-{idx}", "active", "prd_ready", "planner")
+    for idx in range(3):
+        _write_status(sprints_dir, f"draft-prd-{idx}", "drafting", "prd_ready", "planner")
     for idx in range(9):
         _write_status(sprints_dir, f"build-{idx}", "active", "planning_complete")
     for idx in range(4):
@@ -52,7 +56,7 @@ def test_build_snapshot_scales_from_backlog(monkeypatch, tmp_path):
             "snapshot_path": "run/backlog-autoscale/latest.json",
             "metrics": {
                 "drafting_spec": {"status": "drafting", "phase": "spec"},
-                "active_prd_ready": {"status": "active", "phase": "prd_ready"},
+                "active_prd_ready": {"statuses": ["active", "drafting"], "phase": "prd_ready", "handoff_to": "planner"},
                 "active_planning_complete": {"status": "active", "phase": "planning_complete"},
                 "reviewing_handoff_ready": {"status": "reviewing", "phase": "handoff_ready"},
             },
@@ -122,7 +126,7 @@ def test_build_snapshot_scales_from_backlog(monkeypatch, tmp_path):
     snapshot = ba.build_snapshot(policy)
     assert snapshot["metrics"] == {
         "drafting_spec": 5,
-        "active_prd_ready": 7,
+        "active_prd_ready": 10,
         "active_planning_complete": 9,
         "reviewing_handoff_ready": 4,
     }
@@ -130,7 +134,7 @@ def test_build_snapshot_scales_from_backlog(monkeypatch, tmp_path):
     assert snapshot["role_capacity"]["builder"] == {"configured": 2, "enabled": 1, "available": 1}
     assert snapshot["profile_limits"]["pm"] == 5
     assert snapshot["profile_limits"]["builder"] == 6
-    assert snapshot["logical_operator_limits"]["DeepArchitect"] == 7
+    assert snapshot["logical_operator_limits"]["DeepArchitect"] == 8
     assert snapshot["builder_pool"]["desired_total"] == 15
     assert snapshot["builder_pool"]["groups"]["codex-gpt-5.3-spark"] == 2
     assert snapshot["global_limits"]["max_workers"] == 11

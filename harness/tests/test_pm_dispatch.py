@@ -295,6 +295,18 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
     sprints.mkdir(parents=True)
     inbox.mkdir(parents=True)
     _write_builder_ready_graph(sprints, "sprint-latent")
+    (sprints / "sprint-planner.status.json").write_text(
+        json.dumps({"status": "drafting", "phase": "prd_ready", "handoff_to": "planner"}),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-builder.status.json").write_text(
+        json.dumps({"status": "active", "phase": "planning_complete", "handoff_to": "builder_main"}),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-eval.status.json").write_text(
+        json.dumps({"status": "reviewing", "phase": "handoff_ready", "handoff_to": "evaluator"}),
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
     monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
@@ -302,7 +314,10 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
     assert pm_dispatch._builder_pool_backlog_breakdown() == {
         "pending_pm": 0,
         "latent_builder_ready": 1,
-        "total": 1,
+        "planner_prd_ready": 1,
+        "builder_planning_complete": 1,
+        "evaluator_handoff_ready": 1,
+        "total": 4,
     }
 
     (inbox / "pm-existing.json").write_text(
@@ -312,7 +327,10 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
     assert pm_dispatch._builder_pool_backlog_breakdown() == {
         "pending_pm": 1,
         "latent_builder_ready": 0,
-        "total": 1,
+        "planner_prd_ready": 1,
+        "builder_planning_complete": 1,
+        "evaluator_handoff_ready": 1,
+        "total": 4,
     }
 
 

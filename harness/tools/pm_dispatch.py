@@ -1872,13 +1872,45 @@ def _pending_pm_backlog_count() -> int:
     return count
 
 
+def _status_backlog_count(*, statuses: set[str], phase: str, handoff_to: str = "") -> int:
+    count = 0
+    phase_value = phase.strip().lower()
+    handoff_value = handoff_to.strip().lower()
+    for path in SPRINTS_DIR.glob("*.status.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in statuses or _pm_status_is_terminal(status):
+            continue
+        if phase_value and str(payload.get("phase") or "").strip().lower() != phase_value:
+            continue
+        if handoff_value and str(payload.get("handoff_to") or "").strip().lower() != handoff_value:
+            continue
+        count += 1
+    return count
+
+
 def _builder_pool_backlog_breakdown() -> dict[str, int]:
     pending_pm = _pending_pm_backlog_count()
     latent_builder_ready = _latent_builder_ready_backlog_count()
+    planner_prd_ready = _status_backlog_count(statuses={"active", "drafting"}, phase="prd_ready", handoff_to="planner")
+    builder_planning_complete = _status_backlog_count(statuses={"active"}, phase="planning_complete", handoff_to="builder_main")
+    evaluator_handoff_ready = _status_backlog_count(statuses={"reviewing"}, phase="handoff_ready", handoff_to="evaluator")
     return {
         "pending_pm": pending_pm,
         "latent_builder_ready": latent_builder_ready,
-        "total": pending_pm + latent_builder_ready,
+        "planner_prd_ready": planner_prd_ready,
+        "builder_planning_complete": builder_planning_complete,
+        "evaluator_handoff_ready": evaluator_handoff_ready,
+        "total": (
+            pending_pm
+            + latent_builder_ready
+            + planner_prd_ready
+            + builder_planning_complete
+            + evaluator_handoff_ready
+        ),
     }
 
 
@@ -2018,7 +2050,10 @@ def cmd_builder_pool_status(args: argparse.Namespace) -> int:
         f"builder_pool level={snapshot.get('level', 'N/A')} "
         f"available={snapshot.get('total_available', 'N/A')}/{snapshot.get('total_desired', 'N/A')} "
         f"backlog={snapshot.get('backlog', 'N/A')} "
-        f"(pm={breakdown.get('pending_pm', 'N/A')} latent={breakdown.get('latent_builder_ready', 'N/A')}) "
+        f"(pm={breakdown.get('pending_pm', 'N/A')} planner={breakdown.get('planner_prd_ready', 'N/A')} "
+        f"builder={breakdown.get('builder_planning_complete', 'N/A')} "
+        f"eval={breakdown.get('evaluator_handoff_ready', 'N/A')} "
+        f"latent={breakdown.get('latent_builder_ready', 'N/A')}) "
         f"action={snapshot.get('recommended_action', 'N/A')}"
     )
     pruner = snapshot.get("rate_limit_pruner") if isinstance(snapshot.get("rate_limit_pruner"), dict) else {}
