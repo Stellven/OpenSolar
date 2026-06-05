@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import types
@@ -257,6 +258,26 @@ def test_chatgpt_wrapper_reuses_existing_conversation_page_for_collect():
     assert "and not final_data.get(\"is_generating\")" in source
     assert "and int(final_data.get(\"assistant_count\") or 0) > 0" in source
     assert "final_data = await _wait_for_answer(" in source
+
+
+def test_capture_state_times_out_to_default():
+    ns = _load_namespace()
+
+    class _NeverReturnsPage:
+        async def evaluate(self, script):  # pragma: no cover - async stub
+            await asyncio.sleep(2.0)
+            return "{}"
+
+    result = asyncio.run(
+        ns["_capture_state"](
+            _NeverReturnsPage(),
+            timeout_s=0.01,
+            default={"message_count": 2},
+            label="wait_for_answer",
+        )
+    )
+    assert result["message_count"] == 2
+    assert result["_capture_timeout"] == "wait_for_answer"
 
 
 def test_chatgpt_wrapper_installs_browser_use_cdp_patch():

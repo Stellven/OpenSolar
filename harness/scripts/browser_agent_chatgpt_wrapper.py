@@ -292,7 +292,7 @@ async def _wait_for_submitted_conversation(page, initial_state: dict, *, timeout
     best = dict(initial_state or {})
     deadline = time.monotonic() + max(1, int(timeout_s))
     while time.monotonic() < deadline:
-        state = json.loads(await page.evaluate(CAPTURE_JS))
+        state = await _capture_state(page, timeout_s=8.0, default=best, label="submitted_conversation")
         if state:
             best = state
         conversation_id = str((state or {}).get("conversation_id") or "").strip()
@@ -305,12 +305,12 @@ async def _wait_for_submitted_conversation(page, initial_state: dict, *, timeout
 
 async def _wait_for_conversation_ready(page, *, target_url: str, timeout_s: int = 12) -> dict:
     expected_conversation_id = _conversation_target_id(target_url)
-    last_data = json.loads(await page.evaluate(CAPTURE_JS))
+    last_data = await _capture_state(page, timeout_s=8.0, default={}, label="conversation_ready_initial")
     if not expected_conversation_id:
         return last_data
     deadline = time.time() + max(1, int(timeout_s))
     while time.time() < deadline:
-        data = json.loads(await page.evaluate(CAPTURE_JS))
+        data = await _capture_state(page, timeout_s=8.0, default=last_data, label="conversation_ready")
         last_data = data
         if _conversation_state_ready(data, expected_conversation_id=expected_conversation_id):
             return data
@@ -342,6 +342,21 @@ async def _find_existing_conversation_page(browser, *, target_url: str):
         ):
             return page
     return None
+
+
+async def _capture_state(page, *, timeout_s: float = 8.0, default: dict | None = None, label: str = "capture") -> dict:
+    fallback = dict(default or {})
+    try:
+        raw = await asyncio.wait_for(page.evaluate(CAPTURE_JS), timeout=max(1.0, float(timeout_s)))
+    except asyncio.TimeoutError:
+        fallback["_capture_timeout"] = label
+        return fallback
+    try:
+        data = json.loads(raw)
+    except Exception:
+        fallback["_capture_decode_error"] = label
+        return fallback
+    return data if isinstance(data, dict) else fallback
 
 CAPTURE_JS = r"""() => {
   const clean = (value) => String(value || "")
@@ -1343,11 +1358,14 @@ async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: in
     last_text = ""
     stable = 0
     first_response_seen = False
+    last_data: dict = {}
     stable_required = int(os.environ.get("BROWSER_AGENT_STABLE_POLLS") or "8")
     challenge_since: float | None = None
     challenge_grace_s = _challenge_grace_seconds()
     while time.time() < deadline:
-        data = json.loads(await page.evaluate(CAPTURE_JS))
+        data = await _capture_state(page, timeout_s=8.0, default=last_data, label="wait_for_answer")
+        if data:
+            last_data = data
         if data.get("login_wall"):
             raise RuntimeError("chatgpt_login_wall_detected")
         if data.get("challenge_wall"):
@@ -1371,7 +1389,7 @@ async def _wait_for_answer(page, baseline_assistant_count: int, *, timeout_s: in
                 return data
         await asyncio.sleep(3)
     if first_response_seen:
-        return json.loads(await page.evaluate(CAPTURE_JS))
+        return await _capture_state(page, timeout_s=8.0, default=last_data, label="wait_for_answer_final")
     raise TimeoutError("chatgpt_response_timeout")
 
 
