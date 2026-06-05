@@ -89,8 +89,43 @@ def test_conference_insight_eval_rejects_correct_but_generic_report(tmp_path):
     issues = result["scorecard"]["issues"]
     assert any(issue.startswith("insight_generic_survey_toc_leak") for issue in issues)
     assert any(issue.startswith("insight_machine_label_leak") for issue in issues)
-    assert any(issue.startswith("insight_solar_actionability_low") for issue in issues)
+    assert any(issue.startswith("insight_action_mapping_low") for issue in issues)
+    assert any(issue.startswith("insight_solar_absorption_low") for issue in issues)
     assert "insight_figure_required_missing" in issues
+
+
+def test_insight_required_signals_are_profile_configured_not_default(tmp_path):
+    ast = {
+        "title": "DeepDive insight: AI coding agent 产品机会",
+        "profile": "deepdive-insight",
+        "chapters": [{"chapter_id": "ch1", "title": "核心判断"}],
+        "sections": [{"section_id": "ch1/sec1", "chapter_id": "ch1", "title": "核心判断"}],
+        "insight_profile": {"required_signals": ["Spec Runtime"]},
+    }
+    (tmp_path / "survey_report_ast.json").write_text(json.dumps(ast), encoding="utf-8")
+    (tmp_path / "survey_evidence_packs.json").write_text(json.dumps({"blocked": 0, "packs": []}), encoding="utf-8")
+    (tmp_path / "human_final.md").write_text(
+        """
+        # AI coding agent DeepDive
+
+        ## 核心判断
+        AI coding agent 的中心论点是产品竞争正在转向工作流闭环。
+        行动建议是先做实验验证和产品路线图，配套架构设计、观察指标、风险与证伪条件。
+        https://example.com/source
+        https://example.com/source2
+        https://example.com/source3
+        https://example.com/source4
+        https://example.com/source5
+        <figure>路线图</figure>
+        """,
+        encoding="utf-8",
+    )
+
+    result = evaluate_survey(tmp_path, strict=True)
+
+    assert result["insight_quality"]["active"] is True
+    assert any(issue.startswith("insight_required_signal_missing:Spec Runtime") for issue in result["scorecard"]["issues"])
+    assert not any("Dossier" in issue or "TraceFix" in issue for issue in result["scorecard"]["issues"])
 
 
 def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
