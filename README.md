@@ -157,6 +157,9 @@ This is the operating model:
 | Model / operator registry | Available | Model aliases, physical operators, actors, hosts, capability/risk/cost profiles. |
 | Evidence-native evaluation | Available | Handoff, eval, node verdict, session logs, deterministic research gates. |
 | Remote worker path | Available / evolving | Remote sync, dispatch, monitor, and verification scripts are present. |
+| Plugin framework | Available / evolving | Harness can load and validate `harness/plugins/<id>/manifest.yaml` when plugin manifests are present. The public repo does not need to ship enabled third-party plugins by default. |
+| Solar-bundled skills | Available | Repository skills are copied into `~/.claude/skills/` by `install.sh`. Counts may change with the repo. |
+| Third-party skills | Optional | Installed separately through `SKILLS-INSTALL.md`; they are an enhancement, not required for the base install. |
 | Deep Research OS | Evolving | Evidence extraction, citation checking, research evaluation, and report gates. |
 | Context Map / PEEK-style layer | Planned / integrating | Orientation cache for repos, topics, vaults, and long-running projects. |
 | Meta Harness self-optimization | Planned / integrating | Optimizes text artifacts using evaluator score, side-info, replay, and promotion gates. |
@@ -165,6 +168,8 @@ This is the operating model:
 ---
 
 ## Quick Start
+
+### Human install
 
 ```bash
 git clone https://github.com/lisihao/Solar.git ~/Solar
@@ -177,10 +182,37 @@ What install does:
 - copies Solar Core assets into `~/.claude/`;
 - creates `~/.solar/`;
 - syncs the published `harness/` source into `~/.solar/harness/` when present;
+- copies optional packaged runtime components such as `mempalace/` and `codex-bridge/` when present;
 - creates `~/.solar/bin/solar-harness`;
-- runs install verification.
+- runs L1 + L2 install verification.
 
-Harness runtime:
+### Agent install / deploy / self-check path
+
+If you want Claude, Codex, Cursor, Copilot, or another code agent to install Solar for you, give it this exact instruction:
+
+```text
+Install Solar from https://github.com/lisihao/Solar using INSTALL-AGENT.md.
+Follow the steps exactly. Before each command, report: purpose, command, and expected output.
+Do not use sudo/root. Stop immediately on any failure and show the exact output.
+After installation, run the L1 + L2 self-check:
+
+cd ~/Solar && ./install.sh
+~/.solar/bin/solar-harness help
+cd ~/Solar && ./scripts/sync-harness-runtime.sh
+~/.solar/bin/solar-harness help
+
+If optional third-party skills are requested, use SKILLS-INSTALL.md, but do not install optional third-party skills without asking first.
+```
+
+Dedicated documents:
+
+| Document | Purpose |
+|---|---|
+| [`INSTALL-AGENT.md`](INSTALL-AGENT.md) | Step-by-step install/deploy/self-check protocol for AI agents. |
+| [`SKILLS-INSTALL.md`](SKILLS-INSTALL.md) | Optional skill expansion protocol for AI agents. |
+| [`scripts/sync-harness-runtime.sh`](scripts/sync-harness-runtime.sh) | Syncs repository `harness/` into the local runtime `~/.solar/harness/`. |
+
+### Harness runtime
 
 ```bash
 cd ~/Solar
@@ -196,6 +228,15 @@ Runtime boundary:
 - generated runtime state: `run/`, `state/`, `logs/`, `cache/`, `vendor/`, `venvs/`
 
 Runtime logs, databases, private trajectories, local model caches, credentials, and machine-local state should not be committed as source.
+
+### Optional skills and plugins
+
+Base install is intentionally conservative:
+
+- Solar-bundled skills are copied from `skills/` into `~/.claude/skills/`.
+- Third-party skill packs are optional; use [`SKILLS-INSTALL.md`](SKILLS-INSTALL.md) and ask the user before installing optional repositories.
+- Harness plugin support is installed as framework code. Plugins must provide `harness/plugins/<id>/manifest.yaml` and pass plugin validation before they should be treated as usable.
+- API keys are optional for install. If you need API-backed features, copy `.env.template` to `.env` and fill values locally. Do not commit `.env`.
 
 ---
 

@@ -1,193 +1,212 @@
-# SKILLS-INSTALL — 给 AI Agent 看的 Skills 安装剧本
+# Solar Skills Install Protocol
 
-> 如果你是用户的 AI agent (Claude / Codex / Cursor / Copilot 等), 用户把这个文档贴给你, 你的任务是按下面剧本帮用户在他机器上**自动**安装 Solar 系统所需的 Skills。
+> For AI agents installing optional third-party skills after the base Solar install.
 
----
-
-## 协议
-
-- **Solar 仓库自身只打包 12 个 Solar 自有 skill** (`~/Solar/skills/`), `install.sh` 已经把它们装到 `~/.claude/skills/`
-- **真正完整体验需要 1500+ skills**, 来自 Anthropic 官方 + 第三方 + Karpathy 编程技能等
-- **本剧本目的**: 让 AI agent 自动 clone 这些 skill 仓库, 不需要用户手动 git
-- **执行边界**: 全程不需要 root/sudo, 只在 `~/.claude/skills/` 下操作
+Solar does not require third-party skills to complete the base install. `./install.sh` copies repository-bundled skills from `skills/` into `~/.claude/skills/`. This document is only for optional skill expansion.
 
 ---
 
-## 安装前检查
+## Rules for the installing agent
 
-执行前先确认:
+1. Do not install optional third-party repositories without asking the user first.
+2. Do not delete or overwrite the user's existing skills.
+3. Do not claim success without checking the installed paths.
+4. Do not use `sudo` or root.
+5. If a git clone fails, report the error and ask whether to retry with a proxy/mirror.
+6. Keep all installations under `~/.claude/skills/` unless the user explicitly asks otherwise.
+
+---
+
+## Preflight
 
 ```bash
-# Solar L1 + L2 已装
-test -f ~/.claude/CLAUDE.md && echo "✅ Solar 已装" || echo "❌ 先跑 ~/Solar/install.sh"
+# Solar base install should already be present
+test -f ~/.claude/CLAUDE.md && echo "Solar core present" || echo "Run: cd ~/Solar && ./install.sh"
 
-# git 可用
+test -d ~/.claude/skills && echo "Skills directory present" || mkdir -p ~/.claude/skills
+
 which git && git --version | head -1
 ```
 
-如果 Solar 没装, 先停下让用户跑 `cd ~/Solar && ./install.sh`。
+Stop if `git` is missing.
 
 ---
 
-## Step 1: Karpathy 编程技能集 (~210 个 skill, 强烈推荐)
+## What is already installed by Solar
 
-**来源**: `forrestchang/andrej-karpathy-skills` — Karpathy 编码哲学 + 工具技能合集
-**为什么需要**: Solar `CLAUDE.md` 里的 "Karpathy 编码四原则" 引用这些技能
+Base install copies the repository's bundled skills:
 
 ```bash
-# 检查是否已装
-if [ -d ~/.claude/skills/python-pro ] || [ -d ~/.claude/skills/code-reviewer ]; then
-    echo "✅ Karpathy skills 似乎已装"
-else
-    cd ~/.claude/skills
-    # 临时 clone 到子目录, 然后展开
-    git clone --depth=1 https://github.com/forrestchang/andrej-karpathy-skills.git .karpathy-tmp
-    cp -r .karpathy-tmp/skills/* ~/.claude/skills/ 2>/dev/null || cp -r .karpathy-tmp/* ~/.claude/skills/
-    rm -rf .karpathy-tmp
-    echo "✅ Karpathy skills 装好"
-fi
+cd ~/Solar
+find skills -maxdepth 2 -type f | head
+ls ~/.claude/skills | head
 ```
 
-**预期结果**: `~/.claude/skills/` 增加 ~200 个 skill 目录 (python-pro / code-reviewer / debugger / 等)
-
-**失败处理**:
-- `git clone` 失败 → 配代理或换 SSH (`git@github.com:forrestchang/andrej-karpathy-skills.git`)
-- 用户在中国大陆 → 试 `https://gitclone.com/github.com/forrestchang/andrej-karpathy-skills.git` 镜像
-
-**通过条件**: `ls ~/.claude/skills/ | wc -l` 输出 ≥ 50 → 进入 Step 2
+The exact number of bundled skills can change with the repository. Do not hard-code a count in user reports.
 
 ---
 
-## Step 2: Anthropic 官方 Claude Code Skills (~50 个)
+## Optional Pack A — Karpathy-style programming skills
 
-**来源**: Anthropic Claude Code 自带 — 通常用户装 Claude Code 时已经在 `~/.claude/skills/` 或 `/Applications/Claude.app/Contents/Resources/skills/` 里
-**为什么需要**: `gstack/Superpowers` 触发词链路依赖
+Ask first:
+
+```text
+Do you want to install the optional Karpathy-style programming skill pack into ~/.claude/skills/?
+```
+
+Install only after approval:
 
 ```bash
-# 检查 Claude Code 是否已装
-which claude || open -a "Claude" 2>/dev/null
+mkdir -p ~/.claude/skills
+cd ~/.claude/skills
+if [ -d .karpathy-tmp ]; then
+  rm -rf .karpathy-tmp
+fi
+git clone --depth=1 https://github.com/forrestchang/andrej-karpathy-skills.git .karpathy-tmp
+if [ -d .karpathy-tmp/skills ]; then
+  cp -Rn .karpathy-tmp/skills/* ~/.claude/skills/
+else
+  cp -Rn .karpathy-tmp/* ~/.claude/skills/
+fi
+rm -rf .karpathy-tmp
+```
 
-# 看 Claude Code 自带 skills 位置
-for path in /Applications/Claude.app/Contents/Resources/skills \
-            ~/Library/Application\ Support/Claude/skills \
-            ~/.config/claude/skills; do
-    if [ -d "$path" ]; then
-        echo "找到 Claude Code 自带 skills: $path"
-        # 软链或复制 (建议软链, 跟 Claude Code 升级同步)
-        ln -sf "$path"/* ~/.claude/skills/ 2>/dev/null || cp -r "$path"/* ~/.claude/skills/
-    fi
+Check:
+
+```bash
+ls ~/.claude/skills | grep -E "python|review|debug|test" | head || true
+```
+
+---
+
+## Optional Pack B — Claude Code built-in skills
+
+Claude Code may already ship its own skills. Link/copy only after user approval.
+
+```bash
+for path in \
+  /Applications/Claude.app/Contents/Resources/skills \
+  "$HOME/Library/Application Support/Claude/skills" \
+  "$HOME/.config/claude/skills"; do
+  if [ -d "$path" ]; then
+    echo "Found Claude skills: $path"
+  fi
 done
 ```
 
-**通过条件**: `ls ~/.claude/skills/ | grep -E "^(brainstorming|writing-plans|systematic-debugging)$"` 至少命中 1 个
+If the user wants them installed:
+
+```bash
+mkdir -p ~/.claude/skills
+for path in \
+  /Applications/Claude.app/Contents/Resources/skills \
+  "$HOME/Library/Application Support/Claude/skills" \
+  "$HOME/.config/claude/skills"; do
+  if [ -d "$path" ]; then
+    cp -Rn "$path"/* ~/.claude/skills/ 2>/dev/null || true
+  fi
+done
+```
 
 ---
 
-## Step 3: gstack 工具集 (网页浏览/QA/部署 等)
+## Optional Pack C — gstack setup
 
-**来源**: gstack 是 Solar 自有的扩展, 通过 `~/.claude/skills/gstack/setup` 安装
-**为什么需要**: Solar `CLAUDE.md` 的"gstack (核心模块)"章节, 触发词 `/browse` `/review` `/ship` 等都依赖它
+If `~/.claude/skills/gstack/setup` exists, it can be initialized after user approval:
 
 ```bash
-# Solar L1 安装时 gstack 子目录已经在 ~/.claude/skills/gstack/, 只需跑 setup
 if [ -f ~/.claude/skills/gstack/setup ]; then
-    cd ~/.claude/skills/gstack && ./setup
-    echo "✅ gstack 已 setup"
+  cd ~/.claude/skills/gstack
+  ./setup
+  echo "gstack setup complete"
 else
-    echo "⚠️  ~/.claude/skills/gstack/ 不存在, 先跑 ~/Solar/install.sh"
+  echo "gstack setup script not found; skip"
 fi
 ```
 
-**通过条件**: `~/.claude/skills/gstack/bin/$B` 或 `~/.solar/bin/$B` 可执行
+Check:
+
+```bash
+find ~/.claude/skills/gstack -maxdepth 3 -type f | head 2>/dev/null || true
+```
 
 ---
 
-## Step 4: Skill Retriever MCP (按场景动态加载 Skill)
+## Optional Pack D — Skill retriever MCP
 
-**来源**: Solar `core/mcp-servers/skill-retriever/` (已随 install.sh 装到 `~/.claude/core/`)
-**为什么需要**: Solar `CLAUDE.md` 的"技能分层检索 (MCP v2.0)"章节, 让 Claude 按用户意图动态拉 skill
+This is optional and depends on the user's Claude Code MCP setup.
 
 ```bash
-# 注册到 Claude Code MCP
 SKILL_MCP=$(find ~/.claude/core ~/.claude/mcp-servers -name "*skill-retriever*" -type d 2>/dev/null | head -1)
 if [ -n "$SKILL_MCP" ]; then
-    cd "$SKILL_MCP"
-    [ -f package.json ] && npm install --silent
-    [ -f main.ts ] && claude mcp add skill-retriever -- node $SKILL_MCP/main.js
-    echo "✅ skill-retriever MCP 已注册"
-fi
-```
-
-**通过条件**: `claude mcp list | grep skill-retriever | grep -v Failed` 命中
-
----
-
-## Step 5: 第三方 Skills (按需选装)
-
-下面是用户**可能**想要的额外 skill 仓库, **AI 应该问用户哪些要装** 不要全装:
-
-| 仓库 | 内容 | 何时装 |
-|------|------|-------|
-| `anthropics/claude-cookbooks` | API 用法示例 | 用户开发 Claude API 时 |
-| `langchain-ai/langgraph-skills` | LangGraph 工作流 skill | 用户做 agent 编排时 |
-| `mlflow/mlflow-skills` | ML 实验跟踪 | 用户搞 ML 时 |
-
-```bash
-# 询问用户后再装
-read -p "要装 LangGraph skills 吗? [y/N] " yn
-if [[ "$yn" =~ ^[Yy]$ ]]; then
-    git clone --depth=1 https://github.com/langchain-ai/langgraph-skills.git ~/.claude/skills/langgraph 2>&1
-fi
-```
-
----
-
-## Step 6: 验收
-
-```bash
-echo "=== Solar Skills 安装结果 ==="
-TOTAL=$(ls ~/.claude/skills/ 2>/dev/null | wc -l | tr -d ' ')
-echo "总 skill 目录: $TOTAL"
-
-# 关键 skill 抽检
-for s in python-pro code-reviewer brainstorming writing-plans gstack; do
-    [ -d ~/.claude/skills/$s ] && echo "  ✅ $s" || echo "  ❌ $s 缺失"
-done
-
-echo ""
-if [ "$TOTAL" -ge 50 ]; then
-    echo "✅ Skills 安装完成 (≥ 50 个)"
-    echo "下一步: 启动 Claude Code, 输入 'solar' 看 Solar 启动宣告"
+  echo "Found skill retriever candidate: $SKILL_MCP"
 else
-    echo "⚠️ 数量偏少 ($TOTAL < 50), 至少 Step 1 (Karpathy) 应该装"
+  echo "No skill retriever MCP found; skip"
+fi
+```
+
+If the user approves registration and `claude` CLI is available:
+
+```bash
+if [ -n "$SKILL_MCP" ] && command -v claude >/dev/null 2>&1; then
+  cd "$SKILL_MCP"
+  [ -f package.json ] && npm install --silent
+  if [ -f main.js ]; then
+    claude mcp add skill-retriever -- node "$SKILL_MCP/main.js"
+  elif [ -f main.ts ]; then
+    echo "main.ts found; compile/register manually according to this MCP package"
+  fi
 fi
 ```
 
 ---
 
-## 给 AI agent 的元规则
+## Optional third-party repositories
 
-执行本剧本时:
+These should be installed only when the user explicitly asks for that domain:
 
-1. **不擅自装第 5 步可选 skills** — 必须先问用户
-2. **不假装成功** — 每步检查 exit code, 失败明确报告
-3. **不删用户已有 skill** — 用 `cp -n` 不覆盖, 或软链
-4. **遇到 git 网络问题** — 提示用户配代理或换镜像, 不卡死
-5. **遇到 Claude Code 未装** — 停下提示用户先装 Claude Code: https://claude.ai/code
+| Domain | Example source | When to install |
+|---|---|---|
+| Claude API examples | `anthropics/claude-cookbooks` | User is developing Claude API apps. |
+| Agent orchestration | LangGraph-related skills if available | User is building LangGraph/agent workflow demos. |
+| ML experiments | MLflow-related materials if available | User is doing ML experiment tracking. |
+
+Do not promise a fixed repository is maintained unless you have verified it at install time.
 
 ---
 
-## 可选高级:让用户的 AI 自动维护 skills
-
-监护人级用户 (有 GitHub PAT) 可以让 AI agent 跑后台脚本周期性 `git pull` 更新 skills:
+## Verification
 
 ```bash
-# crontab 每周日凌晨 3 点更新 Karpathy skills
-(crontab -l 2>/dev/null; echo "0 3 * * 0 cd ~/.claude/skills/.karpathy-tmp && git pull --quiet") | crontab -
+echo "=== Solar Skills Summary ==="
+test -d ~/.claude/skills && echo "skills_dir=ok" || echo "skills_dir=missing"
+TOTAL=$(find ~/.claude/skills -maxdepth 1 -mindepth 1 2>/dev/null | wc -l | tr -d ' ')
+echo "skill_entries=$TOTAL"
+
+for s in gstack python-pro code-reviewer brainstorming writing-plans systematic-debugging; do
+  [ -e ~/.claude/skills/$s ] && echo "present: $s" || true
+done
 ```
 
-**默认不设**, 用户主动要才配置。
+A small number of skills is not a Solar install failure. Third-party skills are optional enhancements.
 
 ---
 
-**底线**: 本剧本帮 AI 装的 skills 是**增强**Solar 体验, 不是必需。即使全部 skip 失败, Solar L1 + L2 (CLAUDE.md + harness + mempalace) 已经能跑大部分核心功能。
+## Final report format
+
+```text
+Skills install report
+- Base Solar skills: present/missing
+- Optional Karpathy pack: installed/skipped/failed
+- Optional Claude built-ins: installed/skipped/failed
+- Optional gstack setup: done/skipped/failed
+- Optional MCP registration: done/skipped/failed
+- Total skill entries: N
+- Failures: none / exact command + output
+```
+
+---
+
+## Bottom line
+
+Solar's base system should install and run without third-party skill packs. Use this protocol only to expand the available skill surface after the user approves the extra repositories or MCP registrations.

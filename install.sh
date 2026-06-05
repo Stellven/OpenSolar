@@ -17,7 +17,7 @@
 #   - 不 git clone 别的仓库
 #   - 不写入 API keys (用户自己编辑 .env)
 #   - 不跑 Python 依赖 (mempalace 需 chromadb/mcp/sentence-transformers, 见 SKILLS-INSTALL.md)
-#   - 不安装 1500+ Skills (Anthropic Claude Code 自带 + 第三方仓库, 见 SKILLS-INSTALL.md 让 AI 装)
+#   - 不安装第三方 skill packs；仓库内置 skills 会复制，第三方增强包见 SKILLS-INSTALL.md
 
 set -e
 
@@ -159,13 +159,13 @@ if [ "$FAIL" -eq 0 ]; then
     echo ""
     echo "📝 下一步:"
     echo "  1. (可选) 配置 API keys: cp $SOLAR_DIR/.env.template $SOLAR_DIR/.env"
-    echo "     编辑填入: ANTHROPIC_API_KEY / ZHIPU_API_KEY / DEEPSEEK_API_KEY"
+    echo "     编辑填入需要的 API key；安装本身不依赖 API key"
     echo ""
     echo "  2. (可选) Python 依赖 (MemPalace 需要):"
     echo "     python3.11 -m pip install --user chromadb sentence-transformers langdetect mcp pyyaml"
     echo ""
-    echo "  3. (推荐) 让你的 AI 装 Skills 增强:"
-    echo "     把 $SOLAR_DIR/SKILLS-INSTALL.md 给 AI agent (Claude/Cursor 等), 它会自动 clone 第三方 skills"
+    echo "  3. (可选) Skills 增强:"
+    echo "     让 AI agent 按 $SOLAR_DIR/SKILLS-INSTALL.md 安装第三方 skill packs；必须先征得用户同意"
     echo ""
     echo "  4. 启动 Claude Code, 输入 'solar' 看启动宣告"
     echo ""
