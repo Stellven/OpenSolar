@@ -78,6 +78,17 @@ TRANSIENT_OPERATOR_FAILURE_RE = re.compile(
     r"auth_expired|not logged in|not authenticated",
     re.I,
 )
+
+
+def _transient_operator_failure_text(record: dict[str, Any]) -> str:
+    """Collect transient provider-failure evidence across PM and operator result shapes."""
+    parts: list[str] = []
+    for key in ("failure_reason", "log_tail", "stderr", "stdout", "error", "message"):
+        value = record.get(key)
+        if value:
+            parts.append(str(value))
+    return "\n".join(parts).strip()
+
 RATE_LIMIT_PRUNER_LABEL = os.environ.get("SOLAR_RATE_LIMIT_PRUNER_LABEL", "com.solar.harness-rate-limit-pruner")
 OPERATOR_HEALTH_WATCHDOG_LABEL = os.environ.get("SOLAR_OPERATOR_HEALTH_WATCHDOG_LABEL", "com.solar.harness.operator-health-watchdog")
 CODE_EXEC_TASK_TYPES = {
@@ -2387,7 +2398,7 @@ def _mark_graph_node_pm_dispatched(item: dict[str, Any], submitted: dict[str, An
 
 
 def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) -> dict[str, Any]:
-    reason = str(record.get("failure_reason") or "").strip()
+    reason = _transient_operator_failure_text(record)
     if not TRANSIENT_OPERATOR_FAILURE_RE.search(reason):
         return {"ok": False, "released": False, "reason": "not_transient_operator_failure"}
     sprint_id = str(record.get("sprint_id") or "").strip()
@@ -2538,7 +2549,7 @@ def _mark_graph_node_evaluation_dispatched(record: dict[str, Any]) -> dict[str, 
 def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) -> dict[str, Any]:
     if normalize_role(str(record.get("requested_role") or "")) != "evaluator":
         return {"ok": False, "released": False, "reason": "not_evaluator_task"}
-    reason = str(record.get("failure_reason") or "").strip()
+    reason = _transient_operator_failure_text(record)
     if not TRANSIENT_OPERATOR_FAILURE_RE.search(reason):
         return {"ok": False, "released": False, "reason": "not_transient_operator_failure"}
     sprint_id = str(record.get("sprint_id") or "").strip()
@@ -2595,7 +2606,7 @@ def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) ->
             "ts": now,
             "reason": "transient_operator_failure",
             "task_id": task_id,
-            "failure_reason": str(record.get("failure_reason") or ""),
+            "failure_reason": reason,
         }
     )
     result_entry = (graph.get("node_results") or {}).get(node_id)
