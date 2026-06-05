@@ -13,6 +13,8 @@ import io
 import json
 import os
 import re
+import shutil
+import subprocess
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from typing import Any, Iterable
@@ -20,12 +22,16 @@ from typing import Any, Iterable
 from harness_paths import resolve_runtime_harness_dir
 
 SCHEMA_VERSION = "operator_health_watchdog.v1"
+LAUNCH_AGENT_LABEL = os.environ.get("SOLAR_OPERATOR_HEALTH_WATCHDOG_LABEL", "com.solar.harness.operator-health-watchdog")
+SKIPPED_SAMPLE_LIMIT = int(os.environ.get("SOLAR_OHW_SKIPPED_SAMPLE_LIMIT", "25"))
 
 HARNESS_DIR = resolve_runtime_harness_dir()
 RUN_DIR = HARNESS_DIR / "run" / "operator-health-watchdog"
 LOCK_PATH = RUN_DIR / "lock"
 LATEST_REPORT_PATH = RUN_DIR / "latest.json"
 HISTORY_PATH = RUN_DIR / "history.jsonl"
+LIBRARY_LAUNCH_AGENT_PATH = Path.home() / "Library" / "LaunchAgents" / f"{LAUNCH_AGENT_LABEL}.plist"
+RUN_LAUNCH_AGENT_PATH = RUN_DIR / f"{LAUNCH_AGENT_LABEL}.plist"
 
 
 def _iso_now() -> str:
@@ -164,6 +170,37 @@ def _phase_entry(
         "counters": counters or {},
         "details": details or {},
     }
+
+
+def _indexed_skipped(skipped: list[dict[str, Any]], *, sample_limit: int = SKIPPED_SAMPLE_LIMIT) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    if not skipped:
+        return [], None
+    sample_limit = max(1, sample_limit)
+    by_reason: dict[str, dict[str, Any]] = {}
+    for item in skipped:
+        reason = str(item.get("reason") or "unknown")
+        entry = by_reason.setdefault(reason, {"reason": reason, "count": 0, "targets": []})
+        entry["count"] += 1
+        target = item.get("target")
+        if target is not None and len(entry["targets"]) < 5:
+            entry["targets"].append(str(target))
+    index = {
+        "total": len(skipped),
+        "sample_limit": sample_limit,
+        "truncated": len(skipped) > sample_limit,
+        "by_reason": sorted(by_reason.values(), key=lambda entry: (-int(entry["count"]), str(entry["reason"]))),
+    }
+    return skipped[:sample_limit], index
+
+
+def _attach_skipped_index(phase: dict[str, Any], skipped: list[dict[str, Any]]) -> dict[str, Any]:
+    sample, index = _indexed_skipped(skipped)
+    phase["skipped"] = sample
+    if index is not None:
+        phase["skipped_index"] = index
+        phase["counters"] = dict(phase.get("counters") or {})
+        phase["counters"]["skipped_total"] = int(index["total"])
+    return phase
 
 
 def _action(
@@ -360,15 +397,36 @@ def _run_graph_drain_phase(controller_mod: Any, *, apply: bool, capacity: dict[s
     )
 
 
-def _iter_pm_records(pm_mod: Any) -> Iterable[tuple[Path, dict[str, Any]]]:
+def _is_capacity_probe_record(pm_mod: Any, record: dict[str, Any], path: Path) -> bool:
+    helper = getattr(pm_mod, "is_capacity_probe_record", None)
+    if callable(helper):
+        try:
+            return bool(helper(record, path))
+        except TypeError:
+            try:
+                return bool(helper(record=record, path=path))
+            except Exception:
+                pass
+        except Exception:
+            pass
+    task_id = str(record.get("task_id") or path.stem)
+    sprint_id = str(record.get("sprint_id") or "")
+    return task_id.startswith("pm-graph-dispatch-capacity-probe-") or task_id.startswith("pm-eval-capacity-probe-") or sprint_id in {"graph-dispatch-capacity-probe", "eval-capacity-probe"}
+
+
+def _iter_pm_records(pm_mod: Any, *, include_probe_records: bool = True) -> Iterable[tuple[Path, dict[str, Any]]]:
     inbox_dir = getattr(pm_mod, "PM_INBOX_DIR", HARNESS_DIR / "run" / "pm-inbox")
     if not inbox_dir.exists():
         return []
-    return (
-        (path, _load_json(path, {}))
-        for path in sorted(inbox_dir.glob("pm-*.json"))
-        if isinstance(_load_json(path, None), dict)
-    )
+    records: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(inbox_dir.glob("pm-*.json")):
+        record = _load_json(path, None)
+        if not isinstance(record, dict):
+            continue
+        if not include_probe_records and _is_capacity_probe_record(pm_mod, record, path):
+            continue
+        records.append((path, record))
+    return records
 
 
 def _is_pid_alive(pid: int | None) -> bool:
@@ -672,7 +730,7 @@ def run_watchdog(
                 "_release_graph_eval_on_transient_operator_failure",
                 lambda *_: {"ok": False, "released": False},
             )
-        for path, record in _iter_pm_records(pm_mod):
+        for path, record in _iter_pm_records(pm_mod, include_probe_records=False):
             if not isinstance(record, dict):
                 continue
             task_id = str(record.get("task_id") or path.stem)
@@ -724,13 +782,14 @@ def run_watchdog(
                     except Exception:
                         pass
         if release_actions or release_skips:
+            release_phase = _phase_entry(
+                "reconcile_pm_failures",
+                "ok",
+                actions=release_actions,
+                skipped=release_skips,
+            )
             phases.append(
-                _phase_entry(
-                    "reconcile_pm_failures",
-                    "ok",
-                    actions=release_actions,
-                    skipped=release_skips,
-                )
+                _attach_skipped_index(release_phase, release_skips)
             )
             counters["pm_failures_reconciled"] += len(release_actions)
         else:
@@ -812,7 +871,7 @@ def run_watchdog(
         projection_actions: list[dict[str, Any]] = []
         projection_skips: list[dict[str, Any]] = []
         if lease_adapter_mod is not None and hasattr(lease_adapter_mod, "repair_status_projection"):
-            for _path, record in _iter_pm_records(pm_mod):
+            for _path, record in _iter_pm_records(pm_mod, include_probe_records=False):
                 if not isinstance(record, dict):
                     continue
                 projection_payload = lease_adapter_mod.repair_status_projection(record, apply=apply)
@@ -826,15 +885,14 @@ def run_watchdog(
                     item for item in projection_payload.get("skipped", []) if isinstance(item, dict)
                 )
             actions.extend(item for item in projection_actions if item.get("status") == "applied")
-            phases.append(
-                _phase_entry(
-                    "repair_status_projection",
-                    "ok" if projection_actions else "skipped",
-                    actions=projection_actions,
-                    skipped=projection_skips,
-                    counters={"applied": len(projection_actions)},
-                )
+            projection_phase = _phase_entry(
+                "repair_status_projection",
+                "ok" if projection_actions else "skipped",
+                actions=projection_actions,
+                skipped=projection_skips,
+                counters={"applied": len(projection_actions)},
             )
+            phases.append(_attach_skipped_index(projection_phase, projection_skips))
         else:
             phases.append(_phase_entry("repair_status_projection", "skipped", skipped=[{"reason": "adapter_missing"}]))
 
@@ -1021,17 +1079,59 @@ def command_run_loop(
     return results
 
 
+def _launchd_domain() -> str:
+    return f"gui/{os.getuid()}"
+
+
+def _launchagent_status() -> dict[str, Any]:
+    plist_candidates = [LIBRARY_LAUNCH_AGENT_PATH, RUN_LAUNCH_AGENT_PATH]
+    plist_path = next((path for path in plist_candidates if path.exists()), RUN_LAUNCH_AGENT_PATH)
+    payload: dict[str, Any] = {
+        "label": LAUNCH_AGENT_LABEL,
+        "plist_path": str(plist_path),
+        "plist_candidates": [str(path) for path in plist_candidates],
+        "installed": any(path.exists() for path in plist_candidates),
+        "launchd_loaded": False,
+        "launchd_state": "unknown",
+    }
+    if shutil.which("launchctl") is None:
+        payload["launchd_state"] = "launchctl_unavailable"
+        return payload
+    try:
+        result = subprocess.run(
+            ["launchctl", "print", f"{_launchd_domain()}/{LAUNCH_AGENT_LABEL}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception as exc:
+        payload["launchd_state"] = f"launchctl_error:{type(exc).__name__}"
+        return payload
+    if result.returncode != 0:
+        payload["launchd_state"] = "not_loaded"
+        return payload
+    output = result.stdout or result.stderr or ""
+    payload["launchd_loaded"] = True
+    state_match = re.search(r"^\s*state = ([^\n]+)", output, re.M)
+    if state_match:
+        payload["launchd_state"] = state_match.group(1).strip()
+    return payload
+
+
 def command_status(
     *,
     json_output: bool = True,
     latest_path: Path = LATEST_REPORT_PATH,
 ) -> dict[str, Any]:
     del json_output
+    launchagent = _launchagent_status()
     if not latest_path.exists():
         payload = {
             "ok": False,
-            "installed": False,
-            "launchd_loaded": False,
+            "installed": bool(launchagent.get("installed", False)),
+            "launchd_loaded": bool(launchagent.get("launchd_loaded", False)),
+            "launchd_state": launchagent.get("launchd_state"),
             "last_run_at": None,
             "last_exit_code": None,
             "last_actions": {
@@ -1050,8 +1150,9 @@ def command_status(
         if not isinstance(latest_payload, dict):
             payload = {
                 "ok": False,
-                "installed": False,
-                "launchd_loaded": False,
+                "installed": bool(launchagent.get("installed", False)),
+                "launchd_loaded": bool(launchagent.get("launchd_loaded", False)),
+                "launchd_state": launchagent.get("launchd_state"),
                 "latest_report": str(latest_path),
                 "last_run_at": None,
                 "last_exit_code": None,
@@ -1070,8 +1171,9 @@ def command_status(
             steps = latest_payload.get("steps", []) if isinstance(latest_payload.get("steps"), list) else []
             payload = {
                 "ok": bool(latest_payload.get("ok", False)),
-                "installed": bool(latest_payload.get("installed", False)),
-                "launchd_loaded": bool(latest_payload.get("launchd_loaded", False)),
+                "installed": bool(launchagent.get("installed", latest_payload.get("installed", False))),
+                "launchd_loaded": bool(launchagent.get("launchd_loaded", latest_payload.get("launchd_loaded", False))),
+                "launchd_state": launchagent.get("launchd_state"),
                 "last_run_at": latest_payload.get("finished_at") or latest_payload.get("started_at"),
                 "last_exit_code": latest_payload.get("last_exit_code"),
                 "last_actions": {
@@ -1094,4 +1196,5 @@ def command_status(
             }
     payload["paths"] = payload.get("paths", {})
     payload["paths"]["latest_report"] = str(latest_path)
+    payload["launchagent"] = launchagent
     return payload

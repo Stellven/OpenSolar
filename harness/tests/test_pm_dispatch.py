@@ -606,6 +606,55 @@ def test_operator_health_watchdog_status_projects_latest_and_legacy_pruner(monke
     assert status["legacy_pruner"]["launchd_loaded"] is False
 
 
+def test_pm_reconcile_excludes_capacity_probe_records(monkeypatch, tmp_path, capsys):
+    pm_dispatch = _load_pm_dispatch()
+    inbox = tmp_path / "pm-inbox"
+    inbox.mkdir()
+    stale_ts = "2026-01-01T00:00:00Z"
+    probe_id = "pm-graph-dispatch-capacity-probe-CAPACITY-deadbeef"
+    normal_id = "pm-real-task-N1-deadbeef"
+    (inbox / f"{probe_id}.json").write_text(
+        json.dumps(
+            {
+                "task_id": probe_id,
+                "sprint_id": "graph-dispatch-capacity-probe",
+                "node_id": "CAPACITY",
+                "result_path": str(tmp_path / "missing-probe-result.md"),
+                "status": "submitted",
+                "submitted_at": stale_ts,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (inbox / f"{normal_id}.json").write_text(
+        json.dumps(
+            {
+                "task_id": normal_id,
+                "sprint_id": "sprint-real",
+                "node_id": "N1",
+                "result_path": str(tmp_path / "missing-real-result.md"),
+                "status": "submitted",
+                "submitted_at": stale_ts,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+    monkeypatch.setattr(pm_dispatch, "_active_pm_task_ids", lambda: set())
+
+    files = [path.name for path in pm_dispatch._pm_record_files(include_probe_records=False)]
+    assert f"{probe_id}.json" not in files
+    assert f"{normal_id}.json" in files
+
+    rc = pm_dispatch.cmd_reconcile(argparse.Namespace(apply=True, max_age_minutes=1, json=True, limit=40))
+    out = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert out["summary"] == {"fail_missing_pm_result": 1}
+    assert json.loads((inbox / f"{probe_id}.json").read_text(encoding="utf-8"))["status"] == "submitted"
+    assert json.loads((inbox / f"{normal_id}.json").read_text(encoding="utf-8"))["status"] == "failed_missing_pm_result"
+
+
 def test_drain_builder_ready_submits_and_marks_graph(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     sprints = tmp_path / "sprints"
