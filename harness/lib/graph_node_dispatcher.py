@@ -4504,7 +4504,12 @@ def _builder_operator_pool_workers(
                 "host_id": "operator-pool",
                 "host_type": "operator_pool",
                 "lease_state": "idle",
-                "capability_match": {"required": worker_capabilities, "matched": [], "missing": [], "observed": []},
+                "capability_match": {
+                    "required": worker_capabilities,
+                    "matched": worker_capabilities,
+                    "missing": [],
+                    "observed": worker_capabilities,
+                },
                 "compat_fallback": False,
                 "compat_maps_to": None,
                 "resolution_source": "operator_pool_virtual",
@@ -4537,7 +4542,12 @@ def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
             "host_id": "operator-pool",
             "host_type": "operator_pool",
             "lease_state": "idle",
-            "capability_match": {"required": ["review", "testing"], "matched": [], "missing": [], "observed": []},
+            "capability_match": {
+                "required": ["review", "testing"],
+                "matched": ["review", "testing"],
+                "missing": [],
+                "observed": ["review", "testing"],
+            },
             "compat_fallback": False,
             "compat_maps_to": None,
             "resolution_source": "operator_pool_virtual",
@@ -4555,7 +4565,10 @@ def _graph_queue_dispatch_role(payload: dict[str, Any], node: dict[str, Any], as
         or node.get("role")
         or "builder"
     )
-    return str(raw or "builder").strip().lower()
+    role = str(raw or "builder").strip().lower().replace("-", "_")
+    if role in {"builder_main", "builder_worker", "implementation"}:
+        return "builder"
+    return role
 
 
 def _graph_node_task_type(node: dict[str, Any]) -> str:

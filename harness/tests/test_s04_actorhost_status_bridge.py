@@ -147,6 +147,36 @@ def test_worker_discovery_surfaces_actorhost_fields(monkeypatch) -> None:
     assert workers[0]["actorhost"]["resolution_source"] == "actor_hosts"
 
 
+def test_operator_pool_virtual_workers_advertise_brokered_capabilities(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_builder_operator_pool_available_count", lambda: 2)
+    monkeypatch.setenv("SOLAR_GRAPH_BUILDER_OPERATOR_POOL_SLOTS", "1")
+    monkeypatch.setattr(gnd, "_operator_pool_role_available", lambda role: role == "evaluator")
+
+    builder_workers = gnd._builder_operator_pool_workers(
+        worker_skills=["python"],
+        worker_capabilities=["python", "runtime-dag"],
+    )
+    evaluator_workers = gnd._evaluator_operator_pool_workers()
+
+    assert len(builder_workers) == 1
+    builder_match = builder_workers[0]["capability_match"]
+    assert builder_match["matched"] == ["python", "runtime-dag"]
+    assert builder_match["missing"] == []
+    assert builder_match["observed"] == ["python", "runtime-dag"]
+
+    assert len(evaluator_workers) == 1
+    evaluator_match = evaluator_workers[0]["capability_match"]
+    assert evaluator_match["matched"] == ["review", "testing"]
+    assert evaluator_match["missing"] == []
+    assert evaluator_match["observed"] == ["review", "testing"]
+
+
+def test_graph_queue_dispatch_role_normalizes_builder_aliases() -> None:
+    assert gnd._graph_queue_dispatch_role({}, {}, {"dispatch_role": "builder_main"}) == "builder"
+    assert gnd._graph_queue_dispatch_role({}, {}, {"dispatch_role": "builder-worker"}) == "builder"
+    assert gnd._graph_queue_dispatch_role({}, {"dispatch_role": "Implementation"}, {}) == "builder"
+
+
 def test_operator_pool_dispatch_result_surfaces_selected_actorhost(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(gnd, "HARNESS_DIR", tmp_path)
     monkeypatch.setattr(gnd, "SPRINTS_DIR", tmp_path / "sprints")
