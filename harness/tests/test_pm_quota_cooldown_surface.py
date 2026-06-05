@@ -239,6 +239,21 @@ class TestIsDispatchableReason:
 # ---------------------------------------------------------------------------
 
 class TestApplyFailureFlowControl:
+    def test_parse_try_again_at_reset_hint(self):
+        import datetime
+        from zoneinfo import ZoneInfo
+
+        import operator_flow_control as ofc
+
+        now = datetime.datetime(2026, 6, 4, 20, 33, tzinfo=ZoneInfo("America/Toronto"))
+        reset = ofc.parse_rate_limit_reset_at(
+            "ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark. "
+            "Switch to another model now, or try again at 9:25 PM.",
+            now=now,
+        )
+
+        assert reset == datetime.datetime(2026, 6, 5, 1, 25, tzinfo=datetime.timezone.utc)
+
     def test_quota_text_sets_cooldown_state(self, tmp_path, monkeypatch):
         import operator_flow_control as ofc
 

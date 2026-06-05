@@ -477,6 +477,28 @@ def _apply_failure_runtime_override(
     )
 
 
+def _tail_text(path: Path, limit: int = 4000) -> str:
+    try:
+        if not path.exists() or not path.is_file():
+            return ""
+        return path.read_text(encoding="utf-8", errors="replace")[-limit:]
+    except Exception:
+        return ""
+
+
+def _failure_text_for_flow_control(result_dir: Path, log_lines: list[str]) -> str:
+    """Include backend sidecar logs so quota/auth lines are not lost in wrapper output."""
+    parts: list[str] = []
+    base_tail = "\n".join(log_lines[-50:]).strip()
+    if base_tail:
+        parts.append(base_tail)
+    for name in ("codex-cli-output.log", "codex-last-message.md"):
+        text = _tail_text(result_dir / name).strip()
+        if text:
+            parts.append(f"[{name}]\n{text}")
+    return "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: daemon
 # ---------------------------------------------------------------------------
@@ -981,14 +1003,15 @@ def cmd_daemon(args: argparse.Namespace) -> int:
             # ── Write result artifact ─────────────────────────────────────────────
             log_tail = "\n".join(log_lines[-50:])
             flow_control_decision: dict[str, Any] | None = None
-            if result_status not in {"completed", "draining"} and log_tail.strip():
+            failure_text = _failure_text_for_flow_control(result_dir, log_lines)
+            if result_status not in {"completed", "draining"} and failure_text.strip():
                 try:
                     flow_control_decision = _apply_failure_runtime_override(
                         operator_id=operator_id,
                         config=config,
                         envelope=envelope,
                         task_dir=result_dir,
-                        failure_text=log_tail,
+                        failure_text=failure_text,
                     )
                 except Exception as exc:
                     log_lines.append(f"[WARN] failure flow control hook failed: {exc}")

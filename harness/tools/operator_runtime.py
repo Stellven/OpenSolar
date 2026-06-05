@@ -96,7 +96,9 @@ def get_operator_status(operator_id: str) -> Optional[Dict[str, Any]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if "expires_at" in data:
-            if _now() > data["expires_at"]:
+            expires_at = _parse_utc(str(data.get("expires_at") or ""))
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if expires_at is not None and now > expires_at:
                 try:
                     path.unlink()
                 except Exception:
