@@ -2,6 +2,7 @@
 """Regression tests for pane hygiene projection in status-server."""
 
 import importlib.util
+import datetime
 import json
 from pathlib import Path
 
@@ -78,6 +79,51 @@ def test_status_server_source_renders_host_role_and_hygiene_columns():
     assert "<th>Hygiene</th>" in source
 
 
+def test_recent_user_development_requirements_groups_root_sprint(tmp_path, monkeypatch):
+    root = "sprint-20260605-status-sprint-page-recent-user-requirements"
+    req_sid = f"{root}-s01-requirements"
+    arch_sid = f"{root}-s02-architecture"
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    for sid, status, phase in [(req_sid, "passed", "completed"), (arch_sid, "active", "implementation")]:
+        (tmp_path / f"{sid}.status.json").write_text(
+            json.dumps(
+                {
+                    "id": sid,
+                    "title": "架构设计与接口契约",
+                    "status": status,
+                    "phase": phase,
+                    "updated_at": now,
+                    "created_at": now,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    (tmp_path / f"{req_sid}.requirement_ir.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "solar.requirement_ir.v1",
+                "sprint_id": req_sid,
+                "source_inputs": {"raw_request": "[raw_request]\n在 status 的 sprint 页面展示最近一个月用户提交的开发需求和执行状态。"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(status_server, "SPRINTS_DIR", tmp_path)
+
+    payload = status_server._recent_user_development_requirements(days=30)
+
+    assert payload["status"] == "ok"
+    assert payload["count"] == 1
+    item = payload["items"][0]
+    assert item["root_id"] == root
+    assert item["status"] == "active"
+    assert item["phase"] == "implementation"
+    assert item["slice_count"] == 2
+    assert "status sprint page recent user requirements" in item["demand"]
+
+
 def test_read_jsonl_fast_tail_returns_last_entries_without_full_scan(tmp_path):
     path = tmp_path / "all.jsonl"
     rows = []
@@ -117,6 +163,7 @@ def test_status_payload_short_cache_hits_on_second_call(monkeypatch):
     monkeypatch.setattr(status_server, "_autoresearch_impact_summary", lambda: {})
     monkeypatch.setattr(status_server, "_meta_harness_summary", lambda: {})
     monkeypatch.setattr(status_server, "_pm_dispatch_summary", lambda: {})
+    monkeypatch.setattr(status_server, "_recent_user_development_requirements", lambda days=30: {"status": "ok", "items": []})
     monkeypatch.setattr(status_server, "_physical_operator_summary", lambda: {})
     monkeypatch.setattr(status_server, "_final_contract_summary_status", lambda: {})
     monkeypatch.setattr(status_server, "_requirement_coverage_summary", lambda sid: {})

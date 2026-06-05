@@ -5406,6 +5406,223 @@ def _sprint_meta(sid: str) -> dict:
     return meta
 
 
+def _sprint_root_requirement_id(sid: str) -> str:
+    sid = str(sid or "").strip()
+    if not sid:
+        return ""
+    match = re.search(r"-(?:s|S)\d{2}-(?:requirements|architecture|core-runtime|orchestration-ui|verification-release)\b", sid)
+    return sid[: match.start()] if match else sid
+
+
+def _is_synthetic_sprint_id(sid: str) -> bool:
+    return any(str(sid or "").startswith(prefix) for prefix in _SYNTHETIC_SID_PREFIXES)
+
+
+def _sprint_slug_title(sid: str) -> str:
+    text = re.sub(r"^(?:sprint|epic)-\d{8}(?:-\d{6})?-", "", str(sid or "").strip())
+    for suffix in ("-s01-requirements", "-s02-architecture", "-s03-core-runtime", "-s04-orchestration-ui", "-s05-verification-release"):
+        text = text.replace(suffix, "")
+    text = re.sub(r"[-_]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return _clip_text(text or sid, 140)
+
+
+def _clean_requirement_text(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "[raw_request]" in text:
+        text = text.split("[raw_request]", 1)[1]
+    text = re.sub(r"\[entrypoint_metadata\].*?(?=\[raw_request\]|$)", " ", text, flags=re.S)
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or re.match(r"^(sprint_id|node_id|role|cwd|repo):\s*", stripped):
+            continue
+        lines.append(stripped)
+    text = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    if text.startswith("评审 sprint-") or re.match(r"^执行\s+S\d+\b", text):
+        return ""
+    return _clip_text(text, 220)
+
+
+def _looks_internal_requirement_summary(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return True
+    internal_markers = (
+        "planner pool probe",
+        "把用户原始大需求拆成",
+        "建立端到端测试、负控",
+        "补齐正式 planner 产物",
+        "执行 s0",
+        "评审 sprint-",
+        "读取同 sprint",
+    )
+    return any(marker in lowered for marker in internal_markers)
+
+
+def _requirement_text_from_path(path: Path) -> tuple[str, str]:
+    try:
+        if path.suffix == ".json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            source_inputs = data.get("source_inputs") if isinstance(data.get("source_inputs"), dict) else {}
+            candidates: list[object] = [
+                source_inputs.get("raw_request"),
+                source_inputs.get("raw_intent"),
+                data.get("raw_intent"),
+                data.get("title"),
+            ]
+            requirements = data.get("requirements")
+            if isinstance(requirements, list):
+                candidates.extend((row or {}).get("source_text") for row in requirements if isinstance(row, dict))
+            for candidate in candidates:
+                text = _clean_requirement_text(candidate)
+                if text and text != "N/A":
+                    return text, "requirement_ir"
+            return "", "requirement_ir"
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return "", path.name
+    desc = (
+        _first_paragraph_after_heading(text, r"^##\s*(用户问题|problem|背景|context|目标|goals?|intent|需求|requirements?)\b.*")
+        or _first_heading(text).removeprefix("PRD").strip()
+    )
+    return (_clip_text(desc, 220), path.suffix.removeprefix(".") or path.name) if desc else ("", path.name)
+
+
+def _recent_user_development_requirements(days: int = 30, max_items: int = 1000) -> dict:
+    if not SPRINTS_DIR.exists():
+        return {"ok": False, "status": "missing", "window_days": days, "count": 0, "items": []}
+
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    groups: dict[str, dict] = {}
+
+    def ensure_group(root_id: str) -> dict:
+        return groups.setdefault(
+            root_id,
+            {
+                "root_id": root_id,
+                "sprint_ids": set(),
+                "statuses": [],
+                "phases": [],
+                "latest_ts": datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc),
+                "created_ts": None,
+                "demand": "",
+                "source": "",
+                "source_path": "",
+            },
+        )
+
+    status_paths = list(SPRINTS_DIR.glob("**/sprint-*.status.json")) + list(SPRINTS_DIR.glob("**/epic-*.status.json"))
+    for path in status_paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            sid = str(data.get("id") or data.get("sprint_id") or path.name.removesuffix(".status.json"))
+            if _is_synthetic_sprint_id(sid):
+                continue
+            updated = _parse_status_time(str(data.get("updated_at") or data.get("completed_at") or data.get("created_at") or ""))
+            if updated is None:
+                updated = datetime.datetime.fromtimestamp(path.stat().st_mtime, tz=datetime.timezone.utc)
+            if updated < cutoff:
+                continue
+        except Exception:
+            continue
+        root_id = _sprint_root_requirement_id(sid)
+        group = ensure_group(root_id)
+        group["sprint_ids"].add(sid)
+        group["statuses"].append(str(data.get("status") or "unknown"))
+        group["phases"].append(str(data.get("phase") or ""))
+        if updated > group["latest_ts"]:
+            group["latest_ts"] = updated
+            group["latest_status"] = str(data.get("status") or "unknown")
+            group["latest_phase"] = str(data.get("phase") or "")
+            group["latest_sprint_id"] = sid
+            group["status_title"] = str(data.get("title") or "")
+        created = _parse_status_time(str(data.get("created_at") or ""))
+        if created and (group["created_ts"] is None or created < group["created_ts"]):
+            group["created_ts"] = created
+
+    req_paths = sorted(
+        list(SPRINTS_DIR.glob("**/*.requirement_ir.json")),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    for path in req_paths:
+        sid = path.name
+        for suffix in (".requirement_ir.json",):
+            sid = sid.removesuffix(suffix)
+        root_id = _sprint_root_requirement_id(sid)
+        if not root_id or _is_synthetic_sprint_id(root_id):
+            continue
+        try:
+            mtime = datetime.datetime.fromtimestamp(path.stat().st_mtime, tz=datetime.timezone.utc)
+        except OSError:
+            continue
+        group = groups.get(root_id)
+        if group is None and mtime < cutoff:
+            continue
+        group = ensure_group(root_id)
+        group["sprint_ids"].add(sid)
+        if mtime > group["latest_ts"]:
+            group["latest_ts"] = mtime
+        if group["created_ts"] is None:
+            group["created_ts"] = mtime
+        slug_demand = _sprint_slug_title(root_id)
+        if not group["demand"] and (not slug_demand or slug_demand.startswith(("intent ", "intent-"))):
+            text, source = _requirement_text_from_path(path)
+            if text:
+                group["demand"] = text
+                group["source"] = source
+                group["source_path"] = str(path)
+
+    items: list[dict] = []
+    for root_id, group in groups.items():
+        if group["latest_ts"] < cutoff:
+            continue
+        statuses = [s.lower() for s in group["statuses"] if s]
+        phases = [p for p in group["phases"] if p]
+        latest_status = str(group.get("latest_status") or ("unknown" if not statuses else statuses[-1]))
+        latest_phase = str(group.get("latest_phase") or (phases[-1] if phases else ""))
+        slug_demand = _sprint_slug_title(root_id)
+        raw_demand = group["demand"] or _clean_requirement_text(group.get("status_title"))
+        if slug_demand and not slug_demand.startswith(("intent ", "intent-")):
+            demand = slug_demand
+        else:
+            demand = raw_demand or slug_demand
+        if _looks_internal_requirement_summary(demand):
+            demand = slug_demand or raw_demand or root_id
+        items.append(
+            {
+                "root_id": root_id,
+                "latest_sprint_id": group.get("latest_sprint_id") or sorted(group["sprint_ids"])[-1],
+                "demand": demand,
+                "status": latest_status,
+                "phase": latest_phase,
+                "slice_count": len(group["sprint_ids"]),
+                "status_count": len(statuses),
+                "passed_count": sum(1 for s in statuses if s in {"passed", "completed", "finalized", "done"}),
+                "active_count": sum(1 for s in statuses if s in _ACTIVE_SPRINT_STATUSES),
+                "blocked_count": sum(1 for s in statuses if s in {"blocked", "failed", "failed_review", "error"}),
+                "created_at": group["created_ts"].isoformat().replace("+00:00", "Z") if group["created_ts"] else "",
+                "updated_at": group["latest_ts"].isoformat().replace("+00:00", "Z"),
+                "source": group["source"] or "status_slug",
+                "source_path": group["source_path"],
+            }
+        )
+    items.sort(key=lambda row: row.get("updated_at") or "", reverse=True)
+    shown = items[:max_items]
+    return {
+        "ok": True,
+        "status": "ok",
+        "window_days": days,
+        "count": len(items),
+        "shown": len(shown),
+        "items": shown,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
 def _read_assignments() -> dict:
     """Return pane assignment map from current or legacy assignment files."""
     if PANE_ASSIGNMENTS.exists():
@@ -8649,6 +8866,7 @@ def _status_payload(limit: int = 50, sprint_id: str = "") -> dict:
         "autoresearch_impact": _autoresearch_impact_summary(),
         "meta_harness": _meta_harness_summary(),
         "pm_dispatches": _pm_dispatch_summary(),
+        "recent_user_requirements": _recent_user_development_requirements(days=30),
         "collector_schedules": _collector_scheduler_payload(),
         "physical_operators": physical_operators,
         "warning_breakdown": _pane_warning_breakdown(main_screen, lab_screen, multi_task_pool, physical_operators),
@@ -9640,6 +9858,8 @@ tr:hover td {
   </section>
 
   <section class="panel" id="tab-sprint">
+    <h2>近 30 天用户开发需求</h2>
+    <div class="card" id="recent-user-requirements-card">Loading...</div>
     <h2>Current Sprint</h2>
     <div class="card" id="sprint-card">Loading...</div>
     <h2>Contract Summary</h2>
@@ -11032,6 +11252,46 @@ function renderRequirementCoverage(data, compact) {
     + '</div>'
     + '</div>';
 }
+function renderRecentUserRequirements(data) {
+  data = data || {};
+  const items = data.items || [];
+  if (!items.length) {
+    return '<div class="muted">最近 ' + esc(data.window_days || 30) + ' 天没有可展示的用户开发需求。</div>';
+  }
+  const active = items.filter(item => Number(item.active_count || 0) > 0).length;
+  const blocked = items.filter(item => Number(item.blocked_count || 0) > 0).length;
+  const passed = items.filter(item => String(item.status || '').toLowerCase() === 'passed' || String(item.status || '').toLowerCase() === 'completed').length;
+  let html = ''
+    + '<div class="research-shell">'
+    + '<div class="research-overview">'
+    + '<div class="research-stat"><div class="kv-label">窗口</div><strong>近 ' + esc(data.window_days || 30) + ' 天</strong></div>'
+    + '<div class="research-stat"><div class="kv-label">需求数</div><strong>' + esc(data.count || items.length) + '</strong></div>'
+    + '<div class="research-stat"><div class="kv-label">活跃</div><strong>' + esc(active) + '</strong></div>'
+    + '<div class="research-stat"><div class="kv-label">已过</div><strong>' + esc(passed) + '</strong></div>'
+    + '<div class="research-stat"><div class="kv-label">阻塞/失败</div><strong>' + esc(blocked) + '</strong></div>'
+    + '</div>';
+  html += '<table style="margin-top:0.9rem;"><tr><th>最近更新</th><th>用户需求</th><th>执行状态</th><th>阶段</th><th>Sprint</th><th>切片</th></tr>';
+  items.forEach(item => {
+    const updated = String(item.updated_at || '').replace('T', ' ').replace('Z', '').slice(0, 16) || 'N/A';
+    const demand = item.demand || item.root_id || 'N/A';
+    const sprint = item.latest_sprint_id || item.root_id || 'N/A';
+    const slices = esc(item.slice_count || 0) + ' / passed ' + esc(item.passed_count || 0);
+    html += '<tr>'
+      + '<td class="muted">' + esc(updated) + '</td>'
+      + '<td><div style="font-weight:800;color:#f8fafc;">' + esc(demand) + '</div><div class="muted" style="font-size:0.72rem;margin-top:.25rem;">source: ' + esc(item.source || 'N/A') + '</div></td>'
+      + '<td>' + statusBadge(item.status || 'unknown') + '</td>'
+      + '<td>' + esc(item.phase || 'N/A') + '</td>'
+      + '<td><span class="tech-id">' + esc(sprint) + '</span></td>'
+      + '<td>' + slices + '</td>'
+      + '</tr>';
+  });
+  html += '</table>';
+  if (Number(data.count || 0) > items.length) {
+    html += '<div class="muted" style="margin-top:.6rem;">只显示前 ' + esc(items.length) + ' 条；总计 ' + esc(data.count) + ' 条。</div>';
+  }
+  html += '</div>';
+  return html;
+}
 function renderEvolution(evolution) {
   const el = document.getElementById('evolution-card');
   if (!el) return;
@@ -11765,6 +12025,7 @@ function render(data) {
   document.getElementById('refresh-ts').textContent = 'Last updated: ' + now;
 
   const sp = data.current_sprint || {};
+  document.getElementById('recent-user-requirements-card').innerHTML = renderRecentUserRequirements(data.recent_user_requirements || {});
   const requestedSprintId = data.requested_sprint_id || '';
   if (sp.sprint_id && sp.is_active !== false) {
     const sprintTitle = requestedSprintId && requestedSprintId === sp.sprint_id
@@ -11918,11 +12179,23 @@ function refresh() {
         }
       });
     })
-    .finally(() => { window.__solarStatusRefreshInFlight = false; });
+	    .finally(() => { window.__solarStatusRefreshInFlight = false; });
+}
+function refreshRecentUserRequirements() {
+  const el = document.getElementById('recent-user-requirements-card');
+  if (!el) return;
+  fetch('/status/recent-user-requirements?ts=' + Date.now(), {cache: 'no-store'})
+    .then(r => r.json())
+    .then(data => { el.innerHTML = renderRecentUserRequirements(data); })
+    .catch(e => {
+      el.innerHTML = '<div class="warn">近 30 天用户开发需求加载失败：' + esc(e && e.message ? e.message : String(e)) + '</div>';
+    });
 }
 activateTab((location.hash || '#overview').slice(1));
+refreshRecentUserRequirements();
 refresh();
 setInterval(refresh, 15000);
+setInterval(refreshRecentUserRequirements, 60000);
 </script>
 </body>
 </html>
@@ -12024,6 +12297,9 @@ class StatusHandler(BaseHTTPRequestHandler):
         elif path == "/status":
             sprint_id = params.get("sprint_id", [""])[0]
             self._send_json(_status_payload(limit=50, sprint_id=sprint_id))
+
+        elif path == "/status/recent-user-requirements":
+            self._send_json(_recent_user_development_requirements(days=30))
 
         elif path == "/api/pane-model-call":
             target = params.get("target", [""])[0]
