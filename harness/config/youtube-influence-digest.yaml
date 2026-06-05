@@ -14,8 +14,8 @@ schedule:
   - 18
   minute: 17
 output:
-  raw_dir: /Users/lisihao/Knowledge/_raw/youtube-influence-digest
-  state_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest
+  raw_dir: ${SOLAR_KNOWLEDGE_DIR}/_raw/youtube-influence-digest
+  state_dir: ${HARNESS_DIR}/state/youtube-influence-digest
   max_videos_per_run: 30
   per_channel_limit: 3
   lookback_hours: 72
@@ -34,13 +34,13 @@ asr:
   blocking_for_knowledge_progress: false
   queue_health_policy: fallback_non_blocking
   max_per_run: 0
-  queue_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-queue
-  done_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-done
-  audio_dir: /Users/lisihao/.solar/harness/state/youtube-influence-digest/asr-audio
-  raw_dir: /Users/lisihao/Knowledge/_raw/youtube-influence-digest/asr
-  yt_dlp_bin: /Users/lisihao/Solar/harness/.venv-youtube-digest/bin/yt-dlp
+  queue_dir: ${HARNESS_DIR}/state/youtube-influence-digest/asr-queue
+  done_dir: ${HARNESS_DIR}/state/youtube-influence-digest/asr-done
+  audio_dir: ${HARNESS_DIR}/state/youtube-influence-digest/asr-audio
+  raw_dir: ${SOLAR_KNOWLEDGE_DIR}/_raw/youtube-influence-digest/asr
+  yt_dlp_bin: ${SOLAR_REPO}/harness/.venv-youtube-digest/bin/yt-dlp
   ffmpeg_location: /opt/homebrew/bin
-  js_runtimes: node:/Users/lisihao/n/bin/node
+  js_runtimes: node:${NODE_BIN:-node}
   whisper_bin: /opt/homebrew/bin/whisper
   whisper_model: small
   language: zh

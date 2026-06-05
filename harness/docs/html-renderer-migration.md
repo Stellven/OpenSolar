@@ -47,8 +47,8 @@ The adapter strips external `<script src>`, stylesheet `<link>`, and CSS `@impor
 Run:
 
 ```bash
-bash /Users/lisihao/Solar/harness/tests/test-html-anything-adapter.sh
-bash /Users/lisihao/Solar/harness/tests/test-html-artifact-helper.sh
-bash /Users/lisihao/Solar/harness/tests/test-pm-planner-html-artifacts.sh
-bash /Users/lisihao/Solar/harness/tests/test-accepted-artifact-knowledge-sync.sh
+bash ${SOLAR_REPO}/harness/tests/test-html-anything-adapter.sh
+bash ${SOLAR_REPO}/harness/tests/test-html-artifact-helper.sh
+bash ${SOLAR_REPO}/harness/tests/test-pm-planner-html-artifacts.sh
+bash ${SOLAR_REPO}/harness/tests/test-accepted-artifact-knowledge-sync.sh
 ```

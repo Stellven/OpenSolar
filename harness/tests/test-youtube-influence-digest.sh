@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${ROOT:-/Users/lisihao/Solar/harness}"
+ROOT="${ROOT:-${SOLAR_REPO}/harness}"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 PUBLISHED_AT="$(python3 - <<'PY'

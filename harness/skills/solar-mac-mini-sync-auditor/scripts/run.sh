@@ -24,8 +24,8 @@ no_remote = sys.argv[2] == "true"
 home = pathlib.Path.home()
 local = home / ".solar" / "harness"
 manifest = local / "state" / "mac-mini-sync-required.jsonl"
-remote = "lisihao@100.122.223.55"
-remote_dir = "/Users/lisihao/.solar/harness"
+remote = "lisihao@${SOLAR_REMOTE_IP}"
+remote_dir = "${HARNESS_DIR}"
 critical = [
     "solar-harness.sh",
     "lib/skill_healthcheck.py",

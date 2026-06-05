@@ -40,8 +40,8 @@ DEFAULT_MAX_AGE_DAYS = int(os.environ.get("AI_INFLUENCE_MAX_AGE_DAYS", "30"))
 DEFAULT_ANALYSIS_TOP_N = int(os.environ.get("AI_INFLUENCE_ANALYSIS_TOP_N", "300"))
 DEFAULT_GLM_BATCH_SIZE = int(os.environ.get("AI_INFLUENCE_GLM_BATCH_SIZE", "10"))
 USER_AGENT = "Solar-AI-Influence-Daily/2.0"
-DEFAULT_MAIL_TO = "sean.lisihao@huawei.com"
-DEFAULT_GMAIL_USER = "lisihao@gmail.com"
+DEFAULT_MAIL_TO = os.environ.get("AI_INFLUENCE_MAIL_TO", "user@example.com")
+DEFAULT_GMAIL_USER = os.environ.get("GMAIL_USER", "user@example.com")
 DEFAULT_GMAIL_KEYCHAIN_SERVICE = "solar-ai-influence-gmail"
 
 
@@ -228,7 +228,7 @@ def collect_via_dom_llm(handle: str, session: requests.Session, dry_run: bool = 
     print(f"      [DOM_DIRECT] Launching Playwright to scrape DOM for @{handle}...", flush=True)
 
     scraper_path = str(Path(__file__).resolve().parent.parent / "tools" / "playwright_twitter_scraper.py")
-    python_bin = "/Users/lisihao/.claude/mcp-servers/browser-use/.venv/bin/python"
+    python_bin = "${CLAUDE_HOME}/mcp-servers/browser-use/.venv/bin/python"
     
     try:
         proc = subprocess.run([python_bin, scraper_path, handle], capture_output=True, text=True, timeout=60)
@@ -1600,20 +1600,21 @@ def send_html_email(html_content: str, date_str: str) -> dict:
         keychain_account = os.environ.get("GMAIL_APP_PASSWORD_KEYCHAIN_ACCOUNT") or gmail_user
         gmail_app_password = _keychain_password(keychain_service, keychain_account)
     gmail_to = os.environ.get("GMAIL_TO") or os.environ.get("MAIL_TO") or os.environ.get("AI_INFLUENCE_MAIL_TO") or DEFAULT_MAIL_TO or gmail_user
+    recipients = [addr.strip() for addr in re.split(r"[,;]", gmail_to) if addr.strip()]
     backend = os.environ.get("AI_INFLUENCE_MAIL_BACKEND", "").lower()
 
     if backend in {"mailapp-rich", "mailapp-rich-compose", "mailapp_rich_compose"}:
-        return mailapp_rich_compose(html_content, date_str, gmail_to)
+        return mailapp_rich_compose(html_content, date_str, ", ".join(recipients))
 
-    if not gmail_user or not gmail_app_password:
-        mail_result = send_macos_mail(html_content, date_str, gmail_to)
+    if not gmail_user or not gmail_app_password or not recipients:
+        mail_result = send_macos_mail(html_content, date_str, ", ".join(recipients))
         if mail_result.get("status") == "sent":
             mail_result["gmail_fallback_reason"] = "GMAIL_USER or GMAIL_APP_PASSWORD not set"
             return mail_result
         return {
             "status": "warn",
             "backend": "preview",
-            "reason": f"GMAIL_USER or GMAIL_APP_PASSWORD not set; macos_mail={mail_result.get('reason', 'unavailable')}",
+            "reason": f"GMAIL_USER/GMAIL_APP_PASSWORD/recipients not set; macos_mail={mail_result.get('reason', 'unavailable')}",
             "macos_mail": mail_result,
             "preview_generated": True,
             "html_mail_required": True,
@@ -1628,16 +1629,16 @@ def send_html_email(html_content: str, date_str: str) -> dict:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = gmail_user
-        msg["To"] = gmail_to
+        msg["To"] = ", ".join(recipients)
         msg.attach(MIMEText(html_content, "html", "utf-8"))
 
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
             server.login(gmail_user, gmail_app_password)
-            server.sendmail(gmail_user, [gmail_to], msg.as_string())
-        return {"status": "sent", "backend": "gmail_smtp", "to": gmail_to}
+            server.sendmail(gmail_user, recipients, msg.as_string())
+        return {"status": "sent", "backend": "gmail_smtp", "to": recipients}
     except Exception as exc:
-        mail_result = send_macos_mail(html_content, date_str, gmail_to)
+        mail_result = send_macos_mail(html_content, date_str, ", ".join(recipients))
         if mail_result.get("status") == "sent":
             mail_result["gmail_fallback_reason"] = str(exc)
             return mail_result

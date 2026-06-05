@@ -15,8 +15,8 @@
       "stage": null,
       "task_graph_status": "active",
       "updated_at": "2026-06-01T20:53:20Z",
-      "status_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s01-requirements.status.json",
-      "task_graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s01-requirements.task_graph.json",
+      "status_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s01-requirements.status.json",
+      "task_graph_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s01-requirements.task_graph.json",
       "handoff_files": [
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s01-requirements.N1-handoff.md",
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s01-requirements.N2-handoff.md",
@@ -53,8 +53,8 @@
       "stage": "completed",
       "task_graph_status": "passed",
       "updated_at": "2026-06-02T02:34:16Z",
-      "status_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s02-architecture.status.json",
-      "task_graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s02-architecture.task_graph.json",
+      "status_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s02-architecture.status.json",
+      "task_graph_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s02-architecture.task_graph.json",
       "handoff_files": [
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s02-architecture.N1-handoff.md",
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s02-architecture.N2-handoff.md",
@@ -86,8 +86,8 @@
       "stage": "completed",
       "task_graph_status": "passed",
       "updated_at": "2026-06-02T04:57:58Z",
-      "status_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s03-core-runtime.status.json",
-      "task_graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s03-core-runtime.task_graph.json",
+      "status_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s03-core-runtime.status.json",
+      "task_graph_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s03-core-runtime.task_graph.json",
       "handoff_files": [
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s03-core-runtime.N1-handoff.md",
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s03-core-runtime.N2-handoff.md",
@@ -115,8 +115,8 @@
       "stage": "completed",
       "task_graph_status": "passed",
       "updated_at": "2026-06-02T08:54:11Z",
-      "status_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s04-orchestration-ui.status.json",
-      "task_graph_path": "/Users/lisihao/.solar/harness/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s04-orchestration-ui.task_graph.json",
+      "status_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s04-orchestration-ui.status.json",
+      "task_graph_path": "${HARNESS_DIR}/sprints/sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s04-orchestration-ui.task_graph.json",
       "handoff_files": [
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s04-orchestration-ui.N1_activation_graph_route-handoff.md",
         "sprint-20260530-p0-修复单-actorhost-taxonomy-与-actor-first-runtime-落地补齐-s04-orchestration-ui.N2_actorhost_status_bridge-handoff.md",

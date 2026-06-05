@@ -2,16 +2,21 @@
 secrets/
 *.key
 *.pem
-*.env
-.env*
+.env
+.env.*
+!.env.template
+!.env.example
 *_secret*
 *_private*
+id_rsa
+id_ed25519
+known_hosts
 
 # 数据库（本地数据，不推送）
 *.db
 *.sqlite
 *.sqlite3
-.solar/solar.db
+.solar/
 
 # 缓存和临时文件
 *.log
@@ -22,10 +27,14 @@ bun.lockb
 *.cache
 
 # 用户私有配置
-.solar/STATE.md
-.solar/DECISIONS.md
-.solar/LOG/
-.solar/session.md
+harness/config/*.local.*
+harness/config/solar-user-config.json
+harness/config/actor-hosts.local.json
+harness/config/physical-operators.local.json
+harness/config/remote-hosts.local.json
+harness/config/*.lock
+model-config.sh
+model-config.sh.*
 
 # 备份文件
 *.backup
@@ -50,8 +59,28 @@ coverage/
 
 # Solar Harness 运行时/证据产物
 harness/.coverage
+harness/.workdir
+harness/_raw/
+harness/_extracted_knowledge_run/
+harness/audits/
+harness/handovers/
+harness/intents/
+harness/brain/lessons*.jsonl
+harness/com.solar*.plist
 harness/run/
 harness/state/
+harness/logs/
+harness/cache/
+harness/runs/
+harness/vendor/
+harness/venvs/
+harness/quarantine/
+harness/workspace/
+harness/workspaces/
+harness/search-index/
+harness/sprints/
+!harness/sprints/examples/
+!harness/sprints/fixtures/
 reports/
 harness/intake-requests/
 harness/intents/intent-*/

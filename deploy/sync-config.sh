@@ -8,7 +8,7 @@ TARGET="${1:-}"
 
 if [ -z "$TARGET" ]; then
     echo "用法: $0 <target-host>"
-    echo "示例: $0 lisihao@192.168.50.194"
+    echo "示例: $0 user@remote-host"
     exit 1
 fi
 

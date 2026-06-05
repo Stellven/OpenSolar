@@ -7,9 +7,10 @@ set -euo pipefail
 
 LOCAL_HOME="${HOME}"
 HARNESS_DIR="${LOCAL_HOME}/.solar/harness"
-REMOTE_USER="${SOLAR_MAC_MINI_USER:-lisihao}"
+REMOTE_USER="${SOLAR_MAC_MINI_USER:-${USER:-remote-user}}"
 REMOTE_HOST="${SOLAR_MAC_MINI_HOST:-}"
 REMOTE_PATH="${SOLAR_MAC_MINI_PATH:-}"
+REMOTE_HOST_CANDIDATES="${SOLAR_MAC_MINI_HOST_CANDIDATES:-}"
 DRY_RUN=false
 VERIFY_ONLY=false
 
@@ -19,8 +20,9 @@ Usage:
   sync-code-to-mac-mini.sh [--host user@host] [--dry-run] [--verify-only]
 
 Env:
-  SOLAR_MAC_MINI_USER  default: lisihao
-  SOLAR_MAC_MINI_HOST  default: auto-detect 100.122.223.55 then 192.168.3.189
+  SOLAR_MAC_MINI_USER  default: current local user
+  SOLAR_MAC_MINI_HOST  required unless --host or SOLAR_MAC_MINI_HOST_CANDIDATES is set
+  SOLAR_MAC_MINI_HOST_CANDIDATES  optional space-separated host candidates
   SOLAR_MAC_MINI_PATH  default: remote $HOME
 EOF
 }
@@ -58,14 +60,15 @@ detect_remote() {
     printf '%s@%s\n' "$REMOTE_USER" "$REMOTE_HOST"
     return
   fi
+  [[ -n "$REMOTE_HOST_CANDIDATES" ]] || die "set SOLAR_MAC_MINI_HOST, --host, or SOLAR_MAC_MINI_HOST_CANDIDATES"
   local host
-  for host in 100.122.223.55 192.168.3.189; do
+  for host in $REMOTE_HOST_CANDIDATES; do
     if ssh_try "${REMOTE_USER}@${host}" 'printf ok' >/dev/null 2>&1; then
       printf '%s@%s\n' "$REMOTE_USER" "$host"
       return
     fi
   done
-  die "cannot reach Mac mini via 100.122.223.55 or 192.168.3.189"
+  die "cannot reach remote host via SOLAR_MAC_MINI_HOST_CANDIDATES"
 }
 
 REMOTE="$(detect_remote)"
@@ -155,7 +158,7 @@ verify_remote() {
     grep -q 'graph-scheduler' /tmp/solar-harness-help.verify
     grep -q 'verify-integrations' /tmp/solar-harness-help.verify
     grep -q 'context inject' /tmp/solar-harness-help.verify
-    if grep -R --exclude-dir='__pycache__' --exclude='*.pyc' --exclude='sync-code-to-mac-mini.sh' --exclude='model-config.sh' '/Users/sihaoli' '$REMOTE_PATH/.solar/harness/lib' '$REMOTE_PATH/.solar/harness/tools' '$REMOTE_PATH/.solar/harness/'*.sh '$REMOTE_PATH/.solar/bin' '$REMOTE_PATH/.solar/codex-bridge' >/tmp/solar-path-leaks.verify 2>/dev/null; then
+    if grep -R -E --exclude-dir='__pycache__' --exclude='*.pyc' --exclude='sync-code-to-mac-mini.sh' --exclude='model-config.sh' '/Users/(sihaoli|lisihao)' '$REMOTE_PATH/.solar/harness/lib' '$REMOTE_PATH/.solar/harness/tools' '$REMOTE_PATH/.solar/harness/'*.sh '$REMOTE_PATH/.solar/bin' '$REMOTE_PATH/.solar/codex-bridge' >/tmp/solar-path-leaks.verify 2>/dev/null; then
       echo 'path_leaks_found'
       head -20 /tmp/solar-path-leaks.verify
       exit 42

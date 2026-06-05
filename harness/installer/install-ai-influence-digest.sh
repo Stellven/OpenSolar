@@ -2,7 +2,7 @@
 set -euo pipefail
 
 LABEL="com.solar.ai-influence-daily-digest"
-HARNESS_DIR="${HARNESS_DIR:-/Users/lisihao/Solar/harness}"
+HARNESS_DIR="${HARNESS_DIR:-${SOLAR_REPO}/harness}"
 PLIST_SRC="$HARNESS_DIR/${LABEL}.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/${LABEL}.plist"
 CONFIG="$HARNESS_DIR/config/ai-influence-daily-digest.yaml"

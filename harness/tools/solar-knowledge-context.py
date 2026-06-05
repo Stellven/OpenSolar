@@ -9,7 +9,7 @@ Usage:
 
 Environment:
   SOLAR_DB          — override ~/.solar/solar.db path
-  OBSIDIAN_VAULT_PATH — override /Users/sihaoli/Knowledge
+  OBSIDIAN_VAULT_PATH — override ${SOLAR_KNOWLEDGE_DIR}
 """
 
 from __future__ import annotations

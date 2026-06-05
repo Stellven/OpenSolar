@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-HARNESS_DIR="${HARNESS_DIR:-/Users/lisihao/Solar/harness}"
+HARNESS_DIR="${HARNESS_DIR:-${SOLAR_REPO:-$HOME/Solar}/harness}"
 PYTHON="${PYTHON:-python3}"
-DB="${DB:-/Users/lisihao/.solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite}"
-STATE_DIR="${SOLAR_YOUTUBE_WEEKLY_REPORT_STATE_DIR:-/Users/lisihao/.solar/harness/state/tech-hotspot-radar}"
+DB="${DB:-${SOLAR_HOME:-$HOME/.solar}/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite}"
+STATE_DIR="${SOLAR_YOUTUBE_WEEKLY_REPORT_STATE_DIR:-${SOLAR_HOME:-$HOME/.solar}/harness/state/tech-hotspot-radar}"
 CONFIG="${CONFIG:-$HARNESS_DIR/config/tech-hotspot-radar.yaml}"
-LOG_DIR="${SOLAR_YOUTUBE_WEEKLY_REPORT_LOG_DIR:-/Users/lisihao/.solar/harness/run}"
+LOG_DIR="${SOLAR_YOUTUBE_WEEKLY_REPORT_LOG_DIR:-${SOLAR_HOME:-$HOME/.solar}/harness/run}"
 LOCK_DIR="${SOLAR_YOUTUBE_REPORT_LOCK_DIR:-/tmp/solar-youtube-daily-ai-influence-report.lockdir}"
 LOCAL_TZ="${LOCAL_TZ:-America/Toronto}"
 ERR_LOG="${SOLAR_YOUTUBE_REPORT_ERR_LOG:-$LOG_DIR/youtube-daily-ai-influence-report.err.log}"
@@ -33,10 +33,24 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PA
 export PYTHONIOENCODING="utf-8"
 export BROWSER_AGENT_HEADLESS="${BROWSER_AGENT_HEADLESS:-true}"
 export TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS="${TECH_HOTSPOT_BROWSER_CHATGPT_HEADLESS:-true}"
-export BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE="${BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE:-/Users/lisihao/.solar/harness/browser-agent-chatgpt-local.json}"
+export BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE="${BROWSER_AGENT_CHATGPT_PROFILE_POLICY_FILE:-${SOLAR_HOME:-$HOME/.solar}/harness/browser-agent-chatgpt-local.json}"
 export AI_INFLUENCE_YOUTUBE_CHAPTER_BATCH_SIZE="${AI_INFLUENCE_YOUTUBE_CHAPTER_BATCH_SIZE:-4}"
 export AI_INFLUENCE_YOUTUBE_CHAPTER_REPAIR_ATTEMPTS="${AI_INFLUENCE_YOUTUBE_CHAPTER_REPAIR_ATTEMPTS:-1}"
 export AI_INFLUENCE_YOUTUBE_TRANSCRIPT_CHAR_LIMIT="${AI_INFLUENCE_YOUTUBE_TRANSCRIPT_CHAR_LIMIT:-6000}"
+MAIL_TO_CONFIG="${AI_INFLUENCE_MAIL_CONFIG:-${SOLAR_HOME:-$HOME/.solar}/harness/state/ai-influence-mail-config.json}"
+if [[ -z "${AI_INFLUENCE_MAIL_TO:-}" && -f "$MAIL_TO_CONFIG" ]]; then
+  AI_INFLUENCE_MAIL_TO="$("$PYTHON" - "$MAIL_TO_CONFIG" <<'PY'
+import json, sys
+try:
+    print(json.load(open(sys.argv[1], encoding="utf-8")).get("to", ""))
+except Exception:
+    print("")
+PY
+)"
+  export AI_INFLUENCE_MAIL_TO
+fi
+export GMAIL_USER="${GMAIL_USER:-user@example.com}"
+export GMAIL_APP_PASSWORD_KEYCHAIN_SERVICE="${GMAIL_APP_PASSWORD_KEYCHAIN_SERVICE:-solar-ai-influence-gmail}"
 
 read -r REPORT_DATE REPORT_WEEK WINDOW_START WINDOW_END < <("$PYTHON" - <<'PY'
 import datetime as dt
@@ -179,7 +193,7 @@ if legacy:
     raise SystemExit(2)
 PY
 
-PLAN_FILE="/Users/lisihao/Knowledge/_raw/tech-hotspot-radar/ai-influence-planned/${REPORT_DATE}/report-plan.json"
+PLAN_FILE="${SOLAR_KNOWLEDGE_DIR:-$HOME/Knowledge}/_raw/tech-hotspot-radar/ai-influence-planned/${REPORT_DATE}/report-plan.json"
 if run_step_with_timeout "plan-ai-influence-reports daily ${WINDOW_START}" "${YOUTUBE_DAILY_REPORT_PLAN_TIMEOUT:-600}" \
   "${RADAR[@]}" plan-ai-influence-reports \
   --date "$REPORT_DATE" \
@@ -196,7 +210,8 @@ if run_step_with_timeout "plan-ai-influence-reports daily ${WINDOW_START}" "${YO
     --chapter-repair-attempts "${AI_INFLUENCE_YOUTUBE_CHAPTER_REPAIR_ATTEMPTS}" \
     --transcript-char-limit "${AI_INFLUENCE_YOUTUBE_TRANSCRIPT_CHAR_LIMIT}" \
     --skip-notebooklm \
-    --continue-on-error
+    --continue-on-error \
+    $([[ "${YOUTUBE_DAILY_REPORT_SEND_MAIL:-true}" == "true" ]] && printf '%s' '--send')
 
   run_step_with_timeout "validate-ai-influence-planned-reports daily ${WINDOW_START}" "${YOUTUBE_DAILY_REPORT_VALIDATE_TIMEOUT:-300}" \
     "${RADAR[@]}" validate-ai-influence-planned-reports \
