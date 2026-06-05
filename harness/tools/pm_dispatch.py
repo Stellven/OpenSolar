@@ -1723,10 +1723,24 @@ def _pm_expected_artifacts(record: dict[str, Any]) -> list[Path]:
 def _pm_closeout_status(record: dict[str, Any]) -> dict[str, Any]:
     expected = _pm_expected_artifacts(record)
     missing = [str(path) for path in expected if not path.exists() or path.stat().st_size <= 0]
+    stale: list[str] = []
+    submitted_at = _parse_record_time(record.get("submitted_at") or record.get("issued_at"))
+    if submitted_at is not None:
+        threshold = submitted_at - datetime.timedelta(seconds=2)
+        for path in expected:
+            if not path.exists() or path.stat().st_size <= 0:
+                continue
+            try:
+                artifact_mtime = datetime.datetime.fromtimestamp(path.stat().st_mtime, tz=datetime.timezone.utc)
+            except OSError:
+                continue
+            if artifact_mtime < threshold:
+                stale.append(str(path))
     return {
-        "ok": not missing,
+        "ok": not missing and not stale,
         "expected_artifacts": [str(path) for path in expected],
         "missing_artifacts": missing,
+        "stale_artifacts": stale,
     }
 
 
@@ -2789,12 +2803,35 @@ def _mark_graph_node_evaluation_dispatched(record: dict[str, Any]) -> dict[str, 
     return {"ok": True, "marked": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id, "state_sync": state_sync}
 
 
+def _graph_eval_requeue_reason(record: dict[str, Any]) -> tuple[str, str] | None:
+    reason_text = _transient_operator_failure_text(record)
+    if TRANSIENT_OPERATOR_FAILURE_RE.search(reason_text):
+        return "transient_operator_failure", reason_text
+
+    status = str(record.get("status") or "").strip().lower()
+    failure_reason = str(record.get("failure_reason") or "").strip().lower()
+    closeout = record.get("closeout_status")
+    has_closeout_artifact_gap = False
+    if isinstance(closeout, dict):
+        missing = closeout.get("missing_artifacts") or []
+        stale = closeout.get("stale_artifacts") or []
+        has_closeout_artifact_gap = bool(missing or stale)
+
+    if status == "failed_contract_closeout" or (
+        has_closeout_artifact_gap and "required_artifacts" in failure_reason
+    ):
+        return "failed_contract_closeout", reason_text
+
+    return None
+
+
 def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) -> dict[str, Any]:
     if normalize_role(str(record.get("requested_role") or "")) != "evaluator":
         return {"ok": False, "released": False, "reason": "not_evaluator_task"}
-    reason = _transient_operator_failure_text(record)
-    if not TRANSIENT_OPERATOR_FAILURE_RE.search(reason):
-        return {"ok": False, "released": False, "reason": "not_transient_operator_failure"}
+    requeue = _graph_eval_requeue_reason(record)
+    if requeue is None:
+        return {"ok": False, "released": False, "reason": "not_requeueable_operator_failure"}
+    requeue_reason, reason = requeue
     sprint_id = str(record.get("sprint_id") or "").strip()
     node_id = str(record.get("node_id") or "").strip()
     task_id = str(record.get("task_id") or "").strip()
@@ -2847,9 +2884,10 @@ def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) ->
     target.setdefault("eval_requeue_history", []).append(
         {
             "ts": now,
-            "reason": "transient_operator_failure",
+            "reason": requeue_reason,
             "task_id": task_id,
             "failure_reason": reason,
+            "closeout_status": record.get("closeout_status"),
         }
     )
     result_entry = (graph.get("node_results") or {}).get(node_id)
@@ -2860,7 +2898,14 @@ def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) ->
         result_entry["updated_at"] = now
 
     graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
+    return {
+        "ok": True,
+        "released": True,
+        "graph": str(graph_path),
+        "sprint_id": sprint_id,
+        "node_id": node_id,
+        "requeue_reason": requeue_reason,
+    }
 
 
 def release_evaluator_assignment_on_transient_failure(record: dict[str, Any]) -> dict[str, Any]:
@@ -3342,6 +3387,12 @@ def cmd_complete(args: argparse.Namespace) -> int:
         record.setdefault("reconcile_history", []).append(
             {"ts": record["failed_at"], "action": "fail_contract_closeout", "reason": record["failure_reason"], **closeout}
         )
+        graph_eval_requeue = _release_graph_eval_on_transient_operator_failure(record)
+        if graph_eval_requeue.get("released"):
+            record["graph_eval_requeue"] = graph_eval_requeue
+            record.setdefault("reconcile_history", []).append(
+                {"ts": record["failed_at"], "action": "graph_eval_requeue", **graph_eval_requeue}
+            )
         write_pm_task_record(task_id, record)
         print(json.dumps({"ok": False, "task_id": task_id, "reason": record["failure_reason"], **closeout}, ensure_ascii=False))
         return 2
@@ -3426,6 +3477,12 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
                 record.setdefault("reconcile_history", []).append(
                     {"ts": now, "action": "fail_contract_closeout", "reason": "completed_without_required_artifacts", **closeout}
                 )
+                graph_eval_requeue = _release_graph_eval_on_transient_operator_failure(record)
+                if graph_eval_requeue.get("released"):
+                    record["graph_eval_requeue"] = graph_eval_requeue
+                    record.setdefault("reconcile_history", []).append(
+                        {"ts": now, "action": "graph_eval_requeue", **graph_eval_requeue}
+                    )
                 write_pm_task_record(task_id, record)
             continue
         if _pm_status_is_terminal(status):
@@ -3451,6 +3508,12 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
                     record.setdefault("reconcile_history", []).append(
                         {"ts": now, "action": "fail_contract_closeout", "reason": "result_path_exists_but_required_artifacts_missing", **closeout}
                     )
+                    graph_eval_requeue = _release_graph_eval_on_transient_operator_failure(record)
+                    if graph_eval_requeue.get("released"):
+                        record["graph_eval_requeue"] = graph_eval_requeue
+                        record.setdefault("reconcile_history", []).append(
+                            {"ts": now, "action": "graph_eval_requeue", **graph_eval_requeue}
+                        )
                     write_pm_task_record(task_id, record)
                 continue
             actions.append({"task_id": task_id, "action": "complete", "reason": "result_path_exists", **closeout})
