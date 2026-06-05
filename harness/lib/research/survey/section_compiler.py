@@ -772,6 +772,124 @@ def _figure_lane_labels(figure_type: str) -> dict[str, str]:
     return {"thesis": "中心判断", "evidence": "支撑证据", "takeaway": "行动/观察"}
 
 
+def _svg_lines(text: str, *, max_chars: int = 30, max_lines: int = 4) -> list[str]:
+    compact = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not compact:
+        return [""]
+    lines: list[str] = []
+    current = ""
+    for char in compact:
+        current += char
+        if len(current) >= max_chars:
+            lines.append(current)
+            current = ""
+            if len(lines) >= max_lines:
+                break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and len("".join(lines)) < len(compact):
+        lines[-1] = lines[-1].rstrip("…") + "…"
+    return lines or [compact[:max_chars]]
+
+
+def _render_figure_svg(figure: dict[str, Any]) -> str:
+    figure_type = str(figure.get("type") or "insight_argument_map")
+    labels = _figure_lane_labels(figure_type)
+    nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
+    lanes = [
+        ("thesis", labels["thesis"], [node for node in nodes if node.get("kind") == "thesis"]),
+        ("evidence", labels["evidence"], [node for node in nodes if node.get("kind") == "evidence"]),
+        ("takeaway", labels["takeaway"], [node for node in nodes if node.get("kind") == "takeaway"]),
+    ]
+    lane_width = 280
+    lane_gap = 28
+    margin = 36
+    node_h = 88
+    node_gap = 16
+    max_nodes = max((len(items) for _, _, items in lanes), default=1)
+    width = margin * 2 + lane_width * 3 + lane_gap * 2
+    height = 118 + max_nodes * node_h + max(max_nodes - 1, 0) * node_gap + 42
+    title = _short_text(str(figure.get("title") or "图示"), max_chars=58)
+    label = str(figure.get("label") or SUPPORTED_FIGURE_TYPES.get(figure_type, "图示"))
+
+    palette = {
+        "thesis": ("#fff8e8", "#b7532a"),
+        "evidence": ("#eef8f3", "#286358"),
+        "takeaway": ("#fff4d7", "#c1841f"),
+    }
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{_h(label + ": " + title)}">',
+        "<defs>",
+        '<filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#3b2a14" flood-opacity="0.13"/></filter>',
+        "</defs>",
+        '<rect width="100%" height="100%" rx="28" fill="#fffaf0"/>',
+        f'<text x="{margin}" y="42" fill="#174c43" font-family="Avenir Next, PingFang SC, sans-serif" font-size="18" font-weight="800">{_h(label)}</text>',
+        f'<text x="{margin}" y="72" fill="#17211a" font-family="Avenir Next, PingFang SC, sans-serif" font-size="24" font-weight="800">{_h(title)}</text>',
+    ]
+    y0 = 104
+    for lane_index, (kind, lane_label, lane_nodes) in enumerate(lanes):
+        x = margin + lane_index * (lane_width + lane_gap)
+        fill, stroke = palette.get(kind, ("#ffffff", "#b7532a"))
+        parts.append(f'<rect x="{x}" y="{y0}" width="{lane_width}" height="{height - y0 - 28}" rx="20" fill="{fill}" stroke="#ead6bd"/>')
+        parts.append(f'<text x="{x + 18}" y="{y0 + 30}" fill="{stroke}" font-family="Avenir Next, PingFang SC, sans-serif" font-size="15" font-weight="800">{_h(lane_label)}</text>')
+        for node_index, node in enumerate(lane_nodes):
+            node_y = y0 + 52 + node_index * (node_h + node_gap)
+            parts.append(f'<rect x="{x + 16}" y="{node_y}" width="{lane_width - 32}" height="{node_h}" rx="16" fill="#ffffff" stroke="{stroke}" filter="url(#shadow)"/>')
+            for line_index, line in enumerate(_svg_lines(str(node.get("label") or ""), max_chars=24, max_lines=4)):
+                parts.append(
+                    f'<text x="{x + 32}" y="{node_y + 28 + line_index * 17}" fill="#17211a" '
+                    f'font-family="Avenir Next, PingFang SC, sans-serif" font-size="13">{_h(line)}</text>'
+                )
+        if lane_index < 2:
+            arrow_y = y0 + 72
+            arrow_x = x + lane_width + 6
+            parts.append(f'<path d="M {arrow_x} {arrow_y} L {arrow_x + lane_gap - 12} {arrow_y}" stroke="#9b7b5c" stroke-width="2" marker-end="url(#arrow)"/>')
+    parts.insert(3, '<marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#9b7b5c"/></marker>')
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def _write_figure_assets(root: Path, cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    figure_dir = root / "assets" / "figures"
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    assets: list[dict[str, Any]] = []
+    for index, card in enumerate(cards, start=1):
+        figure = card.get("figure_spec") if isinstance(card.get("figure_spec"), dict) else {}
+        nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
+        if not figure or not nodes:
+            continue
+        figure_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(figure.get("figure_id") or f"figure_{index:03d}")).strip("_") or f"figure_{index:03d}"
+        figure_type = str(figure.get("type") or "insight_argument_map")
+        filename = f"{index:03d}_{figure_id}_{figure_type}.svg"
+        path = figure_dir / filename
+        path.write_text(_render_figure_svg(figure), encoding="utf-8")
+        rel = f"assets/figures/{filename}"
+        figure["asset_path"] = rel
+        figure["asset_format"] = "svg"
+        assets.append({
+            "figure_id": figure_id,
+            "figure_type": figure_type,
+            "asset_path": rel,
+            "node_count": len(nodes),
+            "status": "rendered",
+        })
+    return assets
+
+
+def _persist_section_render_assets(root: Path, section_render: dict[str, Any], visual_audit: dict[str, Any]) -> None:
+    cards = section_render.get("cards", []) if isinstance(section_render.get("cards"), list) else []
+    card_dir = root / "section_render_cards"
+    card_dir.mkdir(parents=True, exist_ok=True)
+    for card in cards:
+        section_id = str(card.get("section_id") or "section")
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]+", "__", section_id).strip("_") or "section"
+        (card_dir / f"{safe_name}.json").write_text(json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (root / "section_render_cards.json").write_text(json.dumps(section_render, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    figures = {"figures": [card["figure_spec"] for card in cards if card.get("figure_spec")]}
+    (root / "figures.json").write_text(json.dumps(figures, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (root / "visual_audit.json").write_text(json.dumps(visual_audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def _render_figure_block(card: dict[str, Any]) -> str:
     figure = card.get("figure_spec") if isinstance(card.get("figure_spec"), dict) else {}
     nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
@@ -790,9 +908,12 @@ def _render_figure_block(card: dict[str, Any]) -> str:
             continue
         cards = "\n".join(f'<div class="figure-node {kind}">{_h(node.get("label"))}</div>' for node in lane_nodes)
         lane_html.append(f'<div class="figure-lane"><span>{_h(label)}</span>{cards}</div>')
+    asset_path = str(figure.get("asset_path") or "")
+    asset_html = f'<img class="figure-svg" src="{_h(asset_path)}" alt="{_h(figure.get("label") or SUPPORTED_FIGURE_TYPES.get(figure_type, "图示"))}：{_h(figure.get("title") or card.get("title") or "图示")}">' if asset_path else ""
     return "\n".join([
         f'<div class="figure-block" data-figure-type="{_h(figure_type)}">',
         f'  <div class="figure-title"><span>{_h(figure.get("label") or SUPPORTED_FIGURE_TYPES.get(figure_type, "图示"))}</span>{_h(figure.get("title") or card.get("title") or "图示")}</div>',
+        f"  {asset_html}",
         '  <div class="figure-flow">',
         *lane_html,
         "  </div>",
@@ -824,6 +945,16 @@ def _render_section_card_html(card: dict[str, Any]) -> str:
 
 def _render_insight_html(root: Path, ast: dict, contribution: dict, section_render: dict[str, Any]) -> dict:
     cards = section_render.get("cards", []) if isinstance(section_render.get("cards"), list) else []
+    figure_assets = _write_figure_assets(root, cards)
+    visual_audit = {
+        "ok": True,
+        "schema_version": "solar.deepdive.visual_audit.v1",
+        "figure_count": len(figure_assets),
+        "svg_asset_count": len([asset for asset in figure_assets if asset.get("asset_path", "").endswith(".svg")]),
+        "assets": figure_assets,
+        "renderer": "section_render_svg_renderer",
+    }
+    _persist_section_render_assets(root, section_render, visual_audit)
     cards_by_chapter: dict[str, list[dict[str, Any]]] = {}
     for card in cards:
         cards_by_chapter.setdefault(str(card.get("chapter_id") or ""), []).append(card)
@@ -895,6 +1026,7 @@ def _render_insight_html(root: Path, ast: dict, contribution: dict, section_rend
     .figure-block {{ margin: 18px 0; padding: 18px; border-radius: 22px; border: 1px dashed #bc855e; background: #fff3df; }}
     .figure-title {{ font-weight: 800; margin-bottom: 14px; color: var(--accent-2); }}
     .figure-title span {{ display: inline-flex; margin-right: 10px; padding: 3px 9px; border-radius: 999px; background: #153f38; color: #fff9ee; font-size: 12px; vertical-align: middle; }}
+    .figure-svg {{ display: block; width: 100%; max-width: 100%; height: auto; margin: 12px 0 14px; border-radius: 18px; border: 1px solid #ead6bd; background: #fffaf0; }}
     .figure-flow {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
     .figure-lane {{ min-height: 120px; padding: 12px; border-radius: 18px; background: rgba(255,255,255,.62); border: 1px solid #ead6bd; }}
     .figure-lane span {{ display: block; font-size: 13px; font-weight: 800; color: var(--accent); margin-bottom: 8px; }}
@@ -935,6 +1067,8 @@ def _render_insight_html(root: Path, ast: dict, contribution: dict, section_rend
         "final_html": str(html_path),
         "section_render_card_count": len(cards),
         "figure_count": figure_count,
+        "svg_asset_count": len(figure_assets),
+        "visual_audit": str(root / "visual_audit.json"),
         "publisher": "section_render_card_html",
     }
     (root / "survey_insight_html_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

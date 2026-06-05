@@ -157,17 +157,29 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert first_card["figure_spec"]["content_sources"]["thesis"]
     assert first_card["figure_spec"]["nodes"]
     assert first_card["figure_spec"]["edges"]
+    assert first_card["figure_spec"]["asset_path"].startswith("assets/figures/")
+    assert first_card["figure_spec"]["asset_format"] == "svg"
     assert compiled["final_html"].endswith("final.html")
     assert compiled["insight_html_summary"].endswith("survey_insight_html_summary.json")
     assert (tmp_path / "final.html").exists()
     assert (tmp_path / "survey_insight_html_summary.json").exists()
+    assert (tmp_path / "visual_audit.json").exists()
+    assert (tmp_path / first_card["figure_spec"]["asset_path"]).exists()
+    svg_text = (tmp_path / first_card["figure_spec"]["asset_path"]).read_text(encoding="utf-8")
+    assert "<svg" in svg_text
+    assert "中心判断" in svg_text or "组件/机制" in svg_text or "当前判断" in svg_text
     html = (tmp_path / "final.html").read_text(encoding="utf-8")
     assert 'class="section-card"' in html
     assert 'class="evidence-sidebar"' in html
     assert 'class="takeaway-box"' in html
     assert 'class="figure-block"' in html
+    assert 'class="figure-svg"' in html
+    assert "assets/figures/" in html
     assert "图由本节材料生成" in html
     assert "论证图" in html or "架构图" in html or "路线图" in html
+    visual_audit = json.loads((tmp_path / "visual_audit.json").read_text(encoding="utf-8"))
+    assert visual_audit["renderer"] == "section_render_svg_renderer"
+    assert visual_audit["svg_asset_count"] >= 1
     human_text = (tmp_path / "human_final.md").read_text(encoding="utf-8")
     assert "## 信号地图与证据强度" in human_text
     assert "#### 本节判断" in human_text
