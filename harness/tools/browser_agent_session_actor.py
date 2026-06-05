@@ -239,6 +239,18 @@ def _collect_due(manifest: dict[str, Any]) -> bool:
     return due_at <= 0.0 or time.time() >= due_at
 
 
+def _ensure_collect_backoff_window(manifest: dict[str, Any]) -> bool:
+    try:
+        due_at = float(manifest.get("next_collect_after_ts") or 0.0)
+    except Exception:
+        due_at = 0.0
+    if due_at > 0.0:
+        return False
+    _schedule_next_collect(manifest, status=str(manifest.get("status") or "running"))
+    manifest["updated_at"] = _now_iso()
+    return True
+
+
 def _write_active_run(manifest: dict[str, Any]) -> Path:
     path = _active_run_path(str(manifest["task_id"]))
     tmp = path.with_suffix(".json.tmp")
@@ -675,6 +687,9 @@ def process_active_runs_once(
         if not task_id:
             continue
         if task_id in skip_task_ids:
+            continue
+        if _ensure_collect_backoff_window(manifest):
+            _write_active_run(manifest)
             continue
         if not _collect_due(manifest):
             continue

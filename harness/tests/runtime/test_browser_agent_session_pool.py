@@ -28,3 +28,42 @@ def test_pool_ensure_and_acquire_release():
         assert released["state"] == "idle"
         assert released["warm"] is True
         assert released["assigned_task_id"] == ""
+
+
+def test_pool_prefers_youtube_run_affinity_over_cold_idle_slot():
+    with tempfile.TemporaryDirectory() as td:
+        pool = BrowserAgentSessionPool(Path(td), service="chatgpt", pool_size=2)
+        first = pool.acquire_slot(
+            task_id="task-1",
+            request_lineage="ai-influence-youtube-report:phase1:20260605T200355Z",
+            request_dir="/tmp/task-1",
+        )
+        pool.release_slot(first["slot_id"], keep_warm=True)
+
+        second = pool.acquire_slot(
+            task_id="task-2",
+            request_lineage="ai-influence-youtube-report:phase2_batch:20260605T200355Z:batch-01",
+            request_dir="/tmp/task-2",
+        )
+
+        assert second["slot_id"] == first["slot_id"]
+        assert second["last_request_lineage"] == "ai-influence-youtube-report:phase2_batch:20260605T200355Z:batch-01"
+
+
+def test_pool_falls_back_to_cold_idle_without_affinity_match():
+    with tempfile.TemporaryDirectory() as td:
+        pool = BrowserAgentSessionPool(Path(td), service="chatgpt", pool_size=2)
+        first = pool.acquire_slot(
+            task_id="task-1",
+            request_lineage="ai-influence-youtube-report:phase1:run-a",
+            request_dir="/tmp/task-1",
+        )
+        pool.release_slot(first["slot_id"], keep_warm=True)
+
+        second = pool.acquire_slot(
+            task_id="task-2",
+            request_lineage="ai-influence-youtube-report:phase1:run-b",
+            request_dir="/tmp/task-2",
+        )
+
+        assert second["slot_id"] != first["slot_id"]

@@ -11,6 +11,16 @@ def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _request_affinity_key(request_lineage: str) -> str:
+    text = str(request_lineage or "").strip()
+    if not text:
+        return ""
+    pieces = [part for part in text.split(":") if part]
+    if len(pieces) >= 3 and pieces[0] == "ai-influence-youtube-report":
+        return ":".join((pieces[0], pieces[2]))
+    return text
+
+
 class BrowserAgentSessionPool:
     def __init__(self, root: Path, *, service: str = "chatgpt", pool_size: int = 2):
         self.root = Path(root)
@@ -33,6 +43,7 @@ class BrowserAgentSessionPool:
             "assigned_task_id": "",
             "assigned_request_lineage": "",
             "assigned_request_dir": "",
+            "last_request_lineage": "",
             "leased_at": "",
             "last_used_at": "",
             "warm": False,
@@ -60,15 +71,34 @@ class BrowserAgentSessionPool:
             fcntl.flock(lock_fh, fcntl.LOCK_EX)
             slots = self._ensure_slots_unlocked()
             idle_slots = [slot for slot in slots if str(slot.get("state") or "idle") == "idle"]
+            affinity_key = _request_affinity_key(request_lineage)
             if not idle_slots:
                 chosen = min(slots, key=lambda slot: str(slot.get("last_used_at") or ""))
             else:
-                cold_idle = [slot for slot in idle_slots if not bool(slot.get("warm"))]
-                chosen = cold_idle[0] if cold_idle else min(idle_slots, key=lambda slot: str(slot.get("last_used_at") or ""))
+                affinity_idle = []
+                if affinity_key:
+                    affinity_idle = [
+                        slot
+                        for slot in idle_slots
+                        if _request_affinity_key(
+                            str(slot.get("last_request_lineage") or slot.get("assigned_request_lineage") or "")
+                        )
+                        == affinity_key
+                    ]
+                if affinity_idle:
+                    warm_affinity = [slot for slot in affinity_idle if bool(slot.get("warm"))]
+                    candidates = warm_affinity or affinity_idle
+                    chosen = max(candidates, key=lambda slot: str(slot.get("last_used_at") or ""))
+                else:
+                    cold_idle = [slot for slot in idle_slots if not bool(slot.get("warm"))]
+                    chosen = cold_idle[0] if cold_idle else min(
+                        idle_slots, key=lambda slot: str(slot.get("last_used_at") or "")
+                    )
             chosen["state"] = "running"
             chosen["assigned_task_id"] = str(task_id or "")
             chosen["assigned_request_lineage"] = str(request_lineage or "")
             chosen["assigned_request_dir"] = str(request_dir or "")
+            chosen["last_request_lineage"] = str(request_lineage or chosen.get("last_request_lineage") or "")
             chosen["leased_at"] = _now_iso()
             self._write_slot(chosen)
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
@@ -80,6 +110,7 @@ class BrowserAgentSessionPool:
             slot = self._read_slot_by_id(slot_id)
             if slot is None:
                 slot = self._default_slot(self._slot_index(slot_id))
+            slot["last_request_lineage"] = str(slot.get("assigned_request_lineage") or slot.get("last_request_lineage") or "")
             slot["state"] = "idle"
             slot["assigned_task_id"] = ""
             slot["assigned_request_lineage"] = ""
