@@ -362,6 +362,14 @@ def _submitted_run_path(request_dir: str) -> Path:
     return Path(request_dir).expanduser() / "submitted-run.json"
 
 
+def _parse_json_object(text: str) -> dict[str, Any]:
+    try:
+        data = json.loads(str(text or "").strip())
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _write_submitted_run(
     request_dir: str,
     *,
@@ -380,8 +388,11 @@ def _write_submitted_run(
     if result_file.exists():
         try:
             result_json = json.loads(result_file.read_text(encoding="utf-8"))
-            payload["url"] = str(result_json.get("url") or payload.get("url") or "")
-            payload["conversation_id"] = str(result_json.get("conversation_id") or payload.get("conversation_id") or "")
+            nested = _parse_json_object(str(result_json.get("text") or ""))
+            payload["url"] = str(result_json.get("url") or nested.get("url") or payload.get("url") or "")
+            payload["conversation_id"] = str(
+                result_json.get("conversation_id") or nested.get("conversation_id") or payload.get("conversation_id") or ""
+            )
         except Exception:
             pass
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -464,7 +475,7 @@ def _run_via_session_control(
             task_id,
             timeout_seconds=min(timeout, 60),
             poll_interval_seconds=1.0,
-            terminal_statuses={"submitted", "failed"},
+            terminal_statuses={"submitted", "running", "failed"},
         )
         if request_dir:
             _write_submitted_run(request_dir, task_id=task_id, status_payload=status_payload)

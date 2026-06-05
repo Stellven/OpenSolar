@@ -26,6 +26,34 @@ def test_browser_agent_chatgpt_cmd_falls_back_to_bundled_wrapper(monkeypatch):
     assert cmd[-1].endswith("chatgpt_report_operator.py")
 
 
+def test_extract_json_payload_lenient_repairs_inner_quotes():
+    ns = _load_namespace()
+    text = """{
+"section_id": "online-audio-interaction-models",
+"title": "音频模型进入 always-on 在线交互范式",
+"trend_description": "这说明音频模型可能从"语音入口"升级为"环境交互入口"。",
+"evidence_ids": ["2606.05121", "pkt-effc138a62394585"]
+}"""
+    payload = ns["extract_json_payload_lenient"](text)
+    assert payload["section_id"] == "online-audio-interaction-models"
+    assert payload["trend_description"] == '这说明音频模型可能从"语音入口"升级为"环境交互入口"。'
+
+
+def test_extract_json_payload_lenient_repairs_embedded_array_quotes_in_string_fields():
+    ns = _load_namespace()
+    text = """{
+"section_id": "person-grounded-agent-skills",
+"title": "智能体技能从提示词包装走向经验蒸馏",
+"trend_description": "核心判断一（evidence_ids: ["2605.31264", "pkt-859b5fc0299f42fb"]）：COLLEAGUE.SKILL 指向的变化，是把智能体技能从“写一段提示词让模型完成任务”，推进到“从人的异构行为痕迹中蒸馏可行动知识”。",
+"insight_analysis": "这条路线目前只能定为 watchlist。（evidence_ids: ["2605.31264", "pkt-859b5fc0299f42fb"]）",
+"evidence_ids": ["2605.31264", "pkt-859b5fc0299f42fb"]
+}"""
+    payload = ns["extract_json_payload_lenient"](text)
+    assert payload["section_id"] == "person-grounded-agent-skills"
+    assert 'evidence_ids: ["2605.31264", "pkt-859b5fc0299f42fb"]' in payload["trend_description"]
+    assert payload["evidence_ids"] == ["2605.31264", "pkt-859b5fc0299f42fb"]
+
+
 def test_browser_agent_chatgpt_cmd_prefers_explicit_env(monkeypatch):
     monkeypatch.setenv("TECH_HOTSPOT_BROWSER_CHATGPT_CMD", "python3 /tmp/custom-wrapper.py")
     ns = _load_namespace()

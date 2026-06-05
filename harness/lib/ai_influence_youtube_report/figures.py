@@ -7,6 +7,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+import datetime as dt
 from pathlib import Path
 from typing import Any, Callable
 
@@ -223,6 +225,19 @@ def _coerce_figure_result(spec: FigureSpec, payload: dict[str, Any]) -> FigureRe
     )
 
 
+def _flow_control_retry_delay(stderr_text: str, *, cap_seconds: float = 90.0) -> float:
+    text = str(stderr_text or "")
+    match = re.search(r"cooldown until (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)", text)
+    if not match:
+        return 0.0
+    try:
+        target = dt.datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+    except ValueError:
+        return 0.0
+    delay = (target - dt.datetime.now(dt.timezone.utc)).total_seconds() + 1.0
+    return max(0.0, min(float(cap_seconds), delay))
+
+
 def paint_figure(
     spec: FigureSpec,
     *,
@@ -269,17 +284,39 @@ def paint_figure(
     env.setdefault("BROWSER_AGENT_HEADLESS", "true")
     cmd = [str(python_executable or sys.executable), str(script)]
     try:
-        proc = subprocess.run(
-            cmd,
-            text=True,
-            capture_output=True,
-            timeout=max(int(timeout_seconds), 60) + 120,
-            env=env,
-        )
-        (task_dir / "operator.stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
-        (task_dir / "operator.stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
-        result_path = task_dir / "tech-diagram-result.json"
-        if proc.returncode != 0:
+        attempts = 2
+        for attempt in range(1, attempts + 1):
+            proc = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                timeout=max(int(timeout_seconds), 60) + 120,
+                env=env,
+            )
+            stdout_path = task_dir / "operator.stdout.txt"
+            stderr_path = task_dir / "operator.stderr.txt"
+            stdout_path.write_text(proc.stdout or "", encoding="utf-8")
+            stderr_path.write_text(proc.stderr or "", encoding="utf-8")
+            result_path = task_dir / "tech-diagram-result.json"
+            if proc.returncode == 0:
+                if not result_path.exists():
+                    return FigureResult(
+                        figure_id=spec.figure_id,
+                        title=spec.title,
+                        figure_type=spec.figure_type,
+                        placement=spec.placement,
+                        source_chapter_ids=list(spec.source_chapter_ids),
+                        evidence_refs=list(spec.evidence_refs),
+                        status="failed",
+                        error="missing_tech_diagram_result_json",
+                        caption=spec.caption,
+                    )
+                payload = json.loads(result_path.read_text(encoding="utf-8"))
+                return _coerce_figure_result(spec, payload if isinstance(payload, dict) else {})
+            delay = _flow_control_retry_delay(proc.stderr or "")
+            if attempt < attempts and delay > 0:
+                time.sleep(delay)
+                continue
             return FigureResult(
                 figure_id=spec.figure_id,
                 title=spec.title,
@@ -291,20 +328,6 @@ def paint_figure(
                 error=f"operator_rc_{proc.returncode}",
                 caption=spec.caption,
             )
-        if not result_path.exists():
-            return FigureResult(
-                figure_id=spec.figure_id,
-                title=spec.title,
-                figure_type=spec.figure_type,
-                placement=spec.placement,
-                source_chapter_ids=list(spec.source_chapter_ids),
-                evidence_refs=list(spec.evidence_refs),
-                status="failed",
-                error="missing_tech_diagram_result_json",
-                caption=spec.caption,
-            )
-        payload = json.loads(result_path.read_text(encoding="utf-8"))
-        return _coerce_figure_result(spec, payload if isinstance(payload, dict) else {})
     except Exception as exc:
         return FigureResult(
             figure_id=spec.figure_id,

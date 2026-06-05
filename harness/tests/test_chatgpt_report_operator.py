@@ -477,3 +477,52 @@ def test_report_operator_defaults_to_session_control(monkeypatch, tmp_path, caps
     assert submit_calls[0][1] == "DeepResearchChatGPT"
     assert submit_calls[0][0]["action"] == "submit"
     assert capsys.readouterr().out.strip() == "session control output"
+
+
+def test_report_operator_submit_accepts_running_session_status(monkeypatch, tmp_path, capsys):
+    request_dir = tmp_path / "request"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    (request_dir / "chatgpt-mode-state.json").write_text(json.dumps({"ok": True}), encoding="utf-8")
+    result_file = tmp_path / "result.json"
+    result_file.write_text(
+        json.dumps(
+            {
+                "text": json.dumps(
+                    {
+                        "status": "running",
+                        "url": "https://chatgpt.com/c/demo",
+                        "conversation_id": "demo",
+                    },
+                    ensure_ascii=False,
+                )
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("BROWSER_AGENT_SESSION_CONTROL_DISABLED", raising=False)
+    monkeypatch.setenv("BROWSER_AGENT_REQUEST_DIR", str(request_dir))
+    monkeypatch.setenv("BROWSER_AGENT_PURPOSE", "hf-paper-report-plan-2026-06-05")
+    monkeypatch.setenv("BROWSER_AGENT_CHATGPT_PROFILE_POLICY_DISABLED", "1")
+    monkeypatch.setenv("CHATGPT_REPORT_ACTION", "submit")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("submit planner"))
+    monkeypatch.setattr(cro, "submit_request", lambda request, logical_operator, objective, task_id: {"success": True, "task_id": "task-running"})
+    monkeypatch.setattr(
+        cro,
+        "collect_request",
+        lambda *args, **kwargs: (
+            0,
+            {
+                "status": "running",
+                "latest_result": {"result_file": str(result_file)},
+            },
+        ),
+    )
+
+    assert cro.main() == 0
+    submitted = json.loads((request_dir / "submitted-run.json").read_text(encoding="utf-8"))
+    assert submitted["task_id"].startswith("chatgpt-report-")
+    assert submitted["url"] == "https://chatgpt.com/c/demo"
+    assert submitted["conversation_id"] == "demo"
+    assert json.loads(capsys.readouterr().out)["status"] == "running"

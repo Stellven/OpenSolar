@@ -19,6 +19,16 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _slug(value: str) -> str:
     text = re.sub(r"[^a-zA-Z0-9._-]+", "-", str(value or "").strip())
     return text.strip("-._").lower() or "default"
@@ -31,6 +41,76 @@ def _env_flag(*names: str, default: bool = False) -> bool:
             continue
         return value in {"1", "true", "yes", "on"}
     return default
+
+
+def _harness_root() -> Path:
+    return Path(os.environ.get("HARNESS_DIR") or (Path.home() / ".solar" / "harness")).expanduser()
+
+
+def _latest_outbox_status(task_id: str) -> str:
+    outbox = _harness_root() / "actors" / "browser_agent_session" / "outbox"
+    if not outbox.exists():
+        return ""
+    latest_payload: dict[str, Any] | None = None
+    latest_mtime = -1.0
+    for path in outbox.glob(f"result-{task_id}-*.json"):
+        try:
+            mtime = path.stat().st_mtime
+            if mtime < latest_mtime:
+                continue
+            payload = _read_json_file(path)
+            if not payload:
+                continue
+            latest_payload = payload
+            latest_mtime = mtime
+        except OSError:
+            continue
+    return str((latest_payload or {}).get("status") or "").strip().lower()
+
+
+def _request_task_id(request_dir: Path) -> str:
+    submitted = _read_json_file(request_dir / "submitted-run.json") or {}
+    task_id = str(submitted.get("task_id") or "").strip()
+    if task_id:
+        return task_id
+    submit_stdout = request_dir / "submit-stdout.txt"
+    if submit_stdout.exists():
+        try:
+            payload = json.loads(submit_stdout.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload, dict):
+            task_id = str(payload.get("task_id") or "").strip()
+            if task_id:
+                return task_id
+    submitted_state = _read_json_file(request_dir / "submitted-state.json") or {}
+    return str(submitted_state.get("task_id") or "").strip()
+
+
+def _recover_stale_profile_lease(
+    *,
+    lease_manager: ProfileLease,
+    profile_id: str,
+    request_dir: Path,
+    lease_result: dict[str, Any],
+) -> bool:
+    if str(lease_result.get("reason") or "").strip() != "already_acquired":
+        return False
+    held_by = str(lease_result.get("held_by") or "").strip()
+    if not held_by:
+        return False
+    sibling_request_dir = request_dir.parent / held_by
+    submitted = _read_json_file(sibling_request_dir / "submitted-run.json") if sibling_request_dir.exists() else None
+    submitted_status = str((submitted or {}).get("status") or "").strip().lower()
+    held_task_id = _request_task_id(sibling_request_dir) if sibling_request_dir.exists() else ""
+    terminal_statuses = {"completed", "failed"}
+    if submitted_status in terminal_statuses:
+        released = lease_manager.release(profile_id, held_by)
+        return bool(released.get("released"))
+    if held_task_id and _latest_outbox_status(held_task_id) in terminal_statuses:
+        released = lease_manager.release(profile_id, held_by)
+        return bool(released.get("released"))
+    return False
 
 
 def _parse_iso8601(value: str | None) -> datetime.datetime:
@@ -115,6 +195,22 @@ def initialize_runtime_contract(
         mode="exclusive",
         allowed_attach=bool((control_modes or {}).get("playwright_cdp_attach")),
     )
+    if (
+        not lease_result.get("acquired")
+        and _recover_stale_profile_lease(
+            lease_manager=lease_manager,
+            profile_id=profile_id,
+            request_dir=request_dir,
+            lease_result=lease_result,
+        )
+    ):
+        lease_result = lease_manager.acquire(
+            profile_id=profile_id,
+            task_id=task_ref,
+            runtime=runtime_owner,
+            mode="exclusive",
+            allowed_attach=bool((control_modes or {}).get("playwright_cdp_attach")),
+        )
     if not lease_result.get("acquired"):
         raise RuntimeError(
             "browser_profile_lease_acquire_failed:"

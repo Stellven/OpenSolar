@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -260,7 +261,13 @@ def test_ensure_supervisor_running_replaces_stale_pid(monkeypatch):
         class FakeProc:
             pid = 54321
 
-        monkeypatch.setattr("browser_agent_session_actor.subprocess.Popen", lambda *args, **kwargs: FakeProc())
+        seen: dict[str, object] = {}
+
+        def _fake_popen(*args, **kwargs):
+            seen.update(kwargs)
+            return FakeProc()
+
+        monkeypatch.setattr("browser_agent_session_actor.subprocess.Popen", _fake_popen)
         result = ensure_supervisor_running(
             actor_id="browser_agent_session",
             mailbox_base=base,
@@ -270,6 +277,66 @@ def test_ensure_supervisor_running_replaces_stale_pid(monkeypatch):
         assert result["reused"] is False
         assert result["pid"] == 54321
         assert pid_path.read_text(encoding="utf-8").strip() == "54321"
+        assert seen["stdin"] == subprocess.DEVNULL
+        assert seen["stdout"] == subprocess.DEVNULL
+        assert seen["stderr"] == subprocess.DEVNULL
+
+
+def test_browser_agent_session_actor_uses_devnull_stdin_for_operator(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "actors"
+        lease_dir = Path(td) / "run" / "actor-leases"
+        mailbox = ActorMailbox("browser_agent_session", base)
+        envelope = {
+            "task_id": "task-devnull-stdin",
+            "logical_operator": "DeepResearchBrowser",
+            "chatgpt_browser_agent_request": {
+                "prompt": "检查 stdin 配置",
+                "expected_output": "markdown",
+                "project_name": "杂项",
+            },
+        }
+        mailbox.submit_task(envelope)
+        monkeypatch.setenv("HARNESS_DIR", str(Path(td)))
+
+        seen: dict[str, object] = {}
+
+        class FakeCompleted:
+            returncode = 0
+            stdout = "browser actor ok\n"
+
+        def _fake_run(cmd, **kwargs):
+            seen.update(kwargs)
+            task_dir = Path(kwargs["env"]["TASK_DIR"])
+            request_dir = task_dir / "chatgpt-browser-agent-request"
+            request_dir.mkdir(parents=True, exist_ok=True)
+            (task_dir / "chatgpt-browser-agent-result.json").write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "text": "browser actor ok",
+                        "request_dir": str(request_dir),
+                        "project_name": "杂项",
+                        "expected_output": "markdown",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            return FakeCompleted()
+
+        monkeypatch.setattr("browser_agent_session_actor.resolve_command", lambda envelope: [sys.executable, "-V"])
+        monkeypatch.setattr("browser_agent_session_actor.subprocess.run", _fake_run)
+
+        rc = drain_once(
+            actor_id="browser_agent_session",
+            mailbox_base=base,
+            lease_dir=lease_dir,
+        )
+        assert rc == 0
+        assert seen["stdin"] == subprocess.DEVNULL
+        assert seen["stdout"] == subprocess.PIPE
+        assert seen["stderr"] == subprocess.STDOUT
 
 
 def test_recover_stale_supervisor_runtime_resets_lease_slot_and_inbox(monkeypatch):

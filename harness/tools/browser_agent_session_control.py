@@ -71,6 +71,8 @@ def submit_request(
     objective: str = "",
     task_id: str = "",
     request_field: str = "chatgpt_browser_agent_request",
+    retry_attempts: int = 12,
+    retry_wait_seconds: float = 5.0,
 ) -> dict[str, Any]:
     runtime = _runtime()
     resolved_task_id = str(task_id or _task_id())
@@ -81,7 +83,19 @@ def submit_request(
         "logical_operator": str(logical_operator or "DeepResearchBrowser"),
         str(request_field or "chatgpt_browser_agent_request"): dict(request or {}),
     }
-    result = runtime.submit(envelope, logical_operator=str(logical_operator or "DeepResearchBrowser"))
+    result = None
+    max_attempts = max(1, int(retry_attempts or 1))
+    for attempt in range(1, max_attempts + 1):
+        result = runtime.submit(envelope, logical_operator=str(logical_operator or "DeepResearchBrowser"))
+        error = str(getattr(result, "error", "") or "").strip()
+        if getattr(result, "success", False):
+            break
+        if not error.startswith(f"lease_acquisition_failed_for_{DEFAULT_ACTOR_ID}"):
+            break
+        if attempt >= max_attempts:
+            break
+        time.sleep(max(0.2, float(retry_wait_seconds or 0.2)))
+    assert result is not None
     payload = result.to_dict()
     payload["task_id"] = resolved_task_id
     payload["actor_id"] = DEFAULT_ACTOR_ID

@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "lib"))
 sys.path.append(str(ROOT / "tools"))
 
 from actor_mailbox import ActorMailbox
-from browser_agent_session_control import main as control_main
+from browser_agent_session_control import main as control_main, submit_request
 
 
 def _run_cli(args: list[str]) -> tuple[int, dict]:
@@ -116,3 +116,61 @@ def test_submit_poll_collect_cli(monkeypatch):
         rc, collected = _run_cli(["collect", "--task-id", "task-demo", "--timeout-seconds", "1", "--poll-interval-seconds", "0.2"])
         assert rc == 0
         assert collected["status"] == "completed"
+
+
+def test_submit_request_retries_when_browser_agent_session_lease_is_busy(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        monkeypatch.setenv("HARNESS_DIR", str(td_path))
+        mailbox = ActorMailbox("browser_agent_session", td_path / "actors")
+        sleep_calls: list[float] = []
+
+        class FakeSubmitResult:
+            def __init__(self, success: bool, error: str | None = None):
+                self.success = success
+                self.error = error
+                self.lease = None
+                self.inbox_path = str(td_path / "actors" / "browser_agent_session" / "inbox" / "task-demo.json")
+                self.outbox_path = str(td_path / "actors" / "browser_agent_session" / "outbox")
+                self.evidence_ledger_path = ""
+                self.scheduler_decision = {}
+
+            def to_dict(self):
+                return {
+                    "success": self.success,
+                    "lease": None,
+                    "inbox_path": self.inbox_path,
+                    "outbox_path": self.outbox_path,
+                    "evidence_ledger_path": "",
+                    "scheduler_decision": {},
+                    "error": self.error,
+                }
+
+        class FakeRuntime:
+            def __init__(self):
+                self.calls = 0
+
+            def submit(self, task_envelope, logical_operator=None):
+                self.calls += 1
+                if self.calls == 1:
+                    return FakeSubmitResult(False, "lease_acquisition_failed_for_browser_agent_session")
+                mailbox.submit_task(task_envelope)
+                return FakeSubmitResult(True)
+
+        runtime = FakeRuntime()
+        monkeypatch.setattr("browser_agent_session_control._runtime", lambda: runtime)
+        monkeypatch.setattr("browser_agent_session_control.time.sleep", lambda seconds: sleep_calls.append(seconds))
+
+        payload = submit_request(
+            {"prompt": "研究实现 一个测试"},
+            logical_operator="DeepResearchChatGPT",
+            task_id="task-demo",
+            retry_attempts=2,
+            retry_wait_seconds=0.5,
+        )
+
+        assert payload["success"] is True
+        assert payload["task_id"] == "task-demo"
+        assert runtime.calls == 2
+        assert sleep_calls == [0.5]
+        assert payload["inbox_task_file"]

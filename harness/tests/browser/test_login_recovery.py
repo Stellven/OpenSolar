@@ -1,6 +1,7 @@
 """Tests for browser login recovery and runtime control helpers."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -107,6 +108,100 @@ def test_runtime_control_active_session_roundtrip(tmp_path: Path, monkeypatch) -
     assert active["session_lineage"] == "sprint-browser-reuse"
     assert runtime_control.clear_active_session(ctx) is True
     assert runtime_control.read_active_session(ctx) is None
+
+
+def test_runtime_control_recovers_stale_profile_lease_from_terminal_outbox(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BROWSER_PROFILE_REGISTRY_ROOT", str(tmp_path / "profiles"))
+    monkeypatch.setenv("BROWSER_PROFILE_LEASE_DIR", str(tmp_path / "leases"))
+    monkeypatch.setenv("HARNESS_DIR", str(tmp_path / "harness"))
+    request_root = tmp_path / "requests"
+    stale_request = request_root / "task-stale"
+    stale_request.mkdir(parents=True, exist_ok=True)
+    (stale_request / "submitted-run.json").write_text(
+        json.dumps({"task_id": "chatgpt-report-stale", "status": "running"}),
+        encoding="utf-8",
+    )
+    outbox = tmp_path / "harness" / "actors" / "browser_agent_session" / "outbox"
+    outbox.mkdir(parents=True, exist_ok=True)
+    (outbox / "result-chatgpt-report-stale-1.json").write_text(
+        json.dumps({"task_id": "chatgpt-report-stale", "status": "failed"}),
+        encoding="utf-8",
+    )
+    request_dir = request_root / "task-new"
+    ctx1 = runtime_control.initialize_runtime_contract(
+        request_dir=stale_request,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="chatgpt",
+        profile_directory="Profile 7",
+        user_data_dir=str(tmp_path / "chrome"),
+        staged_user_data_dir=str(tmp_path / "staged"),
+        account_identifier="alice@example.com",
+        control_modes={"browser_use_session": True},
+        task_id="task-stale",
+    )
+    assert ctx1["profile_id"] == "chatgpt/alice"
+    ctx2 = runtime_control.initialize_runtime_contract(
+        request_dir=request_dir,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="chatgpt",
+        profile_directory="Profile 7",
+        user_data_dir=str(tmp_path / "chrome"),
+        staged_user_data_dir=str(tmp_path / "staged"),
+        account_identifier="alice@example.com",
+        control_modes={"browser_use_session": True},
+        task_id="task-new",
+    )
+    assert ctx2["task_id"] == "task-new"
+
+
+def test_runtime_control_recovers_stale_profile_lease_when_task_id_only_exists_in_submit_stdout(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("BROWSER_PROFILE_REGISTRY_ROOT", str(tmp_path / "profiles"))
+    monkeypatch.setenv("BROWSER_PROFILE_LEASE_DIR", str(tmp_path / "leases"))
+    monkeypatch.setenv("HARNESS_DIR", str(tmp_path / "harness"))
+    request_root = tmp_path / "requests"
+    stale_request = request_root / "task-stale"
+    stale_request.mkdir(parents=True, exist_ok=True)
+    (stale_request / "submitted-run.json").write_text(
+        json.dumps({"status": "running"}),
+        encoding="utf-8",
+    )
+    (stale_request / "submit-stdout.txt").write_text(
+        json.dumps({"status": "queued", "task_id": "chatgpt-report-stale"}),
+        encoding="utf-8",
+    )
+    outbox = tmp_path / "harness" / "actors" / "browser_agent_session" / "outbox"
+    outbox.mkdir(parents=True, exist_ok=True)
+    (outbox / "result-chatgpt-report-stale-1.json").write_text(
+        json.dumps({"task_id": "chatgpt-report-stale", "status": "failed"}),
+        encoding="utf-8",
+    )
+    runtime_control.initialize_runtime_contract(
+        request_dir=stale_request,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="chatgpt",
+        profile_directory="Profile 7",
+        user_data_dir=str(tmp_path / "chrome"),
+        staged_user_data_dir=str(tmp_path / "staged"),
+        account_identifier="alice@example.com",
+        control_modes={"browser_use_session": True},
+        task_id="task-stale",
+    )
+    ctx2 = runtime_control.initialize_runtime_contract(
+        request_dir=request_root / "task-new",
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="chatgpt",
+        profile_directory="Profile 7",
+        user_data_dir=str(tmp_path / "chrome"),
+        staged_user_data_dir=str(tmp_path / "staged"),
+        account_identifier="alice@example.com",
+        control_modes={"browser_use_session": True},
+        task_id="task-new",
+    )
+    assert ctx2["task_id"] == "task-new"
 
 
 def test_login_recovery_report_contains_executor_and_policy() -> None:

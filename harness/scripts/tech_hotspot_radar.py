@@ -14601,10 +14601,87 @@ def extract_json_payload_lenient(text: str) -> dict[str, Any]:
     match = re.search(r"\{.*\}", text or "", flags=re.S)
     if not match:
         raise ValueError("no JSON object found in browser agent output")
-    payload = json.loads(match.group(0))
+    raw = match.group(0)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        repaired = _repair_json_string_field_lines(raw)
+        try:
+            payload = json.loads(repaired, strict=False)
+        except json.JSONDecodeError:
+            payload = json.loads(_repair_json_inner_quotes(repaired), strict=False)
     if not isinstance(payload, dict):
         raise ValueError("browser agent JSON output must be object")
     return payload
+
+
+def _repair_json_inner_quotes(text: str) -> str:
+    repaired: list[str] = []
+    in_string = False
+    escaped = False
+    length = len(text)
+    idx = 0
+    while idx < length:
+        ch = text[idx]
+        if not in_string:
+            repaired.append(ch)
+            if ch == '"':
+                in_string = True
+            idx += 1
+            continue
+        if escaped:
+            repaired.append(ch)
+            escaped = False
+            idx += 1
+            continue
+        if ch == "\\":
+            repaired.append(ch)
+            escaped = True
+            idx += 1
+            continue
+        if ch == '"':
+            look = idx + 1
+            while look < length and text[look].isspace():
+                look += 1
+            next_char = text[look] if look < length else ""
+            if next_char in {",", "}", "]", ":"} or not next_char:
+                repaired.append(ch)
+                in_string = False
+            else:
+                repaired.append('\\"')
+            idx += 1
+            continue
+        repaired.append(ch)
+        idx += 1
+    return "".join(repaired)
+
+
+def _repair_json_string_field_lines(text: str) -> str:
+    repaired_lines: list[str] = []
+    pattern = re.compile(r'^(\s*"[^"]+"\s*:\s*)"(.+)"(\s*,?\s*)$')
+    for line in text.splitlines():
+        match = pattern.match(line)
+        if not match:
+            repaired_lines.append(line)
+            continue
+        prefix, body, suffix = match.groups()
+        escaped_body: list[str] = []
+        escaped = False
+        for ch in body:
+            if escaped:
+                escaped_body.append(ch)
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped_body.append(ch)
+                escaped = True
+                continue
+            if ch == '"':
+                escaped_body.append('\\"')
+                continue
+            escaped_body.append(ch)
+        repaired_lines.append(f'{prefix}"{"".join(escaped_body)}"{suffix}')
+    return "\n".join(repaired_lines)
 
 
 def call_browser_agent_chatgpt_markdown(prompt: str, config: dict[str, Any], *,

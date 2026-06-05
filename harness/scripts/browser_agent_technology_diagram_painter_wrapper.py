@@ -4,7 +4,7 @@
 Pipeline:
 1. Connect via browser-use profile session (CDP).
 2. Navigate to https://chatgpt.com/.
-3. Verify logged in as target account (browser-agent@example.com).
+3. Verify logged in as target account.
 4. Click "...更多" (More) on the left navigation bar, and select "图片" (Image).
 5. Select model "gpt5.5" and "thinking high" from the model selector.
 6. Enter text + drawing prompt into the textarea and submit.
@@ -21,6 +21,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "lib"
@@ -28,6 +29,7 @@ if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
 import browser_job_runtime as bjrt
+from browser import runtime_control as brtc
 from browser_use.browser.profile import BrowserProfile
 from browser_use.browser.session import BrowserSession
 from playwright.async_api import async_playwright
@@ -38,7 +40,11 @@ DEFAULT_PROFILE_DIRECTORY = "Profile 1"
 DEFAULT_ALLOWED_DOMAINS = [
     "chatgpt.com", "openai.com", "auth0.openai.com", "google.com", "accounts.google.com"
 ]
-TARGET_ACCOUNT_EMAIL = "browser-agent@example.com"
+TARGET_ACCOUNT_EMAIL = (
+    os.environ.get("BROWSER_AGENT_TARGET_ACCOUNT_EMAIL")
+    or os.environ.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL")
+    or "haogege1977@gmail.com"
+)
 
 # ---------------------------------------------------------------------------
 # Logging helpers
@@ -76,9 +82,254 @@ def _prompt_from_stdin() -> dict:
     return {}
 
 
+def _force_wrapper_exit(code: int) -> NoReturn:
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    finally:
+        os._exit(code)
+
+
+def _challenge_grace_seconds() -> float:
+    raw = str(
+        os.environ.get("BROWSER_AGENT_CHATGPT_CHALLENGE_GRACE_SECONDS")
+        or os.environ.get("BROWSER_AGENT_CHALLENGE_GRACE_SECONDS")
+        or "20"
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 20.0
+    return max(0.0, value)
+
+
+def _challenge_persisted_too_long(challenge_since: float | None, *, now: float | None = None, grace_s: float | None = None) -> bool:
+    if challenge_since is None:
+        return False
+    deadline = challenge_since + (grace_s if grace_s is not None else _challenge_grace_seconds())
+    return (now if now is not None else time.time()) >= deadline
+
+
 # ---------------------------------------------------------------------------
 # ChatGPT page interaction helpers
 # ---------------------------------------------------------------------------
+
+CAPTURE_JS = r"""() => {
+  const clean = (value) => String(value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const composerCandidates = Array.from(
+    document.querySelectorAll(
+      "#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea, [data-testid='composer-text-input']"
+    )
+  );
+  const composer = composerCandidates.find(visible) || composerCandidates[0] || null;
+  const bodyText = clean(document.body ? (document.body.innerText || document.body.textContent || "") : "").toLowerCase();
+  const challengeWall =
+    /cloudflare|turnstile|checking your browser|verify you are human|请稍候|正在验证|验证你是真人/i.test(
+      `${document.title || ""}\n${location.href}\n${bodyText}`
+    ) ||
+    Array.from(document.querySelectorAll("iframe")).some((iframe) =>
+      /challenges\.cloudflare\.com|turnstile/i.test(String(iframe.src || ""))
+    );
+  return JSON.stringify({
+    title: document.title || "",
+    url: location.href,
+    composer_ready: !!composer,
+    challenge_wall: challengeWall,
+  });
+}"""
+
+SET_PROMPT_JS = r"""(promptText) => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const candidates = Array.from(
+    document.querySelectorAll(
+      "#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea, [data-testid='composer-text-input']"
+    )
+  );
+  const composer = candidates.find(visible) || candidates[0];
+  if (!composer) {
+    return JSON.stringify({ ok: false, error: "composer_not_found" });
+  }
+  const prompt = String(promptText || "").replace(/\r\n/g, "\n");
+  const lines = prompt.split("\n");
+  composer.focus();
+  if (composer.tagName === "TEXTAREA") {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    if (setter) {
+      setter.call(composer, prompt);
+    } else {
+      composer.value = prompt;
+    }
+    composer.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: prompt }));
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+    composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: prompt }));
+    composer.dispatchEvent(new Event("change", { bubbles: true }));
+    return JSON.stringify({ ok: true, mode: "textarea" });
+  }
+  try {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(composer);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    if (document.execCommand && document.execCommand("insertText", false, prompt)) {
+      composer.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: prompt }));
+      composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: prompt }));
+      return JSON.stringify({ ok: true, mode: "contenteditable_execcommand" });
+    }
+  } catch (_) {}
+  composer.innerHTML = "";
+  for (const line of lines) {
+    const p = document.createElement("p");
+    if (line.length) {
+      p.textContent = line;
+    } else {
+      p.appendChild(document.createElement("br"));
+    }
+    composer.appendChild(p);
+  }
+  composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: prompt }));
+  return JSON.stringify({ ok: true, mode: "contenteditable" });
+}"""
+
+COMPOSER_STATE_JS = r"""() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const candidates = Array.from(
+    document.querySelectorAll(
+      "#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea, [data-testid='composer-text-input']"
+    )
+  );
+  const composer = candidates.find(visible) || candidates[0];
+  if (!composer) return JSON.stringify({ ok: false, error: "composer_not_found" });
+  const text = String(composer.value || composer.innerText || composer.textContent || "").trim();
+  return JSON.stringify({ ok: true, text_length: text.length, tag: composer.tagName, id: composer.id || "" });
+}"""
+
+SUBMIT_JS = r"""() => {
+  const visible = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const selectors = [
+    "form button[type='submit']",
+    "button[type='submit']",
+    "button[data-testid='send-button']",
+    "button[data-testid='composer-send-button']",
+    "button[aria-label*='Send']",
+    "button[aria-label*='send']",
+    "button[aria-label*='发送']",
+    "button.composer-submit-button-color[type='button']",
+    "button.composer-submit-button-color",
+  ];
+  for (const selector of selectors) {
+    const buttons = Array.from(document.querySelectorAll(selector));
+    for (const button of buttons) {
+      if (!visible(button)) continue;
+      const label = String(button.getAttribute("aria-label") || button.textContent || "").trim();
+      if (/语音|voice|stop|停止|cancel|中止/i.test(label)) continue;
+      if (button.disabled || button.getAttribute("aria-disabled") === "true") continue;
+      button.click();
+      return JSON.stringify({ ok: true, selector, label });
+    }
+  }
+  return JSON.stringify({ ok: false, error: "submit_button_not_found" });
+}"""
+
+SUBMIT_FALLBACK_JS = r"""() => {
+  const composer = document.querySelector(
+    "#prompt-textarea, div[contenteditable='true'][role='textbox'], textarea[name='prompt-textarea'], textarea, [data-testid='composer-text-input']"
+  );
+  if (!composer) return JSON.stringify({ ok: false, error: "composer_not_found" });
+  const value = String(composer.value || composer.innerText || composer.textContent || "").trim();
+  if (!value) return JSON.stringify({ ok: false, error: "composer_empty" });
+  composer.focus();
+  composer.dispatchEvent(new Event("input", { bubbles: true }));
+  composer.dispatchEvent(new Event("change", { bubbles: true }));
+  const form = composer.closest("form");
+  if (form && typeof form.requestSubmit === "function") {
+    form.requestSubmit();
+    return JSON.stringify({ ok: true, mode: "form_request_submit" });
+  }
+  if (form) {
+    const event = new Event("submit", { bubbles: true, cancelable: true });
+    form.dispatchEvent(event);
+    return JSON.stringify({ ok: true, mode: "form_submit_event", default_prevented: event.defaultPrevented });
+  }
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    composer.dispatchEvent(new KeyboardEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      key: "Enter",
+      code: "Enter",
+      metaKey: true,
+    }));
+  }
+  return JSON.stringify({ ok: true, mode: "composer_meta_enter_dispatch" });
+}"""
+
+
+async def _wait_for_chat_ready(page, *, timeout_s: int = 60) -> dict:
+    deadline = time.time() + timeout_s
+    last_state: dict = {}
+    refresh_count = 0
+    challenge_since: float | None = None
+    challenge_grace_s = _challenge_grace_seconds()
+    while time.time() < deadline:
+        state = json.loads(await page.evaluate(CAPTURE_JS))
+        last_state = state
+        if state.get("challenge_wall"):
+            if challenge_since is None:
+                challenge_since = time.time()
+            if _challenge_persisted_too_long(challenge_since, grace_s=challenge_grace_s):
+                raise RuntimeError("chatgpt_cloudflare_challenge_detected")
+            await asyncio.sleep(1.5)
+            continue
+        challenge_since = None
+        if state.get("composer_ready") and not state.get("challenge_wall"):
+            return state
+        remaining = deadline - time.time()
+        if refresh_count == 0 and remaining < max(10, timeout_s - 25):
+            try:
+                await page.goto(DEFAULT_URL)
+                refresh_count += 1
+            except Exception:
+                pass
+        elif refresh_count == 1 and remaining < max(5, timeout_s - 55):
+            try:
+                await page.reload()
+                refresh_count += 1
+            except Exception:
+                pass
+        await asyncio.sleep(1.0)
+    raise TimeoutError(
+        "chatgpt_composer_not_ready: "
+        + json.dumps(
+            {
+                "title": last_state.get("title"),
+                "url": last_state.get("url"),
+                "challenge_wall": last_state.get("challenge_wall"),
+            },
+            ensure_ascii=False,
+        )
+    )
 
 async def _verify_account(page) -> bool:
     """Check if logged-in account matches TARGET_ACCOUNT_EMAIL."""
@@ -245,15 +496,8 @@ async def _select_model(page) -> bool:
 async def _submit_prompt(page, full_prompt: str) -> bool:
     print("[TechDiagram] Submitting prompt...", flush=True)
     try:
-        # Wait for either the current ChatGPT composer or legacy textareas.
-        editor = page.locator(
-            "#prompt-textarea:visible, "
-            "textarea:visible, "
-            "div[contenteditable='true']:visible, "
-            "[data-testid='composer-text-input']:visible"
-        ).first
         try:
-            await editor.wait_for(state="visible", timeout=15000)
+            ready_state = await _wait_for_chat_ready(page, timeout_s=60)
         except Exception:
             # Current ChatGPT DOM changes frequently; capture a useful artifact
             # instead of failing as a black box.
@@ -264,46 +508,24 @@ async def _submit_prompt(page, full_prompt: str) -> bool:
             )
             print(f"[TechDiagram] Composer not found. url={page.url} title={await page.title()}", flush=True)
             return False
+        if not ready_state.get("composer_ready"):
+            return False
 
-        # Click to focus
-        await editor.click()
-        await page.wait_for_timeout(500)
-
-        # Fill the prompt (using fill for textarea, or pasting text/typing for div)
-        # Using keyboard type or filling depends on the element type. For ProseMirror, fill might not trigger events.
-        # We can try fill first, if it fails or is a div, we use JS or keyboard.
-        tag_name = await editor.evaluate("el => el.tagName.toLowerCase()")
-        if tag_name == "textarea":
-            await editor.fill(full_prompt)
-        else:
-            # It's a contenteditable div (ProseMirror)
-            # Use JS to set text content or just type
-            # Typing can be slow, but it's safest for triggering React events.
-            # To speed it up, we can set the text then dispatch an input event, or just paste.
-            handle = await editor.element_handle()
-            await page.evaluate(f"""
-                (el) => {{
-                    el.innerHTML = '';
-                    el.innerText = {json.dumps(full_prompt)};
-                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                }}
-            """, handle)
-
+        set_result = json.loads(await page.evaluate(SET_PROMPT_JS, full_prompt))
+        if not set_result.get("ok"):
+            print(f"[TechDiagram] Failed to set prompt: {set_result}", flush=True)
+            return False
         await page.wait_for_timeout(1000)
-
-        # Submit: try clicking the send button first
-        send_btn = page.locator(
-            'button[data-testid="send-button"], '
-            'button[aria-label*="Send"], '
-            'button[aria-label*="发送"], '
-            'button[aria-label*="Submit"], '
-            '[data-testid="composer-speech-button"]'
-        ).first
-        if await send_btn.count() and await send_btn.is_enabled():
-            await send_btn.click()
-        else:
-            # Fallback to Enter
-            await page.keyboard.press("Enter")
+        composer_state = json.loads(await page.evaluate(COMPOSER_STATE_JS))
+        if int(composer_state.get("text_length") or 0) <= 0:
+            print(f"[TechDiagram] Composer stayed empty after fill: {composer_state}", flush=True)
+            return False
+        submit_result = json.loads(await page.evaluate(SUBMIT_JS))
+        if not submit_result.get("ok"):
+            submit_result = json.loads(await page.evaluate(SUBMIT_FALLBACK_JS))
+            if not submit_result.get("ok"):
+                print(f"[TechDiagram] Submit fallback failed: {submit_result}", flush=True)
+                return False
 
         print("[TechDiagram] Prompt submitted.", flush=True)
         return True
@@ -312,7 +534,7 @@ async def _submit_prompt(page, full_prompt: str) -> bool:
         return False
 
 
-async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120) -> dict:
+async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120, capture_state: dict | None = None) -> dict:
     print(f"[TechDiagram] Waiting for image generation (timeout {timeout_s}s)...", flush=True)
     deadline = time.time() + timeout_s
 
@@ -370,6 +592,15 @@ async def _wait_and_download_image(page, request_dir: Path, timeout_s: int = 120
             except Exception as e:
                 print(f"[TechDiagram] Screenshot fallback failed: {e}", flush=True)
 
+        promoted = await _maybe_promote_original_capture(
+            page,
+            request_dir,
+            capture_state,
+            is_generating=bool(is_generating),
+        )
+        if promoted:
+            return promoted
+
         # Determine if we hit an error (e.g. usage limit)
         error_msg = await page.evaluate("""
             (() => {
@@ -423,6 +654,7 @@ async def _install_original_image_capture(page, request_dir: Path) -> dict:
         "tasks": [],
         "candidates": [],
         "counter": 0,
+        "last_candidate_at": 0.0,
     }
 
     async def capture_response(response) -> None:
@@ -475,6 +707,7 @@ async def _install_original_image_capture(page, request_dir: Path) -> dict:
                 "height": height,
                 "content_type": content_type,
             })
+            state["last_candidate_at"] = time.time()
             _write_json(request_dir / "network-image-candidates.json", state["candidates"])
             print(
                 f"[TechDiagram] Captured image response candidate: {out_path} "
@@ -521,6 +754,28 @@ async def _best_original_capture(state: dict, request_dir: Path) -> dict | None:
         "height": best.get("height"),
         "bytes": best.get("bytes"),
     }
+
+
+async def _maybe_promote_original_capture(
+    page,
+    request_dir: Path,
+    capture_state: dict | None,
+    *,
+    is_generating: bool,
+    stable_seconds: float = 20.0,
+) -> dict | None:
+    if not capture_state:
+        return None
+    candidates = list(capture_state.get("candidates") or [])
+    if not candidates:
+        return None
+    last_candidate_at = float(capture_state.get("last_candidate_at") or 0.0)
+    if is_generating and (time.time() - last_candidate_at) < max(5.0, stable_seconds):
+        return None
+    promoted = await _best_original_capture(capture_state, request_dir)
+    if promoted:
+        print("[TechDiagram] Promoted captured original image response as final result.", flush=True)
+    return promoted
 
 
 async def _extract_dom_original_asset(page, request_dir: Path) -> dict | None:
@@ -811,17 +1066,74 @@ async def _run(input_data: dict) -> int:
     }
     _write_json(request_dir / "wrapper-meta.json", meta)
 
-    browser = BrowserSession(
-        browser_profile=BrowserProfile(
-            headless=headless,
-            user_data_dir=staged_dir,
-            profile_directory=profile_directory,
-            allowed_domains=DEFAULT_ALLOWED_DOMAINS,
-            channel="chrome",
-        )
+    control_ctx = brtc.initialize_runtime_contract(
+        request_dir=request_dir,
+        service="chatgpt",
+        runtime_owner="browser_use",
+        wrapper_kind="technology_diagram",
+        profile_directory=profile_directory,
+        user_data_dir=str(user_data_dir),
+        staged_user_data_dir=str(staged_dir or ""),
+        account_identifier=TARGET_ACCOUNT_EMAIL or None,
+        task_id=str(os.environ.get("TASK_ID") or request_dir.name),
+        control_modes={
+            "browser_use_session": True,
+            "playwright_cdp_attach": False,
+            "webwright_bridge": False,
+        },
+        metadata={
+            "request_dir": str(request_dir),
+            "target_url": DEFAULT_URL,
+            "session_reuse": True,
+            "session_lineage": str(os.environ.get("BROWSER_AGENT_SESSION_LINEAGE") or "technology-diagram-painter"),
+            "headless": headless,
+        },
     )
+    active_session = brtc.read_active_session(control_ctx, require_lineage_match=False)
+    browser: BrowserSession | None = None
+    reused_existing_session = False
+    keep_session_alive = True
+    finalized = False
+    succeeded = False
+    runtime_cleanup_dir = cleanup_dir
+    runtime_staged_dir = staged_dir
+    if active_session and active_session.get("cdp_url"):
+        try:
+            browser = BrowserSession(
+                cdp_url=str(active_session.get("cdp_url") or "").strip(),
+                browser_profile=BrowserProfile(
+                    headless=headless,
+                    keep_alive=keep_session_alive,
+                    allowed_domains=DEFAULT_ALLOWED_DOMAINS,
+                    channel="chrome",
+                ),
+            )
+            await asyncio.wait_for(browser.start(), timeout=20)
+            reused_existing_session = True
+            runtime_cleanup_dir = Path(str((active_session.get("details") or {}).get("cleanup_dir") or "")).expanduser() if str((active_session.get("details") or {}).get("cleanup_dir") or "").strip() else cleanup_dir
+            runtime_staged_dir = str((active_session.get("details") or {}).get("staged_user_data_dir") or "").strip() or staged_dir
+        except Exception:
+            brtc.clear_active_session(control_ctx)
+            browser = None
+    if browser is None:
+        browser = BrowserSession(
+            browser_profile=BrowserProfile(
+                headless=headless,
+                keep_alive=keep_session_alive,
+                user_data_dir=staged_dir,
+                profile_directory=profile_directory,
+                allowed_domains=DEFAULT_ALLOWED_DOMAINS,
+                channel="chrome",
+            )
+        )
     try:
-        await asyncio.wait_for(browser.start(), timeout=40)
+        if not reused_existing_session:
+            await asyncio.wait_for(browser.start(), timeout=40)
+        brtc.update_runtime_endpoint(
+            control_ctx,
+            cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+            browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
+        )
         async with async_playwright() as pw:
             pw_browser = await pw.chromium.connect_over_cdp(browser.cdp_url)
             pw_context = pw_browser.contexts[0] if pw_browser.contexts else None
@@ -835,6 +1147,7 @@ async def _run(input_data: dict) -> int:
             print(f"[TechDiagram] Navigating to {DEFAULT_URL}", flush=True)
             await playwright_page.goto(DEFAULT_URL, wait_until="domcontentloaded")
             await playwright_page.wait_for_timeout(3000)
+            await _wait_for_chat_ready(playwright_page, timeout_s=60)
 
             # 2. Verify account
             await _verify_account(playwright_page)
@@ -842,6 +1155,7 @@ async def _run(input_data: dict) -> int:
             # 3. Navigate UI
             await _click_left_nav_more_and_image(playwright_page)
             await _select_model(playwright_page)
+            await _wait_for_chat_ready(playwright_page, timeout_s=45)
 
             # 4. Submit
             submitted = await _submit_prompt(playwright_page, full_prompt)
@@ -850,7 +1164,12 @@ async def _run(input_data: dict) -> int:
             original_capture["active"] = True
 
             # 5. Wait for image
-            result = await _wait_and_download_image(playwright_page, request_dir, timeout_s=timeout_s)
+            result = await _wait_and_download_image(
+                playwright_page,
+                request_dir,
+                timeout_s=timeout_s,
+                capture_state=original_capture,
+            )
             if result.get("status") == "success" and str(result.get("url") or "").endswith("fallback"):
                 original = await _best_original_capture(original_capture, request_dir)
                 if original:
@@ -871,14 +1190,60 @@ async def _run(input_data: dict) -> int:
 
             if result.get("status") != "success":
                 return 1
-            return 0
+            brtc.activate_reusable_session(
+                control_ctx,
+                cdp_url=str(getattr(browser, "cdp_url", "") or ""),
+                browser_session_ref=f"browser-use-session://chatgpt/{control_ctx['profile_id']}",
+                headless=headless,
+                attached=reused_existing_session,
+                details={
+                    "request_dir": str(request_dir),
+                    "staged_user_data_dir": str(runtime_staged_dir or ""),
+                    "cleanup_dir": str(runtime_cleanup_dir or ""),
+                },
+            )
+            brtc.finalize_runtime_contract(
+                control_ctx,
+                success=True,
+                error_text="",
+                page_state={"url": DEFAULT_URL},
+                logged_in_state_verified=True,
+                details={
+                    "provider": "browser_agent_technology_diagram",
+                    "request_dir": str(request_dir),
+                    "reused_existing_session": reused_existing_session,
+                },
+                requires_precise_page_control=False,
+            )
+            finalized = True
+            succeeded = True
+            _force_wrapper_exit(0)
 
     finally:
         try:
-            await asyncio.wait_for(browser.kill(), timeout=20)
+            if browser is not None and not succeeded:
+                await asyncio.wait_for(browser.kill(), timeout=20)
         except Exception:
             pass
-        if cleanup_dir is not None:
+        if not finalized:
+            try:
+                brtc.clear_active_session(control_ctx)
+                brtc.finalize_runtime_contract(
+                    control_ctx,
+                    success=False,
+                    error_text="technology_diagram_wrapper_failed",
+                    page_state={"url": DEFAULT_URL},
+                    logged_in_state_verified=False,
+                    details={
+                        "provider": "browser_agent_technology_diagram",
+                        "request_dir": str(request_dir),
+                        "reused_existing_session": reused_existing_session,
+                    },
+                    requires_precise_page_control=False,
+                )
+            except Exception:
+                pass
+        if cleanup_dir is not None and not succeeded:
             import shutil
             shutil.rmtree(cleanup_dir, ignore_errors=True)
 

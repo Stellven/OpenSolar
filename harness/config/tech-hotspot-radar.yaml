@@ -58,7 +58,7 @@ youtube:
     operator: browser_agent
     chatgpt_project: 杂项
     profile_directory: Profile 1
-    target_account_email: browser-agent@example.com
+    target_account_email: haogege1977@gmail.com
     headless: false
     scrub_client_state: true
     open_project_first: true
@@ -1236,7 +1236,7 @@ hf_paper_insight:
     reasoning_effort: high
     operator_kind: chapter_writer
     profile_directory: Profile 1
-    target_account_email: browser-agent@example.com
+    target_account_email: haogege1977@gmail.com
     headless: true
     scrub_client_state: false
     open_project_first: false

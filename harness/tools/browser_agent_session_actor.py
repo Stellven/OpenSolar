@@ -144,6 +144,7 @@ def ensure_supervisor_running(
     ]
     proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
@@ -548,6 +549,7 @@ def process_task_file(
         proc = subprocess.run(
             command,
             text=True,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
@@ -683,6 +685,7 @@ def process_active_runs_once(
         proc = subprocess.run(
             command,
             text=True,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
