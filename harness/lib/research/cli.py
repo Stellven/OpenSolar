@@ -3407,6 +3407,10 @@ def cmd_survey_finalize_run(args: argparse.Namespace) -> int:
             narrative_max_budget_usd=args.narrative_max_budget_usd,
             narrative_min_chars=args.narrative_min_chars,
             narrative_require_hitl=args.narrative_require_hitl,
+            premium_figures=True if args.premium_figures else None,
+            premium_figure_command=args.premium_figure_command,
+            premium_figure_limit=args.premium_figure_limit,
+            premium_figure_timeout=args.premium_figure_timeout,
         )
         
         # Intercept and run final closeout gate
@@ -3574,7 +3578,13 @@ def cmd_survey_compile(args: argparse.Namespace) -> int:
     from research.survey.section_compiler import compile_survey
 
     _ensure_blueprint_and_contracts(args.output_dir)
-    payload = compile_survey(args.output_dir)
+    payload = compile_survey(
+        args.output_dir,
+        premium_figures=True if args.premium_figures else None,
+        premium_figure_command=args.premium_figure_command,
+        premium_figure_limit=args.premium_figure_limit,
+        premium_timeout_seconds=args.premium_figure_timeout,
+    )
     if emit_json(args, payload):
         return 0 if payload.get("ok") else 1
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -4341,6 +4351,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_survey_finalize.add_argument("--narrative-max-budget-usd", type=float, default=3.0)
     p_survey_finalize.add_argument("--narrative-min-chars", type=int, default=8000)
     p_survey_finalize.add_argument("--narrative-require-hitl", action="store_true", help="Require chief_editor_approval.txt containing APPROVED after narrative rewrite")
+    p_survey_finalize.add_argument("--premium-figures", action="store_true", help="Try TechnologyDiagramPainter/custom backend for high-priority DeepDive figures; SVG remains fallback")
+    p_survey_finalize.add_argument("--premium-figure-command", default="", help="Custom premium figure command; reads request JSON on stdin and emits JSON with image_path")
+    p_survey_finalize.add_argument("--premium-figure-limit", type=int, default=3, help="Max premium figure attempts per compile")
+    p_survey_finalize.add_argument("--premium-figure-timeout", type=int, default=600)
     p_survey_finalize.add_argument("--allow-incomplete", action="store_true", help="Return zero even if final strict eval fails")
     p_survey_finalize.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
@@ -4418,6 +4432,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_survey_compile = sub.add_parser("survey-compile", help="Compile survey section artifacts")
     p_survey_compile.add_argument("--output-dir", required=True)
+    p_survey_compile.add_argument("--premium-figures", action="store_true", help="Try TechnologyDiagramPainter/custom backend for high-priority DeepDive figures; SVG remains fallback")
+    p_survey_compile.add_argument("--premium-figure-command", default="", help="Custom premium figure command; reads request JSON on stdin and emits JSON with image_path")
+    p_survey_compile.add_argument("--premium-figure-limit", type=int, default=3, help="Max premium figure attempts per compile")
+    p_survey_compile.add_argument("--premium-figure-timeout", type=int, default=600)
     p_survey_compile.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
     p_survey_chief = sub.add_parser("survey-chief-editor", help="Rewrite human_final.md with a chief-editor backend")

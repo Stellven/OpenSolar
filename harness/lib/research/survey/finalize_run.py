@@ -107,6 +107,10 @@ def finalize_survey_run(
     narrative_max_budget_usd: float = 0.0,
     narrative_min_chars: int = 0,
     narrative_require_hitl: bool = False,
+    premium_figures: bool | None = None,
+    premium_figure_command: str = "",
+    premium_figure_limit: int = 3,
+    premium_figure_timeout: int = 600,
 ) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     root.mkdir(parents=True, exist_ok=True)
@@ -205,7 +209,13 @@ def finalize_survey_run(
         )
     steps.append({"step": "auto_repair", "ok": repair.get("ok"), "reason": repair.get("reason"), "waiting": repair.get("waiting", 0)})
 
-    compiled = compile_survey(root)
+    compiled = compile_survey(
+        root,
+        premium_figures=premium_figures,
+        premium_figure_command=premium_figure_command,
+        premium_figure_limit=premium_figure_limit,
+        premium_timeout_seconds=premium_figure_timeout,
+    )
     steps.append({"step": "compile", **compiled})
     final_eval = evaluate_survey(root, strict=True, min_finalized=min_finalized, require_complete=require_complete)
     steps.append({"step": "final_eval", "ok": final_eval.get("ok"), "issues": (final_eval.get("scorecard") or {}).get("issues", [])})
