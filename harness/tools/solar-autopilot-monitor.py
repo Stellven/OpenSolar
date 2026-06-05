@@ -1886,7 +1886,8 @@ def graph_workers() -> list[dict]:
         "lazy-import", "cli",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
-        "documentation", "schema", "state-machine", "storage", "sources",
+        "documentation", "schema", "schemas", "state-machine", "storage", "sources",
+        "structured-data", "structured-results",
         "algorithm_design", "solar-harness-control-plane", "architecture-writing",
         "code_impl", "test_generation", "test_execution",
         "code.review", "debug.systematic", "skill.methodology",
@@ -1919,13 +1920,15 @@ def graph_workers() -> list[dict]:
         "schema_design", "fixture_design", "mapping_design",
         "compatibility_design", "feedback_design", "gate_design",
         "metric_design", "replay_design", "shell_design", "synthesis",
-        "documentation", "schema", "architecture-writing", "architecture",
+        "documentation", "schema", "schemas", "architecture-writing", "architecture",
+        "structured-data", "structured-results",
         "document.convert", "document.markdown_extract", "report.compile",
         "research.long_report_compiler", "research.report_ast"
     }
     schema_skills = {
         "architecture-writing", "json-schema", "technical-writing", "markdown",
-        "architecture", "schema", "state-schema-design", "api-design", "data-modeling"
+        "architecture", "schema", "schemas", "state-schema-design", "api-design",
+        "data-modeling", "structured-data", "structured-results"
     }
 
     for pane in discover_worker_panes():

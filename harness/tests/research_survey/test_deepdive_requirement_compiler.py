@@ -60,6 +60,11 @@ def test_compile_deepdive_insight_contract_extends_runtime_gates():
 
     assert validation["ok"], validation
     assert contract["mode"] == "insight"
+    assert contract["insight_profile"]["profile_id"] == "cais-agent-insight"
+    assert contract["insight_profile"]["ok"] is True
+    assert "DD_INSIGHT" in contract["deepdive_dag"]["required_gates"]
+    assert "GenericSurveyTOCGate" in contract["output_contract"]["insight_gates"]
+    assert "conference_signals" in contract["output_contract"]["signal_clusters"]
     assert {"D10", "D11", "D12", "D17", "D18"} <= node_ids
     assert "DeepDiveChiefInsightEditor" in operators
     assert "DeepDiveSignalExtractor" in operators
@@ -82,6 +87,7 @@ def test_compile_generic_insight_contract_has_no_cais_or_solar_defaults():
 
     assert validation["ok"], validation
     assert contract["mode"] == "insight"
+    assert contract["insight_profile"]["active"] is False
     assert "DeepDiveSignalExtractor" in operators
     assert "DeepDiveActionMapper" in operators
     assert "conference_signal" not in output_text

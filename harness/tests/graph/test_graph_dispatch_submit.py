@@ -295,6 +295,73 @@ class TestSendToPaneLiteral:
             }
         ]
 
+    def test_reconcile_releases_eval_failed_contract_closeout(self, tmp_harness, monkeypatch):
+        """A terminal evaluator result without eval sidecars must clear eval assignment for retry."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        operator_id = "mini-codex-gpt55-medium-builder-1"
+        eval_dispatch_id = f"graph-eval-{sid}-N1-q1"
+        node = graph["nodes"][0]
+        node["status"] = "reviewing"
+        node["eval_assignments"] = [
+            {
+                "pane": f"operator:{operator_id}",
+                "dispatch_id": eval_dispatch_id,
+                "role": "primary",
+                "eval_md_path": str(sprints / f"{sid}.N1-eval.md"),
+                "eval_json_path": str(sprints / f"{sid}.N1-eval.json"),
+            }
+        ]
+        node["eval_dispatch_id"] = eval_dispatch_id
+        node["eval_dispatched_at"] = "2026-06-05T04:13:01Z"
+        (sprints / f"{sid}.N1-handoff.md").write_text("# handoff\n", encoding="utf-8")
+
+        result_dir = tmp_path / "run" / "operator-results" / operator_id / f"pm-{sid}-N1-eval"
+        result_dir.mkdir(parents=True)
+        (result_dir / "result.json").write_text(
+            json.dumps(
+                {
+                    "sprint_id": sid,
+                    "node_id": "N1",
+                    "operator_id": operator_id,
+                    "status": "failed_contract_closeout",
+                    "finished_at": "2026-06-05T04:14:01Z",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        release_calls = []
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: release_calls.append(a) or {"released": True})
+        monkeypatch.setattr(
+            gnd,
+            "_cooldown_operator_after_contract_closeout",
+            lambda *a, **k: {"ok": True, "reason": "test_cooldown"},
+        )
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert node["status"] == "reviewing"
+        assert "eval_assignments" not in node
+        assert "eval_dispatch_id" not in node
+        assert node["eval_retry_reason"] == "eval_failed_contract_closeout"
+        assert node["last_eval_closeout_failure"]["operator_status"] == "failed_contract_closeout"
+        assert release_calls == [(f"operator:{operator_id}", eval_dispatch_id, "graph_eval_reconcile_failed_contract_closeout")]
+        assert repaired == [
+            {
+                "node": "N1",
+                "pane": f"operator:{operator_id}",
+                "dispatch_id": eval_dispatch_id,
+                "status": "reviewing",
+                "reason": "eval_failed_contract_closeout",
+                "operator_status": "failed_contract_closeout",
+                "result_json": str(result_dir / "result.json"),
+                "operator_cooldown": {"ok": True, "reason": "test_cooldown"},
+            }
+        ]
+
     def test_assigned_pane_plan_mode_prompt_is_unavailable(self, tmp_harness, monkeypatch):
         """A pane blocked in Claude plan-mode confirmation is not dispatchable."""
         import graph_node_dispatcher as gnd

@@ -14,6 +14,19 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+try:
+    from .profiles import (
+        DEFAULT_PROFILE as DEFAULT_INSIGHT_PROFILE,
+        load_profile,
+        profile_contract_to_scope_boundaries,
+        validate_profile,
+    )
+except ImportError:  # pragma: no cover - supports direct script-style imports.
+    DEFAULT_INSIGHT_PROFILE = "cais-agent-insight"
+    load_profile = None  # type: ignore[assignment]
+    validate_profile = None  # type: ignore[assignment]
+    profile_contract_to_scope_boundaries = None  # type: ignore[assignment]
+
 
 SCHEMA_VERSION = "solar.deepdive.requirement_contract.v1"
 TRACE_SCHEMA_VERSION = "solar.deepdive.traceability.v1"
@@ -23,6 +36,85 @@ EXPLICIT_DEEPDIVE_PROFILES = {
     "deepdive_research",
     "deepresearch",
     "deep_research",
+}
+
+GENERIC_DEEPDIVE_PROFILES = EXPLICIT_DEEPDIVE_PROFILES | {"insight", "deepdive-insight", "deepdive_insight"}
+
+INSIGHT_STATE_EVENTS: list[dict[str, str]] = [
+    {"event": "profile_loaded", "required_metadata": "profile_id, mode, strict defaults, required outputs", "recovery": "fail_closed_if_required_fields_missing"},
+    {"event": "runtime_dag_ready", "required_metadata": "D10-D18 node list, artifact paths, gates, sidecars", "recovery": "rebuild_from_compiler_metadata"},
+    {"event": "signal_pack_ready", "required_metadata": "signal artifact paths, CAIS coverage gate result", "recovery": "block_D12_when_required_signals_missing"},
+    {"event": "absorption_ready", "required_metadata": "map/roadmap paths, actionability gate result", "recovery": "block_D15_D18_when_thresholds_fail"},
+    {"event": "claims_predictions_ready", "required_metadata": "typed claim and prediction paths", "recovery": "block_publisher_when_citation_prediction_gates_fail"},
+    {"event": "cards_figures_ready", "required_metadata": "card/figure paths, gate results", "recovery": "block_HTML_if_cards_or_six_MVP_figures_missing"},
+    {"event": "chief_insight_reviewed", "required_metadata": "review sidecar, template/user-question gates", "recovery": "rerun_or_fail_no_silent_publish"},
+    {"event": "published_core_ready", "required_metadata": "publisher interface artifacts, audit readiness", "recovery": "S04_S05_must_finish_visual_release_validation"},
+]
+
+INSIGHT_RUNTIME_NODE_METADATA: dict[str, dict[str, Any]] = {
+    "D10": {
+        "artifact_paths": ["insight_thesis_plan.json"],
+        "gates": ["GenericSurveyTOCGate", "UserQuestionFitnessGate"],
+        "evaluator_sidecar": "insight_thesis_eval.json",
+        "closeout_acceptance": "Thesis plan answers user questions; generic survey TOC absent.",
+        "status_metadata": {"state": "insight_plan_ready", "reconstruct_from": "runtime_dag metadata or event records"},
+    },
+    "D11": {
+        "artifact_paths": ["conference_signal_map.json", "cais_paper_signal_packs.jsonl"],
+        "gates": ["CAISCoverageGate"],
+        "evaluator_sidecar": "signal_coverage_eval.json",
+        "closeout_acceptance": "Signal map binds named evidence to implications.",
+        "status_metadata": {"state": "signal_pack_ready", "reconstruct_from": "signal artifact paths and CAIS coverage gate result"},
+    },
+    "D12": {
+        "artifact_paths": ["paper_to_solar_absorption_map.json", "solar_operator_roadmap.json"],
+        "gates": ["SolarActionabilityGate"],
+        "evaluator_sidecar": "action_eval.json",
+        "closeout_acceptance": "Every major signal has actionable implication or explicit watchlist reason.",
+        "status_metadata": {"state": "absorption_ready", "reconstruct_from": "map/roadmap paths and actionability gate result"},
+    },
+    "D13": {
+        "artifact_paths": ["typed_claims.jsonl", "claim_evidence_map.json"],
+        "gates": ["CitationVisibilityGate"],
+        "evaluator_sidecar": "claim_eval.json",
+        "closeout_acceptance": "Claims are typed and evidence-bound.",
+        "status_metadata": {"state": "claims_ready", "reconstruct_from": "typed claim and evidence paths"},
+    },
+    "D14": {
+        "artifact_paths": ["prediction_packets.jsonl"],
+        "gates": ["PredictionPacketGate"],
+        "evaluator_sidecar": "prediction_eval.json",
+        "closeout_acceptance": "Prediction packets are explicit and falsifiable.",
+        "status_metadata": {"state": "predictions_ready", "reconstruct_from": "prediction artifact paths and gate results"},
+    },
+    "D15": {
+        "artifact_paths": ["section_render_cards/*.json"],
+        "gates": ["MachineLabelLeakGate", "CitationVisibilityGate"],
+        "evaluator_sidecar": "section_render_eval.json",
+        "closeout_acceptance": "SectionRender cards complete for every major chapter.",
+        "status_metadata": {"state": "cards_ready", "reconstruct_from": "card paths and gate results"},
+    },
+    "D16": {
+        "artifact_paths": ["figure_specs/*.json", "assets/figures/*.svg"],
+        "gates": ["FigureRequiredGate"],
+        "evaluator_sidecar": "figure_eval.json",
+        "closeout_acceptance": "Every major chapter has a claim-linked figure.",
+        "status_metadata": {"state": "figures_ready", "reconstruct_from": "figure spec paths and MVP gate results"},
+    },
+    "D17": {
+        "artifact_paths": ["chief_insight_review.json", "final_machine.md"],
+        "gates": ["TemplateRepetitionGate", "UserQuestionFitnessGate"],
+        "evaluator_sidecar": "chief_insight_eval.json",
+        "closeout_acceptance": "Chief insight review passes all insight gates.",
+        "status_metadata": {"state": "chief_insight_reviewed", "reconstruct_from": "review sidecar and template/user-question gate results"},
+    },
+    "D18": {
+        "artifact_paths": ["final.html", "assets/style.css", "visual_audit.json", "appendix_evidence_matrix.html"],
+        "gates": ["MachineLabelLeakGate", "CitationVisibilityGate", "VisualAuditGate"],
+        "evaluator_sidecar": "publish_eval.json",
+        "closeout_acceptance": "Insight artifact package is complete and status-visible.",
+        "status_metadata": {"state": "published_core_ready", "reconstruct_from": "publisher interface artifacts and audit readiness"},
+    },
 }
 
 
@@ -150,6 +242,57 @@ def stable_id(prefix: str, text: str) -> str:
     return f"{prefix}-{digest}"
 
 
+def infer_insight_profile_id(brief: str, *, requested_profile: str | None = None) -> str | None:
+    """Resolve an insight profile without forcing generic DeepDive into CAIS defaults."""
+
+    requested = normalize_text(requested_profile or "").lower().replace("_", "-")
+    if requested and requested not in {profile.replace("_", "-") for profile in GENERIC_DEEPDIVE_PROFILES}:
+        return requested
+    lowered = normalize_text(brief).lower()
+    if "cais" in lowered and "solar" in lowered:
+        return DEFAULT_INSIGHT_PROFILE
+    return None
+
+
+def load_insight_profile_contract(profile_id: str | None) -> dict[str, Any]:
+    """Load and validate an optional profile contract for insight mode."""
+
+    if not profile_id:
+        return {"active": False, "profile_id": "", "loaded": False, "ok": False, "errors": []}
+    if load_profile is None or validate_profile is None or profile_contract_to_scope_boundaries is None:
+        return {
+            "active": True,
+            "profile_id": profile_id,
+            "loaded": False,
+            "ok": False,
+            "errors": ["profile_loader_unavailable"],
+        }
+    try:
+        profile = load_profile(profile_id)
+        validated = validate_profile(profile)
+    except Exception as exc:  # noqa: BLE001 - profile load errors must be reflected in contract.
+        return {
+            "active": True,
+            "profile_id": profile_id,
+            "loaded": False,
+            "ok": False,
+            "errors": [f"profile_load_failed:{type(exc).__name__}:{exc}"],
+        }
+    scope = profile_contract_to_scope_boundaries(validated)
+    return {
+        "active": True,
+        "profile_id": profile_id,
+        "loaded": True,
+        "ok": bool(validated.get("ok")),
+        "errors": list(validated.get("errors") or []),
+        "required_outputs": list(validated.get("required_outputs") or []),
+        "required_signal_clusters": list(validated.get("required_signal_clusters") or []),
+        "required_gates": list(validated.get("required_gates") or []),
+        "strict_defaults": dict(validated.get("strict_defaults") or {}),
+        "scope_boundaries": scope,
+    }
+
+
 def extract_research_questions(brief: str) -> list[DeepDiveQuestion]:
     normalized = normalize_text(brief)
     raw_lines = [line.strip(" -\t") for line in str(brief or "").splitlines() if line.strip()]
@@ -174,6 +317,73 @@ def extract_research_questions(brief: str) -> list[DeepDiveQuestion]:
             )
         )
     return questions
+
+
+_INSIGHT_NODE_BASE: dict[str, dict[str, Any]] = {
+    "D10": {
+        "gate": "DD_INSIGHT",
+        "logical_operator": "DeepDiveInsightThesisPlanner",
+        "goal": "Build central thesis, chapter theses, and argument load-bearing map.",
+        "depends_on": ["D4", "D5"],
+        "acceptance": ["Insight thesis map answers the user questions instead of a generic survey outline."],
+    },
+    "D11": {
+        "gate": "DD_INSIGHT",
+        "logical_operator": "DeepDiveSignalExtractor",
+        "goal": "Extract topic-specific signals, source clusters, and evidence patterns into reusable insight assets.",
+        "depends_on": ["D3"],
+        "acceptance": ["Signal map binds named evidence to concrete technical, product, or strategic implications."],
+    },
+    "D12": {
+        "gate": "DD_INSIGHT",
+        "logical_operator": "DeepDiveActionMapper",
+        "goal": "Map signals to actions, design implications, experiments, roadmap items, or domain-specific absorption paths.",
+        "depends_on": ["D11"],
+        "acceptance": ["Every major signal has an actionable implication or an explicit reason it remains watchlist-only."],
+    },
+    "D13": {
+        "gate": "DD_INSIGHT",
+        "logical_operator": "DeepDiveTypedClaimCompiler",
+        "goal": "Classify factual, interpretive, predictive, and strategic claims.",
+        "depends_on": ["D10", "D11", "D12"],
+        "acceptance": ["Claims are typed and evidence-bound."],
+    },
+    "D14": {
+        "gate": "DD_INSIGHT",
+        "logical_operator": "DeepDivePredictionPacketBuilder",
+        "goal": "Build forecast packets with drivers, leading indicators, and falsification conditions.",
+        "depends_on": ["D13"],
+        "acceptance": ["Prediction packets are explicit and falsifiable."],
+    },
+    "D15": {
+        "gate": "DD_PUBLISH",
+        "logical_operator": "DeepDiveSectionRenderCompiler",
+        "goal": "Compile sections into render cards with body, evidence callouts, takeaways, and figure specs.",
+        "depends_on": ["D13", "D14"],
+        "acceptance": ["SectionRender cards are complete for every major chapter."],
+    },
+    "D16": {
+        "gate": "DD_PUBLISH",
+        "logical_operator": "DeepDiveFigureSpecRenderer",
+        "goal": "Render claim-linked diagrams, roadmaps, matrices, and architecture figures.",
+        "depends_on": ["D15"],
+        "acceptance": ["Every major chapter has a claim-linked figure."],
+    },
+    "D17": {
+        "gate": "DD_REVIEW",
+        "logical_operator": "DeepDiveChiefInsightEditor",
+        "goal": "Reject correct-but-useless prose and enforce thesis, actionability, forecast, and human-readable evidence.",
+        "depends_on": ["D15", "D16"],
+        "acceptance": ["Chief insight review passes all insight gates."],
+    },
+    "D18": {
+        "gate": "DD_PUBLISH",
+        "logical_operator": "DeepDiveInsightArtifactPublisher",
+        "goal": "Publish final HTML, figures, signal map, action map, and insight roadmap.",
+        "depends_on": ["D17"],
+        "acceptance": ["Insight artifact package is complete and status-visible."],
+    },
+}
 
 
 def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion], *, insight_mode: bool = False) -> dict[str, Any]:
@@ -262,100 +472,36 @@ def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion], *, insight_mo
         },
     ]
     if insight_mode:
-        nodes.extend([
-            {
-                "id": "D10",
-                "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDiveInsightThesisPlanner",
-                "goal": "Build central thesis, chapter theses, and argument load-bearing map.",
-                "depends_on": ["D4", "D5"],
+        for node_id in ("D10", "D11", "D12", "D13", "D14", "D15", "D16", "D17", "D18"):
+            base = _INSIGHT_NODE_BASE[node_id]
+            meta = INSIGHT_RUNTIME_NODE_METADATA[node_id]
+            nodes.append({
+                "id": node_id,
+                "gate": base["gate"],
+                "logical_operator": base["logical_operator"],
+                "goal": base["goal"],
+                "depends_on": base["depends_on"],
                 "question_ids": question_ids,
-                "acceptance": ["Insight thesis map answers the user questions instead of a generic survey outline."],
-            },
-            {
-                "id": "D11",
-                "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDiveSignalExtractor",
-                "goal": "Extract topic-specific signals, source clusters, and evidence patterns into reusable insight assets.",
-                "depends_on": ["D3"],
-                "question_ids": question_ids,
-                "acceptance": ["Signal map binds named evidence to concrete technical, product, or strategic implications."],
-            },
-            {
-                "id": "D12",
-                "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDiveActionMapper",
-                "goal": "Map signals to actions, design implications, experiments, roadmap items, or domain-specific absorption paths.",
-                "depends_on": ["D11"],
-                "question_ids": question_ids,
-                "acceptance": ["Every major signal has an actionable implication or an explicit reason it remains watchlist-only."],
-            },
-            {
-                "id": "D13",
-                "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDiveTypedClaimCompiler",
-                "goal": "Classify factual, interpretive, predictive, and strategic claims.",
-                "depends_on": ["D10", "D11", "D12"],
-                "question_ids": question_ids,
-                "acceptance": ["Claims are typed and evidence-bound."],
-            },
-            {
-                "id": "D14",
-                "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDivePredictionPacketBuilder",
-                "goal": "Build forecast packets with drivers, leading indicators, and falsification conditions.",
-                "depends_on": ["D13"],
-                "question_ids": question_ids,
-                "acceptance": ["Prediction packets are explicit and falsifiable."],
-            },
-            {
-                "id": "D15",
-                "gate": "DD_PUBLISH",
-                "logical_operator": "DeepDiveSectionRenderCompiler",
-                "goal": "Compile sections into render cards with body, evidence callouts, takeaways, and figure specs.",
-                "depends_on": ["D13", "D14"],
-                "question_ids": question_ids,
-                "acceptance": ["SectionRender cards are complete for every major chapter."],
-            },
-            {
-                "id": "D16",
-                "gate": "DD_PUBLISH",
-                "logical_operator": "DeepDiveFigureSpecRenderer",
-                "goal": "Render claim-linked diagrams, roadmaps, matrices, and architecture figures.",
-                "depends_on": ["D15"],
-                "question_ids": question_ids,
-                "acceptance": ["Every major chapter has a claim-linked figure."],
-            },
-            {
-                "id": "D17",
-                "gate": "DD_REVIEW",
-                "logical_operator": "DeepDiveChiefInsightEditor",
-                "goal": "Reject correct-but-useless prose and enforce thesis, actionability, forecast, and human-readable evidence.",
-                "depends_on": ["D15", "D16"],
-                "question_ids": question_ids,
-                "acceptance": ["Chief insight review passes all insight gates."],
-            },
-            {
-                "id": "D18",
-                "gate": "DD_PUBLISH",
-                "logical_operator": "DeepDiveInsightArtifactPublisher",
-                "goal": "Publish final HTML, figures, signal map, action map, and insight roadmap.",
-                "depends_on": ["D17"],
-                "question_ids": question_ids,
-                "acceptance": ["Insight artifact package is complete and status-visible."],
-            },
-        ])
+                "acceptance": base["acceptance"],
+                "artifact_paths": meta["artifact_paths"],
+                "evaluator_sidecar": meta["evaluator_sidecar"],
+                "closeout_acceptance": meta["closeout_acceptance"],
+                "status_metadata": meta["status_metadata"],
+            })
+    required_gates = [
+        "DD_SCOPE",
+        "DD_SOURCE",
+        "DD_EVIDENCE",
+        "DD_SYNTHESIS",
+        "DD_REVIEW",
+        "DD_PUBLISH",
+    ]
+    if insight_mode:
+        required_gates.insert(4, "DD_INSIGHT")
     return {
         "dag_variant": "deepdive_research",
         "runtime_owner": "DeepDive",
-        "required_gates": [
-            "DD_SCOPE",
-            "DD_SOURCE",
-            "DD_EVIDENCE",
-            "DD_SYNTHESIS",
-            "DD_REVIEW",
-            "DD_PUBLISH",
-        ],
+        "required_gates": required_gates,
         "evidence_policy": {
             "ledger_required": True,
             "claim_citation_required": True,
@@ -425,6 +571,8 @@ def compile_deepdive_brief(
     )
     conference_profile = any(token in lowered for token in ("conference", "会议", "学术会议", "workshop", "accepted papers"))
     solar_profile = "solar" in lowered
+    insight_profile_id = infer_insight_profile_id(normalized, requested_profile=options.profile) if insight_mode else None
+    insight_profile_contract = load_insight_profile_contract(insight_profile_id) if insight_mode else {"active": False}
     questions = extract_research_questions(normalized)
     source_refs = [ref.to_dict() for ref in options.source_refs]
     must_answer = [question.text for question in questions]
@@ -436,6 +584,10 @@ def compile_deepdive_brief(
             "What actions, designs, experiments, roadmap items, schemas, operators, or quality gates should follow when applicable?",
             "What should be watched next, with drivers, leading indicators, risks, and falsification conditions?",
         ])
+        profile_scope = insight_profile_contract.get("scope_boundaries") if isinstance(insight_profile_contract, dict) else {}
+        for item in profile_scope.get("must_answer", []) if isinstance(profile_scope, dict) else []:
+            if item not in must_answer:
+                must_answer.append(item)
     must_not_do = [
         "Do not dispatch normal PM requirement nodes.",
         "Do not write raw_intent.json or requirement_ir.json.",
@@ -449,6 +601,10 @@ def compile_deepdive_brief(
             "Do not publish without visible citations and claim-linked figures.",
             "Do not let correct-but-non-actionable prose pass the insight gate.",
         ])
+        profile_scope = insight_profile_contract.get("scope_boundaries") if isinstance(insight_profile_contract, dict) else {}
+        for item in profile_scope.get("must_not_do", []) if isinstance(profile_scope, dict) else []:
+            if item not in must_not_do:
+                must_not_do.append(item)
     contract = {
         "schema_version": SCHEMA_VERSION,
         "id": stable_id("ddc", normalized),
@@ -461,6 +617,7 @@ def compile_deepdive_brief(
         },
         "profile": options.profile,
         "mode": "insight" if insight_mode else "survey",
+        "insight_profile": insight_profile_contract if insight_mode else {"active": False},
         "source_channel": options.source_channel,
         "raw_brief": raw_normalized,
         "brief": normalized,
@@ -479,7 +636,8 @@ def compile_deepdive_brief(
         "operator_mapping": OPERATOR_MAPPING,
     }
     if insight_mode:
-        contract["output_contract"]["insight"] = [
+        profile_outputs = insight_profile_contract.get("required_outputs") if isinstance(insight_profile_contract, dict) else None
+        contract["output_contract"]["insight"] = list(profile_outputs or [
             "signal_map.json",
             "action_mapping.json",
             "challenge_or_implication_matrix.json",
@@ -488,7 +646,13 @@ def compile_deepdive_brief(
             "figures/*.svg",
             "survey_insight_quality.json",
             "chief_insight_review.json",
-        ]
+        ])
+        profile_gates = insight_profile_contract.get("required_gates") if isinstance(insight_profile_contract, dict) else None
+        if profile_gates:
+            contract["output_contract"]["insight_gates"] = list(profile_gates)
+        signal_clusters = insight_profile_contract.get("required_signal_clusters") if isinstance(insight_profile_contract, dict) else None
+        if signal_clusters:
+            contract["output_contract"]["signal_clusters"] = list(signal_clusters)
         profile_extensions: list[str] = []
         if conference_profile:
             profile_extensions.append("conference_signal_map.json")
@@ -547,6 +711,13 @@ def validate_deepdive_contract(contract: dict[str, Any]) -> dict[str, Any]:
             errors.append(f"question_unmapped:{item.get('question_id', 'N/A')}")
     if not contract.get("source_refs"):
         warnings.append("source_refs_empty")
+    if contract.get("mode") == "insight":
+        graph_gates = set(graph.get("required_gates") or [])
+        if "DD_INSIGHT" not in graph_gates:
+            errors.append("insight_gate_missing_from_dag")
+        profile_contract = contract.get("insight_profile") if isinstance(contract.get("insight_profile"), dict) else {}
+        if profile_contract.get("active") and not profile_contract.get("ok"):
+            errors.extend(f"insight_profile_{err}" for err in profile_contract.get("errors", ["invalid"]))
     return {
         "ok": not errors,
         "errors": errors,

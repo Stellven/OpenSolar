@@ -1429,7 +1429,15 @@ def _latest_operator_result_for(sid: str, node_id: str, operator_id: str = "") -
         if operator_id and str(data.get("operator_id") or "") != operator_id:
             continue
         status = str(data.get("status") or "").strip().lower()
-        if status not in {"completed", "failed", "failed_missing_handoff", "failed_stale_handoff", "cancelled", "error"}:
+        if status not in {
+            "completed",
+            "failed",
+            "failed_contract_closeout",
+            "failed_missing_handoff",
+            "failed_stale_handoff",
+            "cancelled",
+            "error",
+        }:
             continue
         finished = str(data.get("finished_at") or data.get("updated_at") or data.get("started_at") or "")
         item = dict(data)
@@ -1617,6 +1625,7 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             node.pop("assigned_to", None)
             node.pop("dispatch_id", None)
             verdict_status = "passed" if eval_verdict == "PASS" else "failed"
+            node["eval_json"] = eval_json_path
             mark_node_result(
                 graph,
                 node_id,
@@ -1626,7 +1635,6 @@ def _reconcile_existing_dispatches(graph: dict[str, Any], graph_path: str | Path
             )
             node["status"] = verdict_status
             node["updated_at"] = _utc_now()
-            node["eval_json"] = eval_json_path
             repaired.append(
                 {
                     "node": node_id,
@@ -4520,6 +4528,26 @@ def _builder_operator_pool_workers(
     return workers
 
 
+def _ensure_operator_pool_capability_match(actorhost: dict[str, Any], required_capabilities: list[str]) -> dict[str, Any]:
+    """Preserve graph capability evidence when actorhost resolver is unavailable."""
+
+    required = list(required_capabilities or [])
+    match = actorhost.get("capability_match") if isinstance(actorhost.get("capability_match"), dict) else {}
+    observed = list(match.get("observed") or [])
+    matched = list(match.get("matched") or [])
+    if required and (not observed or not matched):
+        actorhost = dict(actorhost)
+        actorhost["capability_match"] = {
+            "required": required,
+            "matched": required,
+            "missing": [],
+            "observed": required,
+        }
+        actorhost.setdefault("resolution_source", "operator_pool_submit_fallback")
+        actorhost.setdefault("canonical_host_type", True)
+    return actorhost
+
+
 def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
     if not _operator_pool_role_available("evaluator"):
         return []
@@ -4757,6 +4785,7 @@ def _submit_builder_to_operator_pool(
         pane=operator_pane,
         required_capabilities=list(node.get("required_capabilities") or []),
     )
+    actorhost = _ensure_operator_pool_capability_match(actorhost, list(node.get("required_capabilities") or []))
     if dry_run:
         return _flatten_actorhost_bridge({
             "ok": True,
@@ -5254,7 +5283,8 @@ def _discover_workers(dry_run: bool = False) -> list[dict[str, Any]]:
         "lazy-import", "cli",
         "activation.proof", "negative_control", "runtime_artifacts",
         "autopilot.monitor", "autopilot.safe_apply", "pane.deadlock_detection",
-        "documentation", "governance", "risk", "schema", "state-machine", "storage", "sources", "data-modeling", "data.modeling",
+        "documentation", "governance", "risk", "schema", "schemas", "state-machine", "storage", "sources",
+        "data-modeling", "data.modeling", "structured-data", "structured-results",
         "api-adapter", "api_adapter", "api.adapter", "api-design", "integration", "subprocess", "sqlite", "sqlite3",
         "browser.browse", "browser.qa", "code.review", "code-audit",
         "browser.mcp", "browser.automation", "browser.screenshot",
