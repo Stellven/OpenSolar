@@ -223,7 +223,7 @@ def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
     ]
     ns["hf_paper_insight_db_path"] = lambda config: tmp_path / "dummy.sqlite"
     ns["hf_load_report_candidates"] = lambda store_path, limit, date_str, config, reasoning_mode: candidates
-    ns["hf_call_grouped_report_flow"] = lambda public_records, config, date_str, report_context=None: {
+    ns["hf_call_grouped_report_flow"] = lambda public_records, config, date_str, report_context=None, heat_overview=None: {
         "ok": True,
         "model": "chatgpt-5.5",
         "plan": {
@@ -301,6 +301,9 @@ def test_hf_write_public_report_prefers_grouped_flow_outputs(tmp_path):
     assert pack["report_context"]["window_start"] == "2026-06-01"
     assert pack["report_context"]["window_end"] == "2026-06-07"
     assert len(pack["grouped_report_sections"]) == 2
+    assert "heat_overview" in pack
+    assert "日 / 周 / 月热度总览" in markdown
+    assert "日 / 周 / 月热度总览" in html
 
 
 def test_hf_report_context_weekly_uses_iso_week_not_rolling_window():
@@ -463,6 +466,78 @@ def test_hf_report_collection_summary_uses_weekly_source_tables(tmp_path):
     assert summary["monthly_snapshot_unique_papers"] == 1
     assert summary["selected_papers"] == 2
     assert summary["core_papers"] == 1
+
+
+def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
+    ns = _load_namespace()
+    db_path = tmp_path / "tech-hotspot-radar.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE hf_daily_papers (
+            paper_date TEXT NOT NULL,
+            paper_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            hf_url TEXT NOT NULL,
+            rank INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE hf_paper_period_snapshots (
+            paper_id TEXT NOT NULL,
+            period TEXT NOT NULL,
+            snapshot_at TEXT NOT NULL,
+            rank INTEGER NOT NULL DEFAULT 0,
+            title TEXT NOT NULL DEFAULT ''
+        );
+        """
+    )
+    conn.executemany(
+        "INSERT INTO hf_daily_papers (paper_date, paper_id, title, hf_url, rank) VALUES (?, ?, ?, ?, ?)",
+        [
+            ("2026-06-01", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 1),
+            ("2026-06-01", "p2", "Vision Reasoning Paper", "https://huggingface.co/papers/p2", 4),
+            ("2026-06-02", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 2),
+            ("2026-06-03", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 3),
+            ("2026-06-03", "p3", "New Breakout Paper", "https://huggingface.co/papers/p3", 2),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO hf_paper_period_snapshots (paper_id, period, snapshot_at, rank, title) VALUES (?, ?, ?, ?, ?)",
+        [
+            ("p1", "weekly", "2026-06-01T10:00:00Z", 1, "Agent Runtime Paper"),
+            ("p1", "monthly", "2026-06-01T10:00:00Z", 3, "Agent Runtime Paper"),
+            ("p1", "monthly", "2026-06-03T10:00:00Z", 2, "Agent Runtime Paper"),
+            ("p3", "monthly", "2026-06-03T10:00:00Z", 5, "New Breakout Paper"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    overview = ns["hf_report_heat_overview"](
+        {"output": {"database": str(db_path)}},
+        report_context={
+            "cadence": "weekly",
+            "week_id": "2026-W23",
+            "window_start": "2026-06-01",
+            "window_end": "2026-06-07",
+            "window_label": "2026-W23 · 2026-06-01 ~ 2026-06-07",
+        },
+        limit=5,
+    )
+
+    assert overview["ok"] is True
+    assert len(overview["daily_heat"]) == 3
+    assert overview["daily_heat"][0]["top_title"] == "Agent Runtime Paper"
+    assert overview["weekly_hotspots"][0]["paper_id"] == "p1"
+    assert overview["weekly_hotspots"][0]["days_seen"] == 3
+    assert overview["monthly_hotspots"][0]["paper_id"] == "p1"
+    assert any(row["paper_id"] == "p3" for row in overview["breakout_hotspots"])
+    markdown = "\n".join(ns["_hf_render_heat_overview_markdown"](overview))
+    html = ns["_hf_render_heat_overview_html"](overview)
+    assert "每日热度基线" in markdown
+    assert "本周持续热点" in markdown
+    assert "本月持续热点" in markdown
+    assert "新晋爆发候选" in markdown
+    assert "hf-heat-grid" in html
 
 
 def test_hf_missing_value_handles_lists_without_typeerror():
