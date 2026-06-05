@@ -98,12 +98,18 @@ def _section_final(root: Path, section_id: str) -> str:
 
 def _build_contribution_matrix(root: Path, ast: dict) -> dict:
     rows = []
+    insight_mode = _is_insight_ast(root, ast)
     for section in ast.get("sections", []):
         section_id = str(section.get("section_id") or "")
         text = _section_final(root, section_id)
         claims = sorted(set(_extract_tags(text, "claim")))
         evidence = sorted(set(_extract_tags(text, "evidence")))
         headings = [line.strip("# ").strip() for line in text.splitlines() if line.startswith("## ")]
+        has_insight_thesis = "## 本节判断" in text
+        has_insight_evidence = "## 证据链" in text
+        has_insight_action = "## 影响与行动" in text
+        has_insight_counter = "## 反证和观察" in text
+        has_insight_figure = "## Figure Spec" in text or "SectionRender JSON" in text
         rows.append({
             "section_id": section_id,
             "chapter_id": str(section.get("chapter_id") or ""),
@@ -115,14 +121,14 @@ def _build_contribution_matrix(root: Path, ast: dict) -> dict:
             "evidence_count": len(evidence),
             "has_literature_lineage": "Literature Lineage" in text,
             "has_method_taxonomy": "Method Taxonomy" in text,
-            "has_architecture_synthesis": "Architecture Synthesis" in text,
-            "has_comparative_positioning": "Comparative Positioning" in text,
+            "has_architecture_synthesis": "Architecture Synthesis" in text or (insight_mode and has_insight_action and has_insight_figure),
+            "has_comparative_positioning": "Comparative Positioning" in text or (insight_mode and has_insight_thesis and has_insight_counter),
             "has_terminology_evolution": "Terminology Evolution" in text,
             "has_evaluation_protocol_matrix": "Evaluation Protocol Matrix" in text,
-            "has_evaluation_boundary": "Evaluation And Risk Boundary" in text,
-            "has_limitations_failure_modes": "Limitations And Failure Modes" in text,
+            "has_evaluation_boundary": "Evaluation And Risk Boundary" in text or (insight_mode and has_insight_evidence and has_insight_counter),
+            "has_limitations_failure_modes": "Limitations And Failure Modes" in text or (insight_mode and has_insight_counter),
             "has_controversy_matrix": "Controversy Matrix" in text,
-            "has_contradiction_slots": "Contradiction Slots" in text,
+            "has_contradiction_slots": "Contradiction Slots" in text or (insight_mode and has_insight_counter),
             "headings": headings[:20],
         })
     finalized = [row for row in rows if row["status"] == "finalized"]
@@ -616,7 +622,9 @@ def _build_insight_human_final(root: Path, ast: dict, contribution: dict, sectio
 
     chapters = ast.get("chapters", []) if isinstance(ast.get("chapters"), list) else []
     source_counts = contribution.get("source_type_counts") if isinstance(contribution.get("source_type_counts"), dict) else {}
-    source_summary = "、".join(f"{key} {value}" for key, value in sorted(source_counts.items())) or "N/A"
+    source_summary = "、".join(
+        f"{_source_type_label(key)} {value}" for key, value in sorted(source_counts.items())
+    ) or "N/A"
     title = str(ast.get("title") or "DeepDive 洞察报告")
 
     thesis_lines: list[str] = []
@@ -631,6 +639,7 @@ def _build_insight_human_final(root: Path, ast: dict, contribution: dict, sectio
             summary = str(callout.get("summary") or callout.get("source_title") or "").strip()
             if summary:
                 _append_unique(evidence_lines, [summary], max_items=8)
+    visible_sources = _visible_source_rows(root, max_items=8)
 
     lines = [
         f"# {title}",
@@ -646,6 +655,11 @@ def _build_insight_human_final(root: Path, ast: dict, contribution: dict, sectio
     ]
     if evidence_lines:
         lines.extend([*[f"- {item}" for item in evidence_lines[:8]], ""])
+    if visible_sources:
+        lines.extend(["## 可见来源索引", ""])
+        for source in visible_sources:
+            lines.append(f"- {source['label']}：[ {source['title']} ]({source['url']})")
+        lines.append("")
 
     for chapter in chapters:
         chapter_id = str(chapter.get("chapter_id") or "")
@@ -672,8 +686,10 @@ def _build_insight_human_final(root: Path, ast: dict, contribution: dict, sectio
                 lines.extend(["#### 影响与行动", "", *[f"- {item}" for item in takeaways[:3]], ""])
             lines.extend(["#### 反证和观察", "", "- 保留反向证据、风险边界和后续领先指标；若证据不足，应降级为 watchlist，而不是强推结论。", ""])
 
-    text = "\n".join(lines).strip() + "\n"
-    text, execution_metrics = append_execution_metrics_section(text, root)
+    text = _public_report_text("\n".join(lines).strip()) + "\n"
+    # Insight-mode human output is a publication preview. Keep run/token metrics
+    # in JSON sidecars only; final.md remains the machine-audit artifact.
+    execution_metrics = append_execution_metrics_section(text, root)[1]
     human_path = root / "human_final.md"
     human_path.write_text(text, encoding="utf-8")
     metrics_path = root / "survey_human_execution_metrics.json"
@@ -707,6 +723,50 @@ def _source_type_label(value: str) -> str:
         "social": "社交",
         "unknown": "来源",
     }.get(str(value or "unknown"), "来源")
+
+
+def _visible_source_rows(root: Path, max_items: int = 8) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    priority = {
+        "paper": 0,
+        "official_doc": 1,
+        "code": 2,
+        "benchmark": 3,
+    }
+    sources = sorted(
+        _read_jsonl(root / "sources.jsonl"),
+        key=lambda row: (priority.get(str(row.get("source_type") or "unknown"), 9), str(row.get("title") or "")),
+    )
+    for source in sources:
+        url = str(source.get("url") or "").strip()
+        title = _public_report_text(str(source.get("title") or source.get("id") or "未命名来源").strip())
+        if not url or not title or url in seen:
+            continue
+        seen.add(url)
+        rows.append({
+            "title": _short_text(title, max_chars=72),
+            "url": url,
+            "label": _source_type_label(str(source.get("source_type") or "unknown")),
+        })
+        if len(rows) >= max_items:
+            break
+    return rows
+
+
+def _public_report_text(value: str) -> str:
+    replacements = {
+        "official_doc": "官方材料",
+        "Execution Metrics": "执行指标",
+        "estimated_from_report_artifacts": "由报告产物估算",
+        "claim_id": "判断编号",
+        "evidence_id": "证据编号",
+        "source type": "来源类型",
+    }
+    text = str(value or "")
+    for needle, replacement in replacements.items():
+        text = re.sub(rf"\b{re.escape(needle)}\b", replacement, text)
+    return text
 
 
 def _html_paragraphs(items: list[Any], *, empty: str = "暂无可发布内容。") -> str:
@@ -1138,6 +1198,22 @@ def _render_insight_html(
         premium_figure_limit=premium_figure_limit,
         premium_timeout_seconds=premium_timeout_seconds,
     )
+    visible_sources = _visible_source_rows(root, max_items=8)
+    visible_sources_html = ""
+    if visible_sources:
+        source_items = "\n".join(
+            f'<li><span class="source-badge">{_h(source["label"])}</span> '
+            f'<a href="{_h(source["url"])}" target="_blank" rel="noreferrer">{_h(source["title"])}</a></li>'
+            for source in visible_sources
+        )
+        visible_sources_html = "\n".join([
+            '<section class="source-index">',
+            '  <div class="eyebrow">可见来源索引</div>',
+            "  <ul>",
+            source_items,
+            "  </ul>",
+            "</section>",
+        ])
     visual_audit = {
         "ok": True,
         "schema_version": "solar.deepdive.visual_audit.v1",
@@ -1229,6 +1305,9 @@ def _render_insight_html(
     .figure-node.evidence {{ border-left-color: #316a5f; }}
     .figure-node.takeaway {{ border-left-color: #d59a2f; }}
     .figure-note, .muted {{ color: var(--muted); font-size: 14px; }}
+    .source-index {{ margin: 22px 0 10px; padding: 20px; border-radius: 22px; background: rgba(255,250,240,.82); border: 1px solid var(--line); }}
+    .source-index ul {{ margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px 18px; }}
+    .source-index li {{ display: flex; gap: 8px; align-items: baseline; min-width: 0; }}
     a {{ color: #94451f; text-decoration-thickness: 1px; text-underline-offset: 3px; }}
     @media (max-width: 860px) {{
       .section-card {{ grid-template-columns: 1fr; }}
@@ -1250,11 +1329,13 @@ def _render_insight_html(
         <span class="pill">来源覆盖 { _h(source_summary) }</span>
       </div>
     </header>
+    {visible_sources_html}
     {''.join(chapter_html)}
   </main>
 </body>
 </html>
 """
+    html = _public_report_text(html)
     html_path = root / "final.html"
     html_path.write_text(html, encoding="utf-8")
     summary = {

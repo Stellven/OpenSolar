@@ -499,12 +499,16 @@ def build_section_draft(root: Path, section_id: str, round_index: int = 0) -> st
 
 {anchor} 的核心判断是：{lens['focus']} 正在成为本章论证的承重点，而不是背景材料。本节只允许把 `{source_types}` 能直接支持的内容写成结论；如果出现 `{lens['risk']}`，结论必须降级为观察项。 [claim:{first_claim}] [evidence:{first_evidence}]
 
+本节采用“分类/方法谱系 → 机制解释 → 评估协议 → 复现边界”的结构展开：先确认材料属于哪类技术路线，再判断它能否进入可复现实验、产品设计或路线图。 [claim:{second_claim}] [evidence:{second_evidence}]
+
 ## 证据链
 
 - {anchor} 证据 1：`{first_evidence}` 支撑本节 thesis 的事实边界，不能被扩写成无来源的行业判断。 [claim:{first_claim}] [evidence:{first_evidence}]
 - {anchor} 证据 2：`{second_evidence}` 用来校准 {lens['axis']} 的适用范围和不确定性。 [claim:{second_claim}] [evidence:{second_evidence}]
 - {anchor} 证据 3：`{third_evidence}` 用来检查来源之间是否存在口径差、时间差或实现差。 [claim:{third_claim}] [evidence:{third_evidence}]
 - {anchor} 证据 4：`{fourth_evidence}` 用来补足发布前的可见证据覆盖，避免核心判断只依赖前三条材料。 [claim:{fourth_claim}] [evidence:{fourth_evidence}]
+- 对照与消融：如果材料没有 baseline、ablation 或替代路线比较，本节只能给出弱判断，不能把局部 evidence 写成确定趋势。 [claim:{third_claim}] [evidence:{third_evidence}]
+- 可复现边界：如果缺少 replication 路径、benchmark 设置或生产部署条件，本节只保留实验建议，不进入强路线图。 [claim:{fourth_claim}] [evidence:{fourth_evidence}]
 
 ## 影响与行动
 
