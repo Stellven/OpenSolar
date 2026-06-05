@@ -9080,6 +9080,10 @@ def hf_report_heat_overview(
         end_date = dt.date.fromisoformat(end)
     except ValueError:
         end_date = dt.date.today()
+    reporting = (((config or {}).get("hf_paper_insight") or {}).get("reporting") or {})
+    baseline_days = int(reporting.get("heat_baseline_days") or 90)
+    baseline_days = max(30, min(180, baseline_days))
+    baseline_start = (end_date - dt.timedelta(days=baseline_days - 1)).isoformat()
     month_start = end_date.replace(day=1).isoformat()
     conn = _hf_report_db_conn(config)
     if conn is None:
@@ -9182,6 +9186,25 @@ def hf_report_heat_overview(
             """,
             (month_start, end, max(1, int(limit))),
         )
+        baseline_hotspots = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT paper_id,
+                   MAX(title) AS title,
+                   MAX(hf_url) AS hf_url,
+                   COUNT(DISTINCT paper_date) AS days_seen,
+                   MIN(rank) AS best_daily_rank,
+                   ROUND(AVG(rank), 2) AS avg_daily_rank,
+                   MIN(paper_date) AS first_seen,
+                   MAX(paper_date) AS last_seen
+            FROM hf_daily_papers
+            WHERE paper_date BETWEEN ? AND ?
+            GROUP BY paper_id
+            ORDER BY days_seen DESC, best_daily_rank ASC, avg_daily_rank ASC, title ASC
+            LIMIT ?
+            """,
+            (baseline_start, end, max(1, int(limit))),
+        )
         period_overview = _hf_fetchall_dicts(
             conn,
             """
@@ -9238,15 +9261,23 @@ def hf_report_heat_overview(
         notes.append(
             f"本月持续热点以《{_hf_text(top_month.get('title'))}》为代表，月榜观测 {int(top_month.get('days_seen') or 0)} 天。"
         )
+    if baseline_hotspots:
+        top_base = baseline_hotspots[0]
+        notes.append(
+            f"近 {baseline_days} 天基线热点以《{_hf_text(top_base.get('title'))}》为代表，日榜出现 {int(top_base.get('days_seen') or 0)} 天。"
+        )
     return {
         "ok": True,
         "window_start": start,
         "window_end": end,
         "month_start": month_start,
+        "baseline_days": baseline_days,
+        "baseline_start": baseline_start,
         "daily_heat": daily_rows,
         "period_heat": period_overview,
         "weekly_hotspots": weekly_hotspots,
         "monthly_hotspots": monthly_hotspots,
+        "baseline_hotspots": baseline_hotspots,
         "breakout_hotspots": breakout_hotspots,
         "trend_notes": notes,
     }
@@ -9752,6 +9783,22 @@ def _hf_render_heat_overview_markdown(heat_overview: dict[str, Any] | None) -> l
         )
     if not (overview.get("daily_heat") or []):
         lines.append("| N/A | 0 | N/A |")
+    baseline_days = int(overview.get("baseline_days") or 90)
+    lines.extend([
+        "",
+        f"### 近 {baseline_days} 天基线热点",
+        "",
+        "| 论文 | 日榜出现天数 | 最佳日榜 | 平均日榜 | 最近出现 |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ])
+    for row in (overview.get("baseline_hotspots") or [])[:8]:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_hf_heat_title_link(row)} | {int(row.get('days_seen') or 0)} | {int(row.get('best_daily_rank') or 0)} | {_hf_score_text(row.get('avg_daily_rank'))} | {_hf_text(row.get('last_seen'))} |"
+        )
+    if not (overview.get("baseline_hotspots") or []):
+        lines.append("| N/A | 0 | 0 | N/A | N/A |")
     lines.extend([
         "",
         "### 周榜 / 月榜观测覆盖",
@@ -9869,6 +9916,20 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
             html.escape(_hf_text(row.get("last_seen"))),
         ],
     ) or "<tr><td>N/A</td><td>0</td><td>0</td><td>N/A</td><td>N/A</td></tr>"
+    baseline_rows = _hf_html_rows(
+        (overview.get("baseline_hotspots") or [])[:8],
+        lambda row: [
+            (
+                f'<a href="{html.escape(str(row.get("hf_url") or ""))}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_short_title(row.get("title")))}</a>'
+                if str(row.get("hf_url") or "").strip()
+                else html.escape(_hf_short_title(row.get("title")))
+            ),
+            str(int(row.get("days_seen") or 0)),
+            str(int(row.get("best_daily_rank") or 0)),
+            html.escape(_hf_score_text(row.get("avg_daily_rank"))),
+            html.escape(_hf_text(row.get("last_seen"))),
+        ],
+    ) or "<tr><td>N/A</td><td>0</td><td>0</td><td>N/A</td><td>N/A</td></tr>"
     breakout_rows = _hf_html_rows(
         (overview.get("breakout_hotspots") or [])[:8],
         lambda row: [
@@ -9891,6 +9952,12 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
         <div class="hf-heat-block">
           <h3>每日热度基线</h3>
           <table><thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th></tr></thead><tbody>{daily_rows}</tbody></table>
+        </div>
+      </div>
+      <div class="hf-heat-baseline">
+        <div class="hf-heat-block">
+          <h3>近 {int(overview.get("baseline_days") or 90)} 天基线热点</h3>
+          <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>均值</th><th>最近</th></tr></thead><tbody>{baseline_rows}</tbody></table>
         </div>
       </div>
       <div class="hf-heat-secondary">
@@ -10127,7 +10194,7 @@ def hf_build_report_planner_prompt(
 2. 每个部分应放哪些论文；
 3. 每个部分的核心判断是什么；
 4. 最终{context.get('period_label') or '日报'}应如何排序。
-5. 必须参考日 / 周 / 月热度数据，说明哪些是周内持续热点、哪些是新晋爆发、哪些只是月榜延续。
+5. 必须参考日 / 周 / 月 / 近 90 天基线热度数据，说明哪些是周内持续热点、哪些是新晋爆发、哪些是月榜延续、哪些是长期基线热点。
 
 硬规则：
 - 只能基于输入材料做分组，不要引入外部事实。
@@ -10165,6 +10232,9 @@ def hf_build_report_planner_prompt(
     "daily_heat": heat_input.get("daily_heat") or [],
     "weekly_hotspots": heat_input.get("weekly_hotspots") or [],
     "monthly_hotspots": heat_input.get("monthly_hotspots") or [],
+    "baseline_days": heat_input.get("baseline_days") or 90,
+    "baseline_start": heat_input.get("baseline_start") or "",
+    "baseline_hotspots": heat_input.get("baseline_hotspots") or [],
     "breakout_hotspots": heat_input.get("breakout_hotspots") or [],
     "trend_notes": heat_input.get("trend_notes") or [],
 }, ensure_ascii=False, indent=2)}
@@ -10662,9 +10732,11 @@ def _hf_render_grouped_report_html(
     .hf-panel {{ padding: 22px; margin-top: 24px; }}
     .hf-heat h2 {{ font-size: 28px; }}
     .hf-heat-daily {{ margin-top: 18px; overflow-x: auto; }}
+    .hf-heat-baseline {{ margin-top: 18px; overflow-x: auto; }}
     .hf-heat-secondary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 18px; }}
     .hf-heat-block {{ min-width: 0; }}
     .hf-heat-daily table {{ min-width: 760px; }}
+    .hf-heat-baseline table {{ min-width: 720px; }}
     h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
     h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
     table {{ width: 100%; border-collapse: collapse; font: 14px/1.45 "Avenir Next", sans-serif; }}
@@ -11056,6 +11128,10 @@ def _hf_render_public_report_html(
       margin-top: 18px;
       overflow-x: auto;
     }}
+    .hf-heat-baseline {{
+      margin-top: 18px;
+      overflow-x: auto;
+    }}
     .hf-heat-secondary {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -11064,6 +11140,7 @@ def _hf_render_public_report_html(
     }}
     .hf-heat-block {{ min-width: 0; }}
     .hf-heat-daily table {{ min-width: 760px; }}
+    .hf-heat-baseline table {{ min-width: 720px; }}
     table {{ width: 100%; border-collapse: collapse; }}
     th, td {{ padding: 12px 0; text-align: left; border-bottom: 1px solid var(--line); }}
     th {{
