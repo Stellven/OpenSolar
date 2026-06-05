@@ -5170,6 +5170,17 @@ PY
       quota-refresh|refresh-quota|quota-status)
         python3 "$_pm_dispatch_py" quota-refresh "$@"
         ;;
+      health-watchdog|operator-health-watchdog|watchdog)
+        _health_watchdog_py="$HARNESS_DIR/tools/operator_health_watchdog.py"
+        if [[ ! -f "$_health_watchdog_py" ]]; then
+          _repo_health_watchdog_py="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/operator_health_watchdog.py"
+          [[ -f "$_repo_health_watchdog_py" ]] && _health_watchdog_py="$_repo_health_watchdog_py"
+        fi
+        if [[ ! -f "$_health_watchdog_py" ]]; then
+          err "operator_health_watchdog.py not found: $_health_watchdog_py"; exit 1
+        fi
+        python3 "$_health_watchdog_py" "$@"
+        ;;
       install-quota-refresh|install-quota-launchd)
         bash "$HARNESS_DIR/scripts/quota-refresh-daemon.sh" install "$@"
         ;;
@@ -5200,6 +5211,7 @@ PY
         echo "  $0 pm-fleet drain-builder-ready [--dry-run] [--max-items N]"
         echo "  $0 pm-fleet prune-rate-limits [--json]"
         echo "  $0 pm-fleet quota-refresh [--json] [--apply]"
+        echo "  $0 pm-fleet health-watchdog [--json] [--apply]"
         echo "  $0 pm-fleet install-quota-refresh [--interval SECONDS]"
         echo "  $0 pm-fleet quota-refresh-status"
         echo "  $0 pm-fleet install-rate-limit-pruner [--interval SECONDS]"
