@@ -17,6 +17,7 @@ usage/
 monitor-drafts/
 _raw_mirror/
 _state_mirror/
+actors/
 scripts/__pycache__/
 google-cse-token.json
 google-cse-client_secret.json
