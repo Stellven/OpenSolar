@@ -215,6 +215,21 @@ def test_capability_match_accepts_any_alias_per_required_label() -> None:
     assert result["assigned"][0]["node"] == "N1"
 
 
+def test_persistence_capability_matches_sqlite_storage_workers() -> None:
+    worker = _worker("pane-a")
+    worker["skills"] = ["python", "sqlite", "testing"]
+    worker["capabilities"] = ["python", "sqlite", "storage", "testing"]
+    node = {
+        "id": "N1",
+        "preferred_model": "glm-5.1",
+        "required_skills": ["python", "sqlite", "testing"],
+        "required_capabilities": ["python", "persistence", "testing"],
+    }
+    result = assign_workers([node], [worker])
+    assert result["queued"] == []
+    assert result["assigned"][0]["node"] == "N1"
+
+
 def test_code_impl_and_test_generation_aliases_bind_general_builder_workers() -> None:
     worker = _worker("pane-a")
     worker["skills"] = ["python", "pytest", "refactor", "ImplementationWorker"]
