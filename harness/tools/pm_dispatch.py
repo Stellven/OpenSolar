@@ -1872,7 +1872,23 @@ def _pending_pm_backlog_count() -> int:
     return count
 
 
-def _status_backlog_count(*, statuses: set[str], phase: str, handoff_to: str = "") -> int:
+def _active_pm_sprint_ids() -> set[str]:
+    active: set[str] = set()
+    for path in pm_inbox_dir().glob("pm-*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if _pm_status_is_terminal(str(payload.get("status") or "")):
+            continue
+        sid = str(payload.get("sprint_id") or "").strip()
+        if sid:
+            active.add(sid)
+    return active
+
+
+def _status_backlog_count(*, statuses: set[str], phase: str, handoff_to: str = "", exclude_sprints: set[str] | None = None) -> int:
+    exclude_sprints = exclude_sprints or set()
     count = 0
     phase_value = phase.strip().lower()
     handoff_value = handoff_to.strip().lower()
@@ -1880,6 +1896,9 @@ def _status_backlog_count(*, statuses: set[str], phase: str, handoff_to: str = "
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
+            continue
+        sid = str(payload.get("sprint_id") or path.name.removesuffix(".status.json")).strip()
+        if sid in exclude_sprints:
             continue
         status = str(payload.get("status") or "").strip().lower()
         if status not in statuses or _pm_status_is_terminal(status):
@@ -1894,10 +1913,26 @@ def _status_backlog_count(*, statuses: set[str], phase: str, handoff_to: str = "
 
 def _builder_pool_backlog_breakdown() -> dict[str, int]:
     pending_pm = _pending_pm_backlog_count()
+    active_pm_sprints = _active_pm_sprint_ids()
     latent_builder_ready = _latent_builder_ready_backlog_count()
-    planner_prd_ready = _status_backlog_count(statuses={"active", "drafting"}, phase="prd_ready", handoff_to="planner")
-    builder_planning_complete = _status_backlog_count(statuses={"active"}, phase="planning_complete", handoff_to="builder_main")
-    evaluator_handoff_ready = _status_backlog_count(statuses={"reviewing"}, phase="handoff_ready", handoff_to="evaluator")
+    planner_prd_ready = _status_backlog_count(
+        statuses={"active", "drafting"},
+        phase="prd_ready",
+        handoff_to="planner",
+        exclude_sprints=active_pm_sprints,
+    )
+    builder_planning_complete = _status_backlog_count(
+        statuses={"active"},
+        phase="planning_complete",
+        handoff_to="builder_main",
+        exclude_sprints=active_pm_sprints,
+    )
+    evaluator_handoff_ready = _status_backlog_count(
+        statuses={"reviewing"},
+        phase="handoff_ready",
+        handoff_to="evaluator",
+        exclude_sprints=active_pm_sprints,
+    )
     return {
         "pending_pm": pending_pm,
         "latent_builder_ready": latent_builder_ready,
