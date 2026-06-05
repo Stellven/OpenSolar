@@ -115,8 +115,9 @@
         "phase": "spec"
       },
       "active_prd_ready": {
-        "status": "active",
-        "phase": "prd_ready"
+        "statuses": ["active", "drafting"],
+        "phase": "prd_ready",
+        "handoff_to": "planner"
       },
       "active_planning_complete": {
         "status": "active",

@@ -76,15 +76,27 @@ def _metrics_config(config: dict[str, Any]) -> dict[str, Any]:
     return dict(metrics)
 
 
-def _status_phase_count(status: str, phase: str) -> int:
+def _as_match_set(value: Any) -> set[str]:
+    if isinstance(value, list):
+        return {str(item).strip().lower() for item in value if str(item).strip()}
+    text = str(value or "").strip().lower()
+    return {text} if text else set()
+
+
+def _status_phase_count(spec: dict[str, Any]) -> int:
+    statuses = _as_match_set(spec.get("statuses")) or _as_match_set(spec.get("status"))
+    phases = _as_match_set(spec.get("phases")) or _as_match_set(spec.get("phase"))
+    handoffs = _as_match_set(spec.get("handoff_to") or spec.get("handoffs"))
     count = 0
     for path in SPRINTS_DIR.glob("*.status.json"):
         data = _load_json(path, {})
         if not isinstance(data, dict):
             continue
-        if str(data.get("status") or "").strip().lower() != status:
+        if statuses and str(data.get("status") or "").strip().lower() not in statuses:
             continue
-        if str(data.get("phase") or "").strip().lower() != phase:
+        if phases and str(data.get("phase") or "").strip().lower() not in phases:
+            continue
+        if handoffs and str(data.get("handoff_to") or "").strip().lower() not in handoffs:
             continue
         count += 1
     return count
@@ -97,11 +109,11 @@ def backlog_metrics(config: dict[str, Any] | None = None) -> dict[str, int]:
     for name, spec in metrics.items():
         if not isinstance(spec, dict):
             continue
-        status = str(spec.get("status") or "").strip().lower()
-        phase = str(spec.get("phase") or "").strip().lower()
-        if not status or not phase:
+        statuses = _as_match_set(spec.get("statuses")) or _as_match_set(spec.get("status"))
+        phases = _as_match_set(spec.get("phases")) or _as_match_set(spec.get("phase"))
+        if not statuses and not phases:
             continue
-        result[str(name)] = _status_phase_count(status, phase)
+        result[str(name)] = _status_phase_count(spec)
     return result
 
 
@@ -284,4 +296,3 @@ def refresh_snapshot(policy: dict[str, Any] | None = None) -> dict[str, Any]:
     tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(tmp, path)
     return payload
-
