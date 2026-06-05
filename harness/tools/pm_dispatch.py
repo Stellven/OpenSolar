@@ -1339,6 +1339,59 @@ def _latent_builder_ready_backlog_count() -> int:
     return len(_latent_builder_ready_items())
 
 
+def _node_eval_json_path(sprint_id: str, node_id: str) -> Path:
+    return SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.json"
+
+
+def _node_handoff_path(sprint_id: str, node_id: str) -> Path:
+    return SPRINTS_DIR / f"{sprint_id}.{node_id}-handoff.md"
+
+
+def _node_has_active_or_dispatched_eval(sprint_id: str, node_id: str, node: dict[str, Any]) -> bool:
+    active = _active_pm_record_for_node(sprint_id, node_id)
+    if active and normalize_role(str(active.get("requested_role") or active.get("role") or "")) == "evaluator":
+        return True
+    if node.get("eval_dispatched_at") or node.get("eval_dispatch_id"):
+        return True
+    assignments = node.get("eval_assignments")
+    return isinstance(assignments, list) and bool(assignments)
+
+
+def _sprint_has_actionable_eval_backlog(sprint_id: str) -> bool:
+    graph_path = SPRINTS_DIR / f"{sprint_id}.task_graph.json"
+    if not graph_path.exists():
+        return False
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    nodes = graph.get("nodes")
+    if not isinstance(nodes, list):
+        return False
+    results = graph.get("node_results")
+    if not isinstance(results, dict):
+        results = {}
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_id = str(node.get("id") or "").strip()
+        if not node_id:
+            continue
+        result = results.get(node_id)
+        result_status = str(result.get("status") or "").strip().lower() if isinstance(result, dict) else ""
+        if result_status in {"passed", "failed", "skipped"}:
+            continue
+        if _node_eval_json_path(sprint_id, node_id).exists():
+            continue
+        if _node_has_active_or_dispatched_eval(sprint_id, node_id, node):
+            continue
+        handoff_path = _node_handoff_path(sprint_id, node_id)
+        if not handoff_path.exists() or handoff_path.stat().st_size <= 0:
+            continue
+        return True
+    return False
+
+
 def _pm_expected_artifacts(record: dict[str, Any]) -> list[Path]:
     """Artifacts that prove a PM role task actually satisfied its contract."""
     role = normalize_role(str(record.get("requested_role") or ""))
@@ -1927,12 +1980,23 @@ def _builder_pool_backlog_breakdown() -> dict[str, int]:
         handoff_to="builder_main",
         exclude_sprints=active_pm_sprints,
     )
-    evaluator_handoff_ready = _status_backlog_count(
-        statuses={"reviewing"},
-        phase="handoff_ready",
-        handoff_to="evaluator",
-        exclude_sprints=active_pm_sprints,
-    )
+    evaluator_handoff_ready = 0
+    for status_path in SPRINTS_DIR.glob("*.status.json"):
+        try:
+            payload = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        sprint_id = str(payload.get("sprint_id") or _sprint_id_from_status_path(status_path)).strip()
+        if sprint_id in active_pm_sprints:
+            continue
+        if str(payload.get("status") or "").strip().lower() != "reviewing":
+            continue
+        if str(payload.get("phase") or "").strip().lower() != "handoff_ready":
+            continue
+        if str(payload.get("handoff_to") or "").strip().lower() != "evaluator":
+            continue
+        if _sprint_has_actionable_eval_backlog(sprint_id):
+            evaluator_handoff_ready += 1
     return {
         "pending_pm": pending_pm,
         "latent_builder_ready": latent_builder_ready,

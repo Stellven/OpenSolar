@@ -288,6 +288,32 @@ def _write_builder_ready_graph(sprints: Path, sprint_id: str) -> None:
     )
 
 
+def _write_eval_ready_graph(sprints: Path, sprint_id: str, node_id: str = "E1") -> None:
+    (sprints / f"{sprint_id}.status.json").write_text(
+        json.dumps({"sprint_id": sprint_id, "status": "reviewing", "phase": "handoff_ready", "handoff_to": "evaluator"}),
+        encoding="utf-8",
+    )
+    (sprints / f"{sprint_id}.task_graph.json").write_text(
+        json.dumps(
+            {
+                "sprint_id": sprint_id,
+                "nodes": [
+                    {
+                        "id": node_id,
+                        "goal": "Review builder handoff.",
+                        "logical_operator": "Verifier",
+                        "acceptance": ["eval exists"],
+                        "requirement_ids": ["REQ-1"],
+                        "status": "reviewing",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (sprints / f"{sprint_id}.{node_id}-handoff.md").write_text("handoff\n", encoding="utf-8")
+
+
 def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     sprints = tmp_path / "sprints"
@@ -303,7 +329,8 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
         json.dumps({"status": "active", "phase": "planning_complete", "handoff_to": "builder_main"}),
         encoding="utf-8",
     )
-    (sprints / "sprint-eval.status.json").write_text(
+    _write_eval_ready_graph(sprints, "sprint-eval")
+    (sprints / "stale-node-sidecar.status.json").write_text(
         json.dumps({"status": "reviewing", "phase": "handoff_ready", "handoff_to": "evaluator"}),
         encoding="utf-8",
     )
@@ -343,6 +370,36 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
         "planner_prd_ready": 0,
         "builder_planning_complete": 1,
         "evaluator_handoff_ready": 1,
+        "total": 4,
+    }
+
+    eval_graph = sprints / "sprint-eval.task_graph.json"
+    eval_payload = json.loads(eval_graph.read_text(encoding="utf-8"))
+    eval_payload["nodes"][0]["eval_dispatched_at"] = "2026-06-04T00:00:00Z"
+    eval_payload["nodes"][0]["eval_assignments"] = [{"pane": "solar-harness-lab:0.3", "dispatch_id": "graph-eval-1"}]
+    eval_graph.write_text(json.dumps(eval_payload), encoding="utf-8")
+    assert pm_dispatch._builder_pool_backlog_breakdown() == {
+        "pending_pm": 2,
+        "latent_builder_ready": 0,
+        "planner_prd_ready": 0,
+        "builder_planning_complete": 1,
+        "evaluator_handoff_ready": 0,
+        "total": 3,
+    }
+
+    eval_payload["nodes"][0].pop("eval_dispatched_at")
+    eval_payload["nodes"][0].pop("eval_assignments")
+    eval_graph.write_text(json.dumps(eval_payload), encoding="utf-8")
+    (inbox / "pm-eval.json").write_text(
+        json.dumps({"status": "submitted", "sprint_id": "sprint-eval", "node_id": "E1", "requested_role": "evaluator"}),
+        encoding="utf-8",
+    )
+    assert pm_dispatch._builder_pool_backlog_breakdown() == {
+        "pending_pm": 3,
+        "latent_builder_ready": 0,
+        "planner_prd_ready": 0,
+        "builder_planning_complete": 1,
+        "evaluator_handoff_ready": 0,
         "total": 4,
     }
 
