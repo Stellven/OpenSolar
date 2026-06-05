@@ -286,6 +286,21 @@ SUBMIT_FALLBACK_JS = r"""() => {
 }"""
 
 
+async def _capture_state(page, *, timeout_s: float = 8.0, default: dict | None = None, label: str = "capture") -> dict:
+    fallback = dict(default or {})
+    try:
+        raw = await asyncio.wait_for(page.evaluate(CAPTURE_JS), timeout=max(1.0, float(timeout_s)))
+    except asyncio.TimeoutError:
+        fallback["_capture_timeout"] = label
+        return fallback
+    try:
+        data = json.loads(raw)
+    except Exception:
+        fallback["_capture_decode_error"] = label
+        return fallback
+    return data if isinstance(data, dict) else fallback
+
+
 async def _wait_for_chat_ready(page, *, timeout_s: int = 60) -> dict:
     deadline = time.time() + timeout_s
     last_state: dict = {}
@@ -293,7 +308,7 @@ async def _wait_for_chat_ready(page, *, timeout_s: int = 60) -> dict:
     challenge_since: float | None = None
     challenge_grace_s = _challenge_grace_seconds()
     while time.time() < deadline:
-        state = json.loads(await page.evaluate(CAPTURE_JS))
+        state = await _capture_state(page, timeout_s=8.0, default=last_state, label="wait_for_chat_ready")
         last_state = state
         if state.get("challenge_wall"):
             if challenge_since is None:
