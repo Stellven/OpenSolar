@@ -4592,6 +4592,34 @@ def _operator_pool_role_available(role: str) -> bool:
     return completed.returncode == 0 and "operator_id" in completed.stdout
 
 
+def _operator_pool_operator_available_for_role(operator_id: str, role: str) -> bool:
+    if not _builder_operator_pool_enabled() or not operator_id:
+        return False
+    cmd = [
+        sys.executable,
+        str(HARNESS_DIR / "tools" / "pm_dispatch.py"),
+        "submit",
+        "--role",
+        role,
+        "--operator",
+        operator_id,
+        "--sprint",
+        "graph-dispatch-capacity-probe",
+        "--node",
+        "CAPACITY",
+        "--objective",
+        f"capacity probe for graph-dispatch {role} via {operator_id}",
+        "--dry-run",
+    ]
+    env = _broker_env()
+    env["SOLAR_PM_DISPATCH_ALLOW_DIRECT"] = "1"
+    try:
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=8, env=env)
+    except Exception:
+        return False
+    return completed.returncode == 0 and f"operator_id = {operator_id}" in completed.stdout
+
+
 def _builder_operator_pool_workers(
     worker_skills: list[str],
     worker_capabilities: list[str],
@@ -4672,9 +4700,9 @@ def _ensure_operator_pool_capability_match(actorhost: dict[str, Any], required_c
 
 
 def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
-    if not _operator_pool_role_available("evaluator"):
-        return []
-    worker = {
+    workers: list[dict[str, Any]] = []
+    if _operator_pool_role_available("evaluator"):
+        workers.append({
             "pane": "operator-pool:evaluator.0",
             "models": ["operator-pool", "deepseek-v4-pro", "opus", "gpt-5.5"],
             "skills": ["review", "testing", "bash"],
@@ -4685,11 +4713,35 @@ def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
             "quota_exhausted": [],
             "rate_limit_operator_blocks": [],
             "current_command": "",
-        }
-    _flatten_actorhost_bridge(
-        worker,
+        })
+    advisor_fallbacks = [
+        item.strip()
+        for item in os.environ.get(
+            "SOLAR_GRAPH_EVAL_ADVISOR_FALLBACK_OPERATORS",
+            "mini-reasonix-deepseek-v4-builder",
+        ).split(",")
+        if item.strip()
+    ]
+    for operator_id in advisor_fallbacks:
+        if _operator_pool_operator_available_for_role(operator_id, "evaluator"):
+            workers.append({
+                "pane": f"operator-pool:evaluator.{operator_id}",
+                "operator_id": operator_id,
+                "models": ["deepseek-v4-pro", "operator-pool"],
+                "skills": ["review", "testing", "bash"],
+                "busy": False,
+                "title": f"operator pool evaluator advisor fallback {operator_id}",
+                "evaluator_host_role": "operator_pool_advisor_fallback",
+                "unavailable_reason": "",
+                "quota_exhausted": [],
+                "rate_limit_operator_blocks": [],
+                "current_command": "",
+            })
+    for worker in workers:
+        _flatten_actorhost_bridge(
+            worker,
         {
-            "actor_id": "N/A",
+            "actor_id": str(worker.get("operator_id") or "N/A"),
             "host_id": "operator-pool",
             "host_type": "operator_pool",
             "lease_state": "idle",
@@ -4704,8 +4756,8 @@ def _evaluator_operator_pool_workers() -> list[dict[str, Any]]:
             "resolution_source": "operator_pool_virtual",
             "canonical_host_type": True,
         },
-    )
-    return [worker]
+        )
+    return workers
 
 
 def _graph_queue_dispatch_role(payload: dict[str, Any], node: dict[str, Any], assignment: dict[str, Any]) -> str:
@@ -4999,6 +5051,7 @@ def _submit_eval_to_operator_pool(
     dispatch_id: str,
     instruction_file: Path,
     dry_run: bool,
+    operator_id: str = "",
 ) -> dict[str, Any]:
     dispatch_preview = instruction_file.read_text(encoding="utf-8")
     if len(dispatch_preview) > 60000:
@@ -5047,6 +5100,8 @@ def _submit_eval_to_operator_pool(
         "--context",
         context,
     ]
+    if operator_id:
+        cmd.extend(["--operator", operator_id])
     if dry_run:
         cmd.append("--dry-run")
     env = _broker_env(sid)
@@ -5894,6 +5949,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                     node_id=node_id,
                     graph_path=graph_path,
                     pane=pane,
+                    operator_id=str(assignment.get("operator_id") or evaluator.get("operator_id") or ""),
                     dispatch_id=str(assignment["dispatch_id"]),
                     instruction_file=instruction_file,
                     dry_run=dry_run,

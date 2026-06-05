@@ -4198,6 +4198,7 @@ def _submit_eval_to_operator_pool(
     dispatch_id: str,
     instruction_file: Path,
     dry_run: bool,
+    operator_id: str = "",
 ) -> dict[str, Any]:
     dispatch_preview = instruction_file.read_text(encoding="utf-8")
     if len(dispatch_preview) > 60000:
@@ -4246,6 +4247,8 @@ def _submit_eval_to_operator_pool(
         "--context",
         context,
     ]
+    if operator_id:
+        cmd.extend(["--operator", operator_id])
     if dry_run:
         cmd.append("--dry-run")
     env = _broker_env(sid)
@@ -4320,7 +4323,8 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
         node["evaluation_plan_updated_at"] = _utc_now()
         if not runtime_capacity.get("available_evaluators"):
             pool_worker = {
-                "pane": "operator-pool:evaluator.0",
+                "pane": "operator-pool:evaluator.mini-reasonix-deepseek-v4-builder",
+                "operator_id": "mini-reasonix-deepseek-v4-builder",
                 "models": ["operator-pool", "deepseek-v4-pro", "opus", "gpt-5.5"],
                 "skills": ["review", "testing", "bash"],
                 "busy": False,
@@ -4485,6 +4489,7 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                     node_id=node_id,
                     graph_path=graph_path,
                     pane=pane,
+                    operator_id=str(assignment.get("operator_id") or evaluator.get("operator_id") or ""),
                     dispatch_id=str(assignment["dispatch_id"]),
                     instruction_file=instruction_file,
                     dry_run=dry_run,

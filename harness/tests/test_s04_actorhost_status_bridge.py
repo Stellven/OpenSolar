@@ -151,6 +151,7 @@ def test_operator_pool_virtual_workers_advertise_brokered_capabilities(monkeypat
     monkeypatch.setattr(gnd, "_builder_operator_pool_available_count", lambda: 2)
     monkeypatch.setenv("SOLAR_GRAPH_BUILDER_OPERATOR_POOL_SLOTS", "1")
     monkeypatch.setattr(gnd, "_operator_pool_role_available", lambda role: role == "evaluator")
+    monkeypatch.setattr(gnd, "_operator_pool_operator_available_for_role", lambda *_: False)
 
     builder_workers = gnd._builder_operator_pool_workers(
         worker_skills=["python"],
@@ -169,6 +170,21 @@ def test_operator_pool_virtual_workers_advertise_brokered_capabilities(monkeypat
     assert evaluator_match["matched"] == ["review", "testing"]
     assert evaluator_match["missing"] == []
     assert evaluator_match["observed"] == ["review", "testing"]
+
+
+def test_evaluator_pool_uses_deepseek_advisor_fallback_when_default_empty(monkeypatch) -> None:
+    monkeypatch.setattr(gnd, "_operator_pool_role_available", lambda role: False)
+    monkeypatch.setattr(
+        gnd,
+        "_operator_pool_operator_available_for_role",
+        lambda operator_id, role: operator_id == "mini-reasonix-deepseek-v4-builder" and role == "evaluator",
+    )
+
+    evaluator_workers = gnd._evaluator_operator_pool_workers()
+
+    assert len(evaluator_workers) == 1
+    assert evaluator_workers[0]["operator_id"] == "mini-reasonix-deepseek-v4-builder"
+    assert evaluator_workers[0]["evaluator_host_role"] == "operator_pool_advisor_fallback"
 
 
 def test_graph_queue_dispatch_role_normalizes_builder_aliases() -> None:
