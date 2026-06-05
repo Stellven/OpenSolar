@@ -200,6 +200,29 @@ class TestEvalPassAllowsPassed:
         assert result["ok"] is True
         assert result["status"] == "failed"
 
+    def test_verdict_fail_clears_stale_eval_retry_state(self, tmp_path, monkeypatch):
+        sid = "sprint-ac3-fail-clears-retry"
+        graph_path = _setup_dispatcher_graph(tmp_path, monkeypatch, sid)
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        graph["nodes"][0]["eval_retry_reason"] = "eval_dispatch_send_failed"
+        graph["nodes"][0]["eval_retry_detail"] = {
+            "reason": "operator_pool_eval_submit_failed",
+        }
+        graph_path.write_text(json.dumps(graph, ensure_ascii=False), encoding="utf-8")
+
+        result = gnd.node_verdict(
+            str(graph_path), "N1", "fail",
+            reason="test failure",
+            dry_run=True,
+        )
+
+        updated = json.loads(graph_path.read_text(encoding="utf-8"))
+        node = updated["nodes"][0]
+        assert result["ok"] is True
+        assert result["status"] == "failed"
+        assert "eval_retry_reason" not in node
+        assert "eval_retry_detail" not in node
+
     def test_assert_pass_mark_allowed_ok_with_eval(self, tmp_path, monkeypatch):
         monkeypatch.setattr(gs, "SPRINTS_DIR", tmp_path)
         sid = "sprint-ac3-assert-ok"
