@@ -3147,6 +3147,7 @@ def _prepare_deepdive_entry_contract(
     return {
         "ok": bool(validation.get("ok")),
         "effective_brief": effective_brief,
+        "mode": str(contract.get("mode") or "survey"),
         "contract_path": str(contract_path),
         "traceability_path": str(trace_path),
         "expansion_path": expansion.get("output_json_path", ""),
@@ -3175,6 +3176,7 @@ def cmd_survey_plan(args: argparse.Namespace) -> int:
         audience=args.audience,
         domain=args.domain,
         run_id=args.run_id or None,
+        planner_mode_hint=deepdive_entry.get("mode"),
     )
     files = write_survey_plan(plan, args.output_dir)
     _ensure_blueprint_and_contracts(args.output_dir)

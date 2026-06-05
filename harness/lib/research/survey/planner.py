@@ -38,14 +38,14 @@ DEFAULT_SECTION_TITLES = [
 ]
 
 CONFERENCE_CHAPTER_TITLES = [
-    "问题定义与研究边界",
-    "会议主议题与问题迁移",
-    "论文热点与核心分歧",
-    "规划、记忆与深度研究",
-    "协议、规格与多 Agent 协作",
-    "评测、基准与工程约束",
-    "对 Solar 的吸收路径",
-    "风险与后续实验",
+    "会议信号与中心论点",
+    "议题迁移与关键变化",
+    "论文热点、分歧与机会",
+    "规划、记忆与深度研究信号",
+    "协议、规格与多 Agent 协作信号",
+    "评测、基准与工程约束信号",
+    "行动路线与吸收映射",
+    "风险、反证与后续实验",
 ]
 
 CONFERENCE_SECTION_TITLES = [
@@ -53,6 +53,24 @@ CONFERENCE_SECTION_TITLES = [
     "代表论文与议题观点",
     "核心分歧与技术挑战",
     "对 Solar 的启示",
+]
+
+INSIGHT_CHAPTER_TITLES = [
+    "核心判断与中心论点",
+    "信号地图与证据强度",
+    "关键变化、分歧与机会",
+    "技术、产品与生态影响",
+    "行动路线与设计映射",
+    "预测、反证与观察指标",
+    "风险边界与证据缺口",
+    "路线图与下一步",
+]
+
+INSIGHT_SECTION_TITLES = [
+    "本节判断",
+    "证据链",
+    "影响与行动",
+    "反证和观察",
 ]
 
 
@@ -69,6 +87,14 @@ def _is_conference_insight_brief(brief: str) -> bool:
     conference_signals = ("会议", "学术会议", "conference", "accepted papers", "workshops", "paper index", "program/")
     intent_signals = ("洞察", "发表问题", "讨论问题", "重大技术挑战", "如何发展")
     return any(token in text for token in conference_signals) and any(token in text for token in intent_signals)
+
+
+def _is_insight_brief(brief: str, planner_mode_hint: str | None = None) -> bool:
+    hint = str(planner_mode_hint or "").lower()
+    if hint == "insight" or "insight" in hint:
+        return True
+    text = _normalize_brief(brief).lower()
+    return any(token in text for token in ("deepdive", "deep dive", "深度研究", "深研", "洞察", "insight"))
 
 
 def _conference_subject(brief: str) -> str:
@@ -89,43 +115,75 @@ def _conference_report_title(brief: str) -> str:
     return f"深度报告：{subject} Agent 议题与技术挑战"
 
 
-def _chapter_objective(brief: str, title: str, *, conference_mode: bool) -> str:
-    if not conference_mode:
+def _insight_report_title(brief: str, *, conference_mode: bool) -> str:
+    if conference_mode:
+        return _conference_report_title(brief)
+    subject = _normalize_brief(brief)
+    subject = re.sub(r"^(deepdive|deep dive|insight|洞察|深度研究)[:：\s-]*", "", subject, flags=re.I).strip()
+    return f"DeepDive 洞察报告：{subject[:64] if subject else '核心议题'}"
+
+
+def _chapter_objective(brief: str, title: str, *, insight_mode: bool, conference_mode: bool) -> str:
+    if not insight_mode:
         return f"Explain {title} for {brief}."
     subject = _conference_subject(brief)
+    if conference_mode:
+        objective_map = {
+            "会议信号与中心论点": f"State what central thesis {subject} supports about Agent systems, based on conference tracks, accepted papers, and workshops; avoid generic methodology talk.",
+            "议题迁移与关键变化": f"Explain how {subject} shifts the discussion from model capability to system capability, using official tracks and conference framing.",
+            "论文热点、分歧与机会": f"Extract the main problem clusters, disagreements, and opportunities emerging from {subject} accepted papers instead of listing papers mechanically.",
+            "规划、记忆与深度研究信号": f"Synthesize how {subject} papers redefine planning horizon, long-horizon memory, and deep research workflows.",
+            "协议、规格与多 Agent 协作信号": f"Explain how {subject} frames protocols, specifications, and multi-agent coordination as first-class system problems.",
+            "评测、基准与工程约束信号": f"Summarize what {subject} implies for evaluation, benchmarking, deployment constraints, and operational cost.",
+            "行动路线与吸收映射": f"Translate {subject} insights into concrete architecture, product, runtime, and roadmap absorption paths.",
+            "风险、反证与后续实验": f"Turn {subject} signals into falsifiable risks, open questions, and next experiments.",
+        }
+        return objective_map.get(title, f"Summarize {title} from {subject} conference signals and paper viewpoints.")
     objective_map = {
-        "问题定义与研究边界": f"Summarize what problems {subject} is actually defining for Agent systems, based on conference tracks, accepted papers, and workshops; avoid generic methodology talk.",
-        "会议主议题与问题迁移": f"Explain how {subject} shifts the discussion from model capability to system capability, using official tracks and conference framing.",
-        "论文热点与核心分歧": f"Extract the main problem clusters and disagreements emerging from {subject} accepted papers instead of listing papers mechanically.",
-        "规划、记忆与深度研究": f"Synthesize how {subject} papers redefine planning horizon, long-horizon memory, and deep research workflows.",
-        "协议、规格与多 Agent 协作": f"Explain how {subject} frames protocols, specifications, and multi-agent coordination as first-class system problems.",
-        "评测、基准与工程约束": f"Summarize what {subject} implies for evaluation, benchmarking, deployment constraints, and operational cost.",
-        "对 Solar 的吸收路径": f"Translate {subject} insights into concrete Solar architecture, product, and runtime absorption paths.",
-        "风险与后续实验": f"Turn {subject} signals into falsifiable risks, open questions, and next experiments for Solar.",
+        "核心判断与中心论点": f"State the central thesis for {brief}; make the report answer the user's question directly before any background.",
+        "信号地图与证据强度": f"Map the strongest signals, evidence quality, counter-signals, and source confidence for {brief}.",
+        "关键变化、分歧与机会": f"Explain what is changing, what remains disputed, and which opportunities are genuinely new.",
+        "技术、产品与生态影响": f"Translate the signals into technical, product, ecosystem, and strategy implications.",
+        "行动路线与设计映射": f"Turn the insight into concrete actions, experiments, design options, roadmap items, operators, schemas, or gates when applicable.",
+        "预测、反证与观察指标": f"Build falsifiable forecast packets with drivers, leading indicators, risks, and invalidation conditions.",
+        "风险边界与证据缺口": f"Make uncertainty visible; separate facts, interpretations, weak evidence, and open gaps.",
+        "路线图与下一步": f"Close with prioritized next steps and a watchlist that can drive follow-up work.",
     }
-    return objective_map.get(title, f"Summarize {title} from {subject} conference signals and paper viewpoints.")
+    return objective_map.get(title, f"Turn {brief} into a thesis-first insight chapter with evidence, action, and falsification.")
 
 
-def _section_research_question(brief: str, chapter_title: str, section_title: str, *, conference_mode: bool) -> str:
-    if not conference_mode:
+def _section_research_question(brief: str, chapter_title: str, section_title: str, *, insight_mode: bool, conference_mode: bool) -> str:
+    if not insight_mode:
         return f"{brief} 在“{chapter_title}/{section_title}”上的证据、架构取舍和争议是什么？"
     subject = _conference_subject(brief)
+    if conference_mode:
+        section_map = {
+            "会议在讨论什么问题": f"{subject} 在“{chapter_title}”这一章实际把 Agent 定义成了哪些系统问题？这些问题是从 conference tracks、accepted papers 和 workshops 里如何体现出来的？",
+            "代表论文与议题观点": f"{subject} 的代表论文、official pages 和 workshops 在“{chapter_title}”上分别提出了什么判断？哪些观点彼此呼应？",
+            "核心分歧与技术挑战": f"{subject} 在“{chapter_title}”上暴露出哪些尚未解决的技术挑战、分歧和工程难点？",
+            "对 Solar 的启示": f"基于 {subject} 在“{chapter_title}”上的会议信号，Solar 应吸收哪些思想、避免哪些误判、优先建设哪些能力？",
+        }
+        return section_map.get(section_title, f"{subject} 在“{chapter_title}/{section_title}”上的会议观点、主要挑战和对 Solar 的启示是什么？")
     section_map = {
-        "会议在讨论什么问题": f"{subject} 在“{chapter_title}”这一章实际把 Agent 定义成了哪些系统问题？这些问题是从 conference tracks、accepted papers 和 workshops 里如何体现出来的？",
-        "代表论文与议题观点": f"{subject} 的代表论文、official pages 和 workshops 在“{chapter_title}”上分别提出了什么判断？哪些观点彼此呼应？",
-        "核心分歧与技术挑战": f"{subject} 在“{chapter_title}”上暴露出哪些尚未解决的技术挑战、分歧和工程难点？",
-        "对 Solar 的启示": f"基于 {subject} 在“{chapter_title}”上的会议信号，Solar 应吸收哪些思想、避免哪些误判、优先建设哪些能力？",
+        "本节判断": f"本节围绕“{chapter_title}”必须给出什么明确判断？这个判断如何服务整篇 DeepDive 的中心论点？",
+        "证据链": f"哪些证据支持、削弱或限制“{chapter_title}”的判断？证据强度和来源边界是什么？",
+        "影响与行动": f"“{chapter_title}”可以转成哪些技术、产品、研究、工程或内容行动？优先级如何？",
+        "反证和观察": f"哪些反证会推翻“{chapter_title}”的判断？接下来应该观察哪些领先指标？",
     }
-    return section_map.get(section_title, f"{subject} 在“{chapter_title}/{section_title}”上的会议观点、主要挑战和对 Solar 的启示是什么？")
+    return section_map.get(section_title, f"{brief} 在“{chapter_title}/{section_title}”上的判断、证据、行动和反证是什么？")
 
 
-def _question_text(brief: str, chapter_title: str, section_title: str | None = None, *, conference_mode: bool) -> str:
-    if not conference_mode:
+def _question_text(brief: str, chapter_title: str, section_title: str | None = None, *, insight_mode: bool, conference_mode: bool) -> str:
+    if not insight_mode:
         return f"{brief}: {chapter_title}" if section_title is None else f"{brief}: {chapter_title} / {section_title}"
     subject = _conference_subject(brief)
+    if conference_mode:
+        if section_title is None:
+            return f"{subject}: {chapter_title} 这章应该总结哪些会议级问题？"
+        return f"{subject}: {chapter_title} / {section_title}"
     if section_title is None:
-        return f"{subject}: {chapter_title} 这章应该总结哪些会议级问题？"
-    return f"{subject}: {chapter_title} / {section_title}"
+        return f"{brief}: {chapter_title} 这章如何支撑中心论点？"
+    return f"{brief}: {chapter_title} / {section_title} 的判断、证据、行动和反证是什么？"
 
 
 def chapter_count_for_target(target_chars: int) -> int:
@@ -146,13 +204,15 @@ def create_survey_plan(
     audience: str = "technical",
     domain: str = "ai",
     run_id: str | None = None,
+    planner_mode_hint: str | None = None,
 ) -> dict:
     run_id = run_id or _stable_id("survey", brief + str(target_chars))
     conference_mode = _is_conference_insight_brief(brief)
-    chapter_titles = CONFERENCE_CHAPTER_TITLES if conference_mode else DEFAULT_CHAPTER_TITLES
-    section_titles = CONFERENCE_SECTION_TITLES if conference_mode else DEFAULT_SECTION_TITLES
+    insight_mode = conference_mode or _is_insight_brief(brief, planner_mode_hint)
+    chapter_titles = CONFERENCE_CHAPTER_TITLES if conference_mode else INSIGHT_CHAPTER_TITLES if insight_mode else DEFAULT_CHAPTER_TITLES
+    section_titles = CONFERENCE_SECTION_TITLES if conference_mode else INSIGHT_SECTION_TITLES if insight_mode else DEFAULT_SECTION_TITLES
     chapters_n = chapter_count_for_target(target_chars)
-    if conference_mode:
+    if insight_mode:
         chapters_n = min(chapters_n, len(chapter_titles))
     per_chapter = sections_per_chapter(target_chars)
     total_sections = chapters_n * per_chapter
@@ -173,11 +233,17 @@ def create_survey_plan(
             title=title,
             order=cidx,
             target_chars=chapter_chars,
-            objective=_chapter_objective(brief, title, conference_mode=conference_mode),
+            objective=_chapter_objective(brief, title, insight_mode=insight_mode, conference_mode=conference_mode),
         ))
         parent_q = SurveyQuestion(
             question_id=f"q{cidx:02d}",
-            text=(f"{_conference_subject(brief)}: {title} 这一章从会议和论文信号中暴露出的核心问题是什么？" if conference_mode else f"{brief}: {title} 的核心问题是什么？"),
+            text=(
+                f"{_conference_subject(brief)}: {title} 这一章从会议和论文信号中暴露出的核心问题是什么？"
+                if conference_mode
+                else f"{brief}: {title} 这一章如何支撑中心论点、证据链和行动路线？"
+                if insight_mode
+                else f"{brief}: {title} 的核心问题是什么？"
+            ),
             depth=0,
             required_source_types=["paper", "official_doc", "code", "benchmark"],
         )
@@ -192,14 +258,14 @@ def create_survey_plan(
                 title=f"{title}：{section_title}",
                 order=(cidx - 1) * per_chapter + sidx,
                 target_chars=section_chars,
-                research_question=_section_research_question(brief, title, section_title, conference_mode=conference_mode),
+                research_question=_section_research_question(brief, title, section_title, insight_mode=insight_mode, conference_mode=conference_mode),
                 required_source_types=required,
                 min_evidence=4,
                 min_claims=3,
             ))
             questions.append(SurveyQuestion(
                 question_id=f"q{cidx:02d}_{sidx:02d}",
-                text=_question_text(brief, title, section_title, conference_mode=conference_mode),
+                text=_question_text(brief, title, section_title, insight_mode=insight_mode, conference_mode=conference_mode),
                 parent_id=parent_q.question_id,
                 depth=1,
                 required_source_types=required,
@@ -216,14 +282,15 @@ def create_survey_plan(
     ast = SurveyReportAST(
         ast_id=_stable_id("survey_ast", run_id + brief),
         run_id=run_id,
-        title=_conference_report_title(brief) if conference_mode else f"Professor-Grade Survey: {brief}",
+        title=_insight_report_title(brief, conference_mode=conference_mode) if insight_mode else f"Professor-Grade Survey: {brief}",
         target_chars=target_chars,
         chapters=chapters,
         sections=sections,
     )
+    planner_mode = "conference_insight" if conference_mode else "insight" if insight_mode else "general_survey"
     return {
         "run": to_dict(run),
-        "planner_mode": "conference_insight" if conference_mode else "general_survey",
+        "planner_mode": planner_mode,
         "questions": to_dict(questions),
         "source_matrix": to_dict(source_matrix),
         "report_ast": to_dict(ast),

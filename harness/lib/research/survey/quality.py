@@ -1097,7 +1097,7 @@ def _is_insight_run(root: Path, ast: dict[str, Any]) -> bool:
         ]
     ).lower()
     return (
-        planner_mode == "conference_insight"
+        planner_mode in {"conference_insight", "insight"}
         or "insight" in profile
         or "insight" in text
         or "洞察" in text
