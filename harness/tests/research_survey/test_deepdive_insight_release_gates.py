@@ -173,11 +173,19 @@ def test_failed_cais_generic_survey_fixture_fails_negative_controls(tmp_path: Pa
 
     results = run_all_insight_gates(tmp_path, json.loads((tmp_path / "survey_report_ast.json").read_text()))
     failed = {result["gate_id"] for result in results if not result["ok"]}
+    failure_details = {result["gate_id"]: result for result in results if not result["ok"]}
 
     assert "generic_survey_toc" in failed
     assert "machine_label_leak" in failed
+    assert "solar_actionability" in failed
     assert "cais_coverage" in failed
+    assert "figure_required" in failed
+    assert "citation_visibility" in failed
     assert "prediction_packet" in failed
+    assert "official_doc" in failure_details["machine_label_leak"]["matched_patterns"]
+    assert {"operator", "schema", "gate"} <= set(failure_details["solar_actionability"]["missing_fields"])
+    assert failure_details["figure_required"]["missing_fields"] == ["figures:0<6"]
+    assert failure_details["citation_visibility"]["missing_fields"] == ["visible_sources:0<10"]
 
 
 def test_golden_mvp_fixture_passes_human_html_release_gates(tmp_path: Path) -> None:
