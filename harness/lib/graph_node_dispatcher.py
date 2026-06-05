@@ -4756,8 +4756,9 @@ def _submit_builder_to_operator_pool(
         return {"ok": False, "reason": "operator_pool_disabled"}
 
     assignment = payload.get("assignment") or {}
-    if _graph_queue_dispatch_role(payload, node, assignment) != "builder":
-        return {"ok": False, "reason": "not_builder_role"}
+    dispatch_role = _graph_queue_dispatch_role(payload, node, assignment)
+    if dispatch_role not in {"builder", "evaluator", "planner"}:
+        return {"ok": False, "reason": "unsupported_operator_pool_role", "role": dispatch_role}
     if pane and not _builder_operator_pool_allowed_for_pane(pane):
         return {"ok": False, "reason": "operator_pool_not_enabled_for_pane"}
 
@@ -4770,9 +4771,9 @@ def _submit_builder_to_operator_pool(
             text_payload["section_isolation"] = True
             text_payload["section_id"] = node.get("section_id", "")
     instruction_file.parent.mkdir(parents=True, exist_ok=True)
-    instruction_file.write_text(build_dispatch_text(text_payload, "operator-pool:builder"), encoding="utf-8")
+    instruction_file.write_text(build_dispatch_text(text_payload, f"operator-pool:{dispatch_role}"), encoding="utf-8")
     if not dry_run:
-        _inject_dispatch_context(instruction_file, sid=sid, pane="operator-pool:builder", dispatch_id=dispatch_id)
+        _inject_dispatch_context(instruction_file, sid=sid, pane=f"operator-pool:{dispatch_role}", dispatch_id=dispatch_id)
 
     dispatch_preview = instruction_file.read_text(encoding="utf-8")
     if len(dispatch_preview) > 60000:
@@ -4781,7 +4782,7 @@ def _submit_builder_to_operator_pool(
             + "\n\n[TRUNCATED] Full graph dispatch instructions are in the file path above; read the file before acting."
         )
     objective = (
-        "你是 graph-dispatch builder。请严格执行下面这个 DAG 节点分发文件；"
+        f"你是 graph-dispatch {dispatch_role}。请严格执行下面这个 DAG 节点分发文件；"
         "不要只总结，必须完成节点要求并按文件内的 graph node verdict/closeout 规则回写。\n\n"
         f"Graph dispatch file: {instruction_file}\n"
         f"Sprint: {sid}\n"
@@ -4806,7 +4807,7 @@ def _submit_builder_to_operator_pool(
         str(HARNESS_DIR / "tools" / "pm_dispatch.py"),
         "submit",
         "--role",
-        "builder",
+        dispatch_role,
         "--sprint",
         sid,
         "--node",
@@ -4860,7 +4861,7 @@ def _submit_builder_to_operator_pool(
             "pane": operator_pane,
             "dispatch_id": dispatch_id,
             "instruction_file": str(instruction_file),
-            "dispatch_mode": "operator_pool",
+            "dispatch_mode": f"operator_pool_{dispatch_role}",
             "pm_dispatch": parsed,
             "dry_run": True,
             "graph_updated": False,
@@ -4905,7 +4906,7 @@ def _submit_builder_to_operator_pool(
     _append_event(
         sid,
         {
-            "event": "graph_builder_operator_pool_dispatched",
+            "event": "graph_operator_pool_dispatched",
             "by": "graph-dispatch",
             "data": {
                 "node": node_id,
@@ -4926,7 +4927,7 @@ def _submit_builder_to_operator_pool(
         "pane": operator_pane,
         "dispatch_id": dispatch_id,
         "instruction_file": str(instruction_file),
-        "dispatch_mode": "operator_pool",
+        "dispatch_mode": f"operator_pool_{dispatch_role}",
         "pm_dispatch": parsed,
         "dry_run": False,
         "graph_updated": graph_updated,
