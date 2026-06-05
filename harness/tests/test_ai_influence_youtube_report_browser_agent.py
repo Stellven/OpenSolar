@@ -6,6 +6,7 @@ import pytest
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+HARNESS_ROOT = Path(__file__).resolve().parents[1]
 
 from ai_influence_youtube_report.browser_agent import (  # noqa: E402
     BrowserAgentClient,
@@ -101,6 +102,7 @@ prompt = sys.stdin.read()
     "kind": os.environ.get("CHATGPT_REPORT_OPERATOR_KIND"),
     "expected_output": os.environ.get("BROWSER_AGENT_EXPECTED_OUTPUT"),
     "project_name": os.environ.get("BROWSER_AGENT_CHATGPT_PROJECT_NAME"),
+    "harness_dir": os.environ.get("HARNESS_DIR"),
     "model": os.environ.get("CHATGPT_MODEL"),
     "lineage": os.environ.get("BROWSER_AGENT_SESSION_LINEAGE"),
     "account_email": os.environ.get("BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"),
@@ -151,6 +153,7 @@ print("phase output")
     assert env_payload["expected_output"] == "json"
     assert env_payload["purpose"] == "ai-influence-youtube-report:phase1-plan"
     assert env_payload["project_name"] == "杂项"
+    assert env_payload["harness_dir"] == str(HARNESS_ROOT)
     assert env_payload["model"] == "chatgpt-5.5-thinking-high"
     assert env_payload["lineage"].startswith("ai-influence-youtube-report:phase1:run-77")
     assert env_payload["account_email"] == "browser-agent@example.com"

@@ -185,6 +185,7 @@ class ChatGPTReportOperatorProvider:
         env["BROWSER_AGENT_SESSION_LINEAGE"] = self._session_lineage(stage=stage, run_id=run_id, chapter_id=chapter_id)
         env["SOLAR_BROWSER_SESSION_LINEAGE"] = env["BROWSER_AGENT_SESSION_LINEAGE"]
         env["BROWSER_AGENT_CHATGPT_PROJECT_NAME"] = self.project_name
+        env["HARNESS_DIR"] = str(ROOT)
         if self.target_account_email:
             env["BROWSER_AGENT_CHATGPT_ACCOUNT_EMAIL"] = self.target_account_email
             env["BROWSER_AGENT_TARGET_ACCOUNT_EMAIL"] = self.target_account_email
