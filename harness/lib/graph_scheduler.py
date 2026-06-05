@@ -205,7 +205,10 @@ LABEL_ALIAS_GROUPS = [
 
 
 def _now() -> str:
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except AttributeError:
+        return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def load_graph(path: str | Path) -> dict[str, Any]:
