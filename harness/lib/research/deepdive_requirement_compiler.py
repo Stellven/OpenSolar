@@ -275,20 +275,20 @@ def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion], *, insight_mo
             {
                 "id": "D11",
                 "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDiveConferenceSignalExtractor",
-                "goal": "Extract conference tracks, papers, demos, and workshops into technical signals.",
+                "logical_operator": "DeepDiveSignalExtractor",
+                "goal": "Extract topic-specific signals, source clusters, and evidence patterns into reusable insight assets.",
                 "depends_on": ["D3"],
                 "question_ids": question_ids,
-                "acceptance": ["Conference signal map binds named papers to technical challenges."],
+                "acceptance": ["Signal map binds named evidence to concrete technical, product, or strategic implications."],
             },
             {
                 "id": "D12",
                 "gate": "DD_INSIGHT",
-                "logical_operator": "DeepDivePaperToSolarMapper",
-                "goal": "Map paper signals to Solar schemas, operators, runtime policies, and quality gates.",
+                "logical_operator": "DeepDiveActionMapper",
+                "goal": "Map signals to actions, design implications, experiments, roadmap items, or domain-specific absorption paths.",
                 "depends_on": ["D11"],
                 "question_ids": question_ids,
-                "acceptance": ["Every major signal has a Solar absorption item."],
+                "acceptance": ["Every major signal has an actionable implication or an explicit reason it remains watchlist-only."],
             },
             {
                 "id": "D13",
@@ -330,7 +330,7 @@ def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion], *, insight_mo
                 "id": "D17",
                 "gate": "DD_REVIEW",
                 "logical_operator": "DeepDiveChiefInsightEditor",
-                "goal": "Reject correct-but-useless prose and enforce thesis, Solar actionability, forecast, and human-readable evidence.",
+                "goal": "Reject correct-but-useless prose and enforce thesis, actionability, forecast, and human-readable evidence.",
                 "depends_on": ["D15", "D16"],
                 "question_ids": question_ids,
                 "acceptance": ["Chief insight review passes all insight gates."],
@@ -339,7 +339,7 @@ def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion], *, insight_mo
                 "id": "D18",
                 "gate": "DD_PUBLISH",
                 "logical_operator": "DeepDiveInsightArtifactPublisher",
-                "goal": "Publish final HTML, figures, signal map, absorption map, and action roadmap.",
+                "goal": "Publish final HTML, figures, signal map, action map, and insight roadmap.",
                 "depends_on": ["D17"],
                 "question_ids": question_ids,
                 "acceptance": ["Insight artifact package is complete and status-visible."],
@@ -416,18 +416,23 @@ def compile_deepdive_brief(
     lowered = normalized.lower()
     insight_mode = (
         "insight" in str(options.profile or "").lower()
+        or "insight" in lowered
+        or "洞察" in normalized
         or ("cais" in lowered and "solar" in lowered)
         or ("会议" in normalized and "洞察" in normalized)
     )
+    conference_profile = any(token in lowered for token in ("conference", "会议", "学术会议", "workshop", "accepted papers"))
+    solar_profile = "solar" in lowered
     questions = extract_research_questions(normalized)
     source_refs = [ref.to_dict() for ref in options.source_refs]
     must_answer = [question.text for question in questions]
     if insight_mode:
         must_answer.extend([
-            "What technical signals does the conference or source cluster release?",
-            "What are the major Agent technical challenges?",
-            "Which Solar schemas, operators, runtime policies, gates, and DAG changes should absorb these signals?",
-            "What should be watched over the next 24-36 months, with drivers, indicators, and falsification conditions?",
+            "What is the central thesis of this DeepDive?",
+            "Which concrete signals and evidence support, weaken, or complicate the thesis?",
+            "What are the key technical, product, strategic, or ecosystem implications?",
+            "What actions, designs, experiments, roadmap items, schemas, operators, or quality gates should follow when applicable?",
+            "What should be watched next, with drivers, leading indicators, risks, and falsification conditions?",
         ])
     must_not_do = [
         "Do not dispatch normal PM requirement nodes.",
@@ -438,7 +443,7 @@ def compile_deepdive_brief(
         must_not_do.extend([
             "Do not use a generic survey taxonomy as the final report structure.",
             "Do not leak source_type labels, claim_id, evidence_id, or execution metrics into the human-facing report.",
-            "Do not publish without Solar absorption mappings.",
+            "Do not publish without a concrete action, design, experiment, roadmap, or watchlist mapping.",
             "Do not publish without visible citations and claim-linked figures.",
             "Do not let correct-but-non-actionable prose pass the insight gate.",
         ])
@@ -473,15 +478,22 @@ def compile_deepdive_brief(
     }
     if insight_mode:
         contract["output_contract"]["insight"] = [
-            "conference_signal_map.json",
-            "paper_to_solar_absorption_map.json",
-            "agent_technical_challenge_matrix.json",
+            "signal_map.json",
+            "action_mapping.json",
+            "challenge_or_implication_matrix.json",
             "prediction_packets.jsonl",
             "section_render_cards/*.json",
             "figures/*.svg",
             "survey_insight_quality.json",
             "chief_insight_review.json",
         ]
+        profile_extensions: list[str] = []
+        if conference_profile:
+            profile_extensions.append("conference_signal_map.json")
+        if solar_profile:
+            profile_extensions.append("solar_absorption_map.json")
+        if profile_extensions:
+            contract["output_contract"]["profile_extensions"] = profile_extensions
     if expansion:
         contract["brief_expansion"] = {
             "schema_version": expansion.get("schema_version"),

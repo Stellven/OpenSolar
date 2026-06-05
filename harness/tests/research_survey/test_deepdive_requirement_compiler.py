@@ -62,8 +62,32 @@ def test_compile_deepdive_insight_contract_extends_runtime_gates():
     assert contract["mode"] == "insight"
     assert {"D10", "D11", "D12", "D17", "D18"} <= node_ids
     assert "DeepDiveChiefInsightEditor" in operators
-    assert "conference_signal_map.json" in contract["output_contract"]["insight"]
+    assert "DeepDiveSignalExtractor" in operators
+    assert "DeepDiveActionMapper" in operators
+    assert "signal_map.json" in contract["output_contract"]["insight"]
+    assert "action_mapping.json" in contract["output_contract"]["insight"]
+    assert "conference_signal_map.json" not in contract["output_contract"]["insight"]
+    assert "conference_signal_map.json" in contract["output_contract"]["profile_extensions"]
+    assert "solar_absorption_map.json" in contract["output_contract"]["profile_extensions"]
     assert any("generic survey taxonomy" in item for item in contract["scope_boundaries"]["must_not_do"])
+
+
+def test_compile_generic_insight_contract_has_no_cais_or_solar_defaults():
+    contract = compiler.compile_deepdive_brief(
+        "DeepDive: insight 分析 AI coding agent 产品机会、技术路线和开源项目策略"
+    )
+    validation = compiler.validate_deepdive_contract(contract)
+    operators = {node["logical_operator"] for node in contract["deepdive_dag"]["nodes"]}
+    output_text = "\n".join(contract["output_contract"]["insight"])
+
+    assert validation["ok"], validation
+    assert contract["mode"] == "insight"
+    assert "DeepDiveSignalExtractor" in operators
+    assert "DeepDiveActionMapper" in operators
+    assert "conference_signal" not in output_text
+    assert "paper_to_solar" not in output_text
+    assert "profile_extensions" not in contract["output_contract"]
+    assert not any("Solar absorption" in item for item in contract["scope_boundaries"]["must_not_do"])
 
 
 def test_deepdive_brief_expander_writes_separate_artifacts(tmp_path):

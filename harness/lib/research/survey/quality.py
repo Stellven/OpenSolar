@@ -1007,13 +1007,56 @@ INSIGHT_MACHINE_LABEL_PATTERNS = {
     "estimated_from_report_artifacts": r"\bestimated_from_report_artifacts\b",
 }
 
-INSIGHT_CAIS_REQUIRED_SIGNALS = [
-    "Dossier",
-    "Do Agents Need to Plan Step-by-Step",
-    "Open Agent Specification",
-    "TraceFix",
-    "Discovery in the Wild",
+INSIGHT_THESIS_MARKERS = [
+    "核心判断",
+    "中心论点",
+    "核心结论",
+    "一页结论",
+    "main thesis",
+    "central thesis",
+    "thesis",
+    "main argument",
 ]
+
+INSIGHT_ACTION_PATTERNS = {
+    "action": r"行动|建议|路线图|roadmap|next step|下一步",
+    "design": r"设计|架构|architecture|design|方案",
+    "experiment": r"实验|验证|复现|experiment|evaluation",
+    "operator": r"\boperator\b|算子",
+    "schema_or_gate": r"\bschema\b|数据结构|质量门|\bgate\b|门禁",
+    "product_or_strategy": r"产品|战略|策略|strategy|product",
+}
+
+INSIGHT_PREDICTION_PATTERNS = {
+    "future": r"未来|预测|forecast|watch|观察",
+    "driver": r"driver|驱动|为什么现在|why now",
+    "indicator": r"indicator|领先指标|观察指标|信号",
+    "risk": r"风险|不确定性|反证|counter|反方",
+    "falsification": r"falsification|证伪|推翻|失效条件",
+}
+
+_COMMON_QUESTION_TOKENS = {
+    "what",
+    "which",
+    "with",
+    "this",
+    "that",
+    "should",
+    "when",
+    "where",
+    "how",
+    "why",
+    "deepdive",
+    "insight",
+    "report",
+    "分析",
+    "报告",
+    "洞察",
+    "什么",
+    "哪些",
+    "如何",
+    "为什么",
+}
 
 
 def _visible_report_text(root: Path) -> tuple[str, list[str]]:
@@ -1056,9 +1099,93 @@ def _is_insight_run(root: Path, ast: dict[str, Any]) -> bool:
     return (
         planner_mode == "conference_insight"
         or "insight" in profile
+        or "insight" in text
+        or "洞察" in text
         or ("cais" in text and "solar" in text)
         or ("会议" in text and "洞察" in text)
     )
+
+
+def _extract_signal_list(value: Any) -> list[str]:
+    signals: list[str] = []
+    if isinstance(value, str) and value.strip():
+        signals.append(value.strip())
+    elif isinstance(value, list):
+        for item in value:
+            signals.extend(_extract_signal_list(item))
+    elif isinstance(value, dict):
+        for key in (
+            "required_signals",
+            "must_include_signals",
+            "required_named_signals",
+            "must_include",
+            "named_signals",
+        ):
+            if key in value:
+                signals.extend(_extract_signal_list(value.get(key)))
+    return signals
+
+
+def _required_insight_signals(root: Path, ast: dict[str, Any]) -> list[str]:
+    survey_plan = _read_json(root / "survey_plan.json")
+    contract = _read_json(root / "deepdive_requirement_contract.json")
+    candidates = [
+        ast.get("insight_profile") if isinstance(ast, dict) else {},
+        survey_plan.get("insight_profile") if isinstance(survey_plan, dict) else {},
+        contract.get("insight_profile") if isinstance(contract, dict) else {},
+        contract.get("profile_requirements") if isinstance(contract, dict) else {},
+    ]
+    signals: list[str] = []
+    for candidate in candidates:
+        signals.extend(_extract_signal_list(candidate))
+    return sorted({signal for signal in signals if signal})
+
+
+def _question_tokens(question: str) -> set[str]:
+    text = question.lower()
+    english = {
+        token
+        for token in re.findall(r"[a-z][a-z0-9_-]{3,}", text)
+        if token not in _COMMON_QUESTION_TOKENS
+    }
+    chinese = {
+        token
+        for token in re.findall(r"[\u4e00-\u9fff]{2,}", text)
+        if token not in _COMMON_QUESTION_TOKENS
+    }
+    return english | chinese
+
+
+def _user_question_coverage(root: Path, ast: dict[str, Any], final_text: str) -> dict[str, Any]:
+    contract = _read_json(root / "deepdive_requirement_contract.json")
+    questions: list[str] = []
+    if isinstance(contract, dict):
+        scope = contract.get("scope_boundaries") if isinstance(contract.get("scope_boundaries"), dict) else {}
+        questions.extend(str(item) for item in scope.get("must_answer", []) if str(item).strip())
+        for item in contract.get("research_questions", []) if isinstance(contract.get("research_questions"), list) else []:
+            if isinstance(item, dict) and str(item.get("text") or "").strip():
+                questions.append(str(item.get("text")))
+    if not questions and ast.get("title"):
+        questions.append(str(ast.get("title")))
+    lowered = (final_text or "").lower()
+    covered = 0
+    uncovered: list[str] = []
+    for question in questions:
+        tokens = _question_tokens(question)
+        if not tokens:
+            continue
+        hits = sum(1 for token in tokens if token.lower() in lowered)
+        if hits >= max(1, min(3, len(tokens) // 2)):
+            covered += 1
+        else:
+            uncovered.append(question)
+    total = covered + len(uncovered)
+    return {
+        "covered": covered,
+        "total": total,
+        "ratio": round(covered / max(total, 1), 4),
+        "uncovered": uncovered[:5],
+    }
 
 
 def _count_visible_sources(text: str) -> int:
@@ -1072,6 +1199,7 @@ def _build_insight_quality(root: Path, ast: dict[str, Any], chapters: list[dict[
     active = _is_insight_run(root, ast)
     final_text, visible_files = _visible_report_text(root)
     chapter_titles = [str(row.get("title") or "") for row in chapters if isinstance(row, dict)]
+    lowered = (final_text or "").lower()
     issues: list[str] = []
     warnings: list[str] = []
     gate_details: dict[str, Any] = {}
@@ -1105,7 +1233,32 @@ def _build_insight_quality(root: Path, ast: dict[str, Any], chapters: list[dict[
     if active and machine_label_hits:
         issues.append("insight_machine_label_leak:" + ",".join(sorted(machine_label_hits.keys())))
 
-    lowered = (final_text or "").lower()
+    thesis_hits = [marker for marker in INSIGHT_THESIS_MARKERS if marker.lower() in lowered]
+    gate_details["thesis_clarity"] = {
+        "hits": thesis_hits,
+    }
+    if active and not thesis_hits:
+        issues.append("insight_thesis_missing")
+
+    question_coverage = _user_question_coverage(root, ast, final_text)
+    gate_details["user_question_fitness"] = question_coverage
+    if active and question_coverage["total"] and question_coverage["ratio"] < 0.5:
+        issues.append(
+            f"insight_user_question_coverage_low:{question_coverage['covered']}<{max(1, question_coverage['total'] // 2)}"
+        )
+
+    action_hits = {
+        label: len(re.findall(pattern, final_text or "", flags=re.I))
+        for label, pattern in INSIGHT_ACTION_PATTERNS.items()
+    }
+    action_hit_groups = [label for label, count in action_hits.items() if count > 0]
+    gate_details["action_mapping"] = {
+        "hits": action_hits,
+        "score": len(action_hit_groups),
+    }
+    if active and len(action_hit_groups) < 3:
+        issues.append(f"insight_action_mapping_low:{len(action_hit_groups)}<3")
+
     solar_terms = {
         "solar": len(re.findall(r"\bsolar\b", lowered)),
         "operator": len(re.findall(r"\boperator\b|算子", lowered)),
@@ -1114,12 +1267,23 @@ def _build_insight_quality(root: Path, ast: dict[str, Any], chapters: list[dict[
         "runtime": len(re.findall(r"\bruntime\b|运行时", lowered)),
     }
     actionability_score = sum(1 for value in solar_terms.values() if value > 0)
-    gate_details["solar_actionability"] = {
+    gate_details["solar_absorption"] = {
         "terms": solar_terms,
         "score": actionability_score,
     }
-    if active and actionability_score < 4:
-        issues.append(f"insight_solar_actionability_low:{actionability_score}<4")
+    contract = _read_json(root / "deepdive_requirement_contract.json")
+    context_text = " ".join(
+        str(item or "")
+        for item in [
+            ast.get("title"),
+            ast.get("brief"),
+            contract.get("brief") if isinstance(contract, dict) else "",
+            contract.get("raw_brief") if isinstance(contract, dict) else "",
+        ]
+    ).lower()
+    solar_requested = "solar" in context_text
+    if active and solar_requested and actionability_score < 4:
+        issues.append(f"insight_solar_absorption_low:{actionability_score}<4")
 
     figure_files = list((root / "figures").glob("*.svg")) if (root / "figures").exists() else []
     figures_json = _read_json(root / "figures.json")
@@ -1142,29 +1306,23 @@ def _build_insight_quality(root: Path, ast: dict[str, Any], chapters: list[dict[
     if active and visible_source_count < 5:
         issues.append(f"insight_visible_citation_count_low:{visible_source_count}<5")
 
-    if active and "cais" in lowered:
-        missing_signals = [signal for signal in INSIGHT_CAIS_REQUIRED_SIGNALS if signal.lower() not in lowered]
-        gate_details["cais_signal_coverage"] = {
-            "required": INSIGHT_CAIS_REQUIRED_SIGNALS,
+    required_signals = _required_insight_signals(root, ast)
+    if active and required_signals:
+        missing_signals = [signal for signal in required_signals if signal.lower() not in lowered]
+        gate_details["required_signal_coverage"] = {
+            "required": required_signals,
             "missing": missing_signals,
         }
         if missing_signals:
-            issues.append("insight_cais_signal_missing:" + ",".join(missing_signals[:5]))
+            issues.append("insight_required_signal_missing:" + ",".join(missing_signals[:5]))
     else:
-        gate_details["cais_signal_coverage"] = {"required": [], "missing": []}
+        gate_details["required_signal_coverage"] = {"required": [], "missing": []}
 
-    forecast_terms = [
-        "24",
-        "36",
-        "预测",
-        "forecast",
-        "leading indicator",
-        "领先指标",
-        "falsification",
-        "证伪",
-        "反方条件",
+    forecast_hits = [
+        label
+        for label, pattern in INSIGHT_PREDICTION_PATTERNS.items()
+        if re.search(pattern, final_text or "", flags=re.I)
     ]
-    forecast_hits = [term for term in forecast_terms if term.lower() in lowered]
     gate_details["prediction_packet"] = {
         "hits": forecast_hits,
     }
