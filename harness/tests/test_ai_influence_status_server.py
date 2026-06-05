@@ -76,7 +76,7 @@ def test_save_ai_influence_mail_config(tmp_path, monkeypatch):
     assert "updated_at" in saved
 
 
-def test_ai_influence_send_report_attaches_html_instead_of_using_full_body(tmp_path, monkeypatch):
+def test_ai_influence_send_report_uses_full_html_body_and_attaches_html(tmp_path, monkeypatch):
     mod = _load_module()
     report_dir = tmp_path / "report-one"
     report_dir.mkdir()
@@ -109,12 +109,12 @@ def test_ai_influence_send_report_attaches_html_instead_of_using_full_body(tmp_p
     })
 
     assert result["ok"] is True
-    assert result["result"]["mail_body_mode"] == "summary_with_html_attachment"
-    assert "完整网页报告已作为 HTML 附件发送" in sent["html_content"]
-    assert "这是很长的网页报告" not in sent["html_content"]
+    assert result["result"]["mail_body_mode"] == "full_report_html_with_html_attachment"
+    assert "完整报告正文" in sent["html_content"]
+    assert "这是很长的网页报告" in sent["html_content"]
     assert report_html in sent["attachments"]
     assert transcript in sent["attachments"]
-    assert json.loads((report_dir / "mail-result.json").read_text(encoding="utf-8"))["mail_body_mode"] == "summary_with_html_attachment"
+    assert json.loads((report_dir / "mail-result.json").read_text(encoding="utf-8"))["mail_body_mode"] == "full_report_html_with_html_attachment"
 
 
 def test_ai_influence_html_splits_reports_and_resources_tabs(tmp_path, monkeypatch):

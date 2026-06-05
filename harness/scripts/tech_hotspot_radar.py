@@ -17,6 +17,7 @@ import email.utils
 import hashlib
 import html
 import json
+import mimetypes
 import os
 import re
 import shlex
@@ -18043,9 +18044,14 @@ def send_html_email(html_content: str, subject: str, attachments: list[Path]) ->
     for path in attachments:
         if not path.exists():
             continue
-        part = MIMEBase("application", "octet-stream")
-        part.set_payload(path.read_bytes())
-        encoders.encode_base64(part)
+        content_type, _encoding = mimetypes.guess_type(str(path))
+        maintype, subtype = (content_type or "application/octet-stream").split("/", 1)
+        if maintype == "text":
+            part = MIMEText(path.read_text(encoding="utf-8", errors="ignore"), subtype, "utf-8")
+        else:
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(path.read_bytes())
+            encoders.encode_base64(part)
         part.add_header("Content-Disposition", "attachment", filename=path.name)
         msg.attach(part)
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
