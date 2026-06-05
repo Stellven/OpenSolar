@@ -9952,7 +9952,15 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
       <div class="hf-heat-daily">
         <div class="hf-heat-block">
           <h3>每日热度基线</h3>
-          <table><thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th></tr></thead><tbody>{daily_rows}</tbody></table>
+          <table class="hf-daily-table">
+            <colgroup>
+              <col class="hf-date-col">
+              <col class="hf-count-col">
+              <col class="hf-top5-col">
+            </colgroup>
+            <thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th></tr></thead>
+            <tbody>{daily_rows}</tbody>
+          </table>
         </div>
       </div>
       <div class="hf-heat-baseline">
@@ -10735,8 +10743,12 @@ def _hf_render_grouped_report_html(
     .hf-heat-daily {{ margin-top: 18px; overflow-x: auto; }}
     .hf-heat-baseline {{ margin-top: 18px; overflow-x: auto; }}
     .hf-heat-secondary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 18px; }}
-    .hf-heat-block {{ min-width: 0; }}
-    .hf-heat-daily table {{ min-width: 760px; }}
+    .hf-heat-block {{ width: 100%; min-width: 0; }}
+    .hf-heat-daily table {{ width: 100%; min-width: 980px; table-layout: fixed; }}
+    .hf-daily-table .hf-date-col {{ width: 132px; }}
+    .hf-daily-table .hf-count-col {{ width: 96px; }}
+    .hf-daily-table .hf-top5-col {{ width: auto; }}
+    .hf-daily-table th:nth-child(3), .hf-daily-table td:nth-child(3) {{ padding-left: 18px; }}
     .hf-heat-baseline table {{ min-width: 720px; }}
     h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
     h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
