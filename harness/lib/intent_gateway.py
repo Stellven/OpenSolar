@@ -24,6 +24,7 @@ from typing import Any
 HARNESS_DIR = Path(os.environ.get("SOLAR_HARNESS_DIR", Path(__file__).resolve().parents[1]))
 SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", Path.home() / ".solar" / "harness" / "sprints"))
 INTENTS_DIR = Path(os.environ.get("SOLAR_INTENT_GATEWAY_DIR", Path.home() / ".solar" / "harness" / "intents"))
+ENTRYPOINT_SECTION_HEADERS = frozenset(("[entrypoint_metadata]", "[raw_request]", "[context]"))
 
 GPT_REQUIREMENT_WRITER_TRIGGER_PHRASES = (
     "先研究再实现",
@@ -79,6 +80,37 @@ def read_text_arg(args: argparse.Namespace) -> str:
     if not text:
         raise SystemExit("intent-gateway capture requires --text, --file, or --stdin")
     return text
+
+
+def parse_entrypoint_sections(text: str) -> dict[str, Any]:
+    """Parse structured entrypoint metadata blocks from PM/graph ingress text."""
+    if "[entrypoint_metadata]" not in text:
+        return {"detected": False, "metadata": {}, "raw_request": "", "context": ""}
+
+    current: str | None = None
+    sections: dict[str, list[str]] = {header: [] for header in ENTRYPOINT_SECTION_HEADERS}
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        lowered = stripped.lower()
+        if lowered in ENTRYPOINT_SECTION_HEADERS:
+            current = lowered
+            continue
+        if current is not None:
+            sections[current].append(stripped)
+
+    metadata: dict[str, str] = {}
+    for line in sections["[entrypoint_metadata]"]:
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        metadata[key.strip()] = value.strip()
+
+    return {
+        "detected": True,
+        "metadata": metadata,
+        "raw_request": "\n".join(line for line in sections["[raw_request]"] if line).strip(),
+        "context": "\n".join(line for line in sections["[context]"] if line).strip(),
+    }
 
 
 def extract_research_artifact(args: argparse.Namespace) -> dict[str, Any] | None:
@@ -285,9 +317,17 @@ def infer_mode(text: str) -> str:
 
 
 def deterministic_rewrite(raw_text: str) -> dict[str, Any]:
-    first = next((line.strip() for line in raw_text.splitlines() if line.strip()), raw_text.strip())
+    sections = parse_entrypoint_sections(raw_text)
+    if sections["detected"] and sections["raw_request"]:
+        effective_text = str(sections["raw_request"])
+        if sections["context"]:
+            effective_text = f"{effective_text} [{sections['context']}]"
+    else:
+        effective_text = raw_text
+
+    first = next((line.strip() for line in effective_text.splitlines() if line.strip()), effective_text.strip())
     title = re.sub(r"\s+", " ", first)[:90] or "Untitled Intent"
-    mode = infer_mode(raw_text)
+    mode = infer_mode(effective_text)
     constraints: list[str] = [
         "All execution must enter Solar-Harness through RawIntent and requirement compilation.",
         "Do not bypass task_graph, operator runtime, quota-aware fallback, or evidence logging.",
@@ -301,11 +341,11 @@ def deterministic_rewrite(raw_text: str) -> dict[str, Any]:
         "Compiled work is routable through PM/Planner/task_graph and multi-task operator runtime.",
         "Completion requires evidence artifacts and verifier-visible status.",
     ]
-    return {
+    result: dict[str, Any] = {
         "schema_version": "solar.rewritten_intent.v1",
         "rewrite_method": "deterministic_fallback",
         "title": title,
-        "problem": raw_text.strip(),
+        "problem": effective_text.strip(),
         "objective": title,
         "outcome": "A compiled, dispatchable Solar-Harness work item with acceptance evidence.",
         "constraints": constraints,
@@ -319,6 +359,9 @@ def deterministic_rewrite(raw_text: str) -> dict[str, Any]:
             "Verifier",
         ],
     }
+    if sections["detected"] and sections["metadata"]:
+        result["entrypoint_metadata"] = sections["metadata"]
+    return result
 
 
 def model_rewrite(raw_intent: dict[str, Any], prompt_path: Path) -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -412,7 +455,7 @@ def build_requirement_ir(
             "content": str(enhancement.get("content") or "").strip(),
             "output_md_path": enhancement.get("output_md_path", ""),
         }
-    return {
+    requirement_ir = {
         "schema_version": "solar.requirement_ir.v1",
         "intent_id": intent_id,
         "source": requirement_source_for_raw_intent(raw_intent),
@@ -434,6 +477,10 @@ def build_requirement_ir(
             "attempted": bool(enhancement and enhancement.get("attempted")),
         },
     }
+    entrypoint_metadata = rewritten.get("entrypoint_metadata")
+    if isinstance(entrypoint_metadata, dict) and entrypoint_metadata:
+        requirement_ir["entrypoint_metadata"] = dict(entrypoint_metadata)
+    return requirement_ir
 
 
 def capture(args: argparse.Namespace) -> dict[str, Any]:

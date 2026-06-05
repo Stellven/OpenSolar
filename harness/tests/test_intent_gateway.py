@@ -167,6 +167,45 @@ def test_capture_embeds_research_artifact_into_requirement_ir(tmp_path):
     assert ir["source_inputs"]["research_artifact"]["conversation_id"] == "conv-frontdoor-001"
 
 
+def test_entrypoint_metadata_flows_into_requirement_ir(tmp_path):
+    env = dict(os.environ)
+    env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
+    env["SOLAR_HARNESS_SPRINTS_DIR"] = str(tmp_path / "sprints")
+    raw_text = (
+        "[entrypoint_metadata]\n"
+        "sprint_id: sprint-20260531-test\n"
+        "node_id: N0\n"
+        "role: planner\n"
+        "\n"
+        "[raw_request]\n"
+        "planner pool dry run\n"
+        "\n"
+        "[context]\n"
+        "source=codex dryrun=1\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "capture", "--text", raw_text, "--json"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+    )
+    payload = json.loads(proc.stdout)
+    base = tmp_path / "intents" / payload["intent_id"]
+    rewritten = json.loads((base / "rewritten_intent.json").read_text())
+    ir = json.loads((base / "requirement_ir.json").read_text())
+
+    assert rewritten["title"] != "[entrypoint_metadata]"
+    assert "planner pool dry run" in rewritten["title"].lower()
+    assert rewritten["entrypoint_metadata"] == {
+        "sprint_id": "sprint-20260531-test",
+        "node_id": "N0",
+        "role": "planner",
+    }
+    assert ir["title"] != "[entrypoint_metadata]"
+    assert ir["entrypoint_metadata"] == rewritten["entrypoint_metadata"]
+
+
 def test_capture_triggers_gpt_requirement_writer_for_complex_research_intent(tmp_path):
     env = dict(os.environ)
     env["SOLAR_INTENT_GATEWAY_DIR"] = str(tmp_path / "intents")
