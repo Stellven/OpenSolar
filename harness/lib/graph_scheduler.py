@@ -96,6 +96,8 @@ LABEL_ALIAS_GROUPS = [
         "subprocess",
         "sqlite",
         "sqlite3",
+        "storage",
+        "persistence",
     },
     {
         "test_generation",
