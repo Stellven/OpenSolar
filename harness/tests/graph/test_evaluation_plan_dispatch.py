@@ -42,6 +42,8 @@ def test_dispatch_node_evals_falls_back_dual_plan_to_staged_with_single_evaluato
                     "required_evaluators": 2,
                     "evaluator_classes": ["Verifier"],
                 },
+                "eval_retry_reason": "eval_dispatch_send_failed",
+                "eval_retry_detail": {"reason": "operator_pool_eval_submit_failed"},
             }
         ],
     }
@@ -83,6 +85,8 @@ def test_dispatch_node_evals_falls_back_dual_plan_to_staged_with_single_evaluato
     assert plan["requested_review_mode"] == "dual"
     assert plan["capacity"]["available_evaluators"] == 1
     assert plan["capacity"]["dispatchable_now"] is True
+    assert "eval_retry_reason" not in graph["nodes"][0]
+    assert "eval_retry_detail" not in graph["nodes"][0]
 
 
 def test_dispatch_node_evals_send_failed_restores_reviewing(monkeypatch) -> None:
@@ -142,6 +146,61 @@ def test_dispatch_node_evals_send_failed_restores_reviewing(monkeypatch) -> None
     assert "eval_assignments" not in node
     assert "eval_dispatched_at" not in node
     assert released[0][2] == "graph_eval_dispatch_send_failed"
+    assert saved["graph"] is graph
+
+
+def test_dispatch_node_evals_operator_pool_send_failed_records_submit_detail(monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid-eval-pool-send-failed",
+        "nodes": [
+            {
+                "id": "N2",
+                "goal": "needs operator-pool eval",
+                "status": "reviewing",
+            }
+        ],
+    }
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(gnd, "load_graph", lambda path: graph)
+    monkeypatch.setattr(gnd, "save_graph", lambda path, data: saved.setdefault("graph", data))
+    monkeypatch.setattr(gnd, "_node_eval_needed", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: Path("/tmp/handoff.md"))
+    monkeypatch.setattr(gnd, "_node_handoff_candidates", lambda sid, node, graph: [Path("/tmp/handoff.md")])
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: Path("/tmp/eval.md"))
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_member_file", lambda sid, node_id, idx: Path(f"/tmp/eval-dispatch-{idx}.md"))
+    monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "release_lease", lambda *args, **kwargs: {"released": True})
+    monkeypatch.setattr(
+        gnd,
+        "_submit_eval_to_operator_pool",
+        lambda **kwargs: {
+            "ok": False,
+            "reason": "operator_pool_eval_submit_failed",
+            "returncode": 1,
+            "stderr": "ERROR: 没有可用算子 (no_dispatchable_operator_for_role: evaluator)",
+            "stdout": "",
+        },
+    )
+    monkeypatch.setattr(
+        gnd,
+        "_discover_evaluators",
+        lambda dry_run=False: [
+            {"pane": "operator-pool:evaluator.0", "busy": False, "models": ["operator-pool"], "skills": ["review"]},
+        ],
+    )
+
+    result = gnd.dispatch_node_evals("/tmp/sid-eval-pool-send-failed.task_graph.json", dry_run=False)
+
+    node = graph["nodes"][0]
+    assert result["ok"] is False
+    assert result["skipped"][0]["reason"] == "send_failed"
+    assert result["skipped"][0]["operator_pool"]["reason"] == "operator_pool_eval_submit_failed"
+    assert "no_dispatchable_operator_for_role" in result["skipped"][0]["operator_pool"]["stderr"]
+    assert node["status"] == "reviewing"
+    assert node["eval_retry_detail"]["reason"] == "operator_pool_eval_submit_failed"
+    assert "no_dispatchable_operator_for_role" in node["eval_retry_detail"]["stderr"]
     assert saved["graph"] is graph
 
 

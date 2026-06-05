@@ -2467,6 +2467,9 @@ def _store_eval_assignments(
     node["eval_assigned_to"] = str(primary.get("pane") or "")
     node["eval_dispatch_id"] = str(primary.get("dispatch_id") or "")
     node["eval_dispatched_at"] = dispatched_at
+    if str(node.get("eval_retry_reason") or "") == "eval_dispatch_send_failed":
+        node.pop("eval_retry_reason", None)
+        node.pop("eval_retry_detail", None)
     node_id = str(node.get("id") or node.get("node_id") or "")
     if sprint_id and node_id:
         _sync_state_node(
@@ -5962,7 +5965,11 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 submit_result = {}
                 sent = _send_to_pane(pane, instruction_file, dry_run, sid=sid, dispatch_id=str(assignment["dispatch_id"]))
             if not sent:
-                send_failed = {"assignment": assignment, "instruction_file": str(instruction_file)}
+                send_failed = {
+                    "assignment": assignment,
+                    "instruction_file": str(instruction_file),
+                    "submit_result": submit_result,
+                }
                 reason = str(submit_result.get("reason") or _pane_unavailable_reason(pane) or "eval_send_failed")
                 if not str(assignment["pane"]).startswith("operator-pool:"):
                     marker = _mark_pane_recover_retryable if _recoverable_pane_blocker(reason) else _mark_pane_recover_cooldown
@@ -5988,12 +5995,27 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
             node["status"] = "reviewing"
             node["updated_at"] = _utc_now()
             node["eval_retry_reason"] = "eval_dispatch_send_failed"
-            skipped.append({
+            submit_detail = send_failed.get("submit_result") if isinstance(send_failed.get("submit_result"), dict) else {}
+            node["eval_retry_detail"] = {
+                "reason": str(submit_detail.get("reason") or "send_failed"),
+                "returncode": submit_detail.get("returncode"),
+                "stderr": str(submit_detail.get("stderr") or "")[-1200:],
+                "stdout": str(submit_detail.get("stdout") or "")[-1200:],
+            }
+            skipped_item = {
                 "node": node_id,
                 "pane": str(send_failed["assignment"]["pane"]),
                 "reason": "send_failed",
                 "evaluation_plan": runtime_plan,
-            })
+            }
+            if submit_detail:
+                skipped_item["operator_pool"] = {
+                    "reason": str(submit_detail.get("reason") or ""),
+                    "returncode": submit_detail.get("returncode"),
+                    "stderr": str(submit_detail.get("stderr") or "")[-1200:],
+                    "stdout": str(submit_detail.get("stdout") or "")[-1200:],
+                }
+            skipped.append(skipped_item)
             continue
 
         node["status"] = "reviewing"
