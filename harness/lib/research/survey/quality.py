@@ -977,6 +977,212 @@ def _build_depth_profile(
     }
 
 
+INSIGHT_GENERIC_SURVEY_TITLES = {
+    "问题定义与研究边界",
+    "历史脉络与技术演进",
+    "核心架构范式",
+    "方法分类与代表系统",
+    "评估方法与基准体系",
+    "工程实现与部署约束",
+    "风险、安全与可解释性",
+    "产业生态与开源实现",
+}
+
+INSIGHT_REPEATED_TEMPLATE_PATTERNS = [
+    "研究问题与术语边界",
+    "关键机制与设计空间",
+    "证据链与代表工作",
+    "工程取舍与评价标准",
+    "风险与争议",
+    "未解问题",
+    "机制可行性不等于工程可控性",
+]
+
+INSIGHT_MACHINE_LABEL_PATTERNS = {
+    "official_doc": r"\bofficial_doc\b",
+    "claim_id": r"\bclaim_id\b",
+    "evidence_id": r"\bevidence_id\b",
+    "source_type": r"\bsource_type\b",
+    "execution_metrics": r"\bExecution Metrics\b",
+    "estimated_from_report_artifacts": r"\bestimated_from_report_artifacts\b",
+}
+
+INSIGHT_CAIS_REQUIRED_SIGNALS = [
+    "Dossier",
+    "Do Agents Need to Plan Step-by-Step",
+    "Open Agent Specification",
+    "TraceFix",
+    "Discovery in the Wild",
+]
+
+
+def _visible_report_text(root: Path) -> tuple[str, list[str]]:
+    preferred_paths = [
+        root / "chief_editor_final.md",
+        root / "human_final.md",
+        root / "final.html",
+    ]
+    fallback_paths = [root / "final.md"]
+    texts: list[str] = []
+    used: list[str] = []
+    for path in preferred_paths:
+        if path.exists():
+            texts.append(path.read_text(encoding="utf-8", errors="ignore"))
+            used.append(path.name)
+    if not texts:
+        for path in fallback_paths:
+            if path.exists():
+                texts.append(path.read_text(encoding="utf-8", errors="ignore"))
+                used.append(path.name)
+    return "\n\n".join(texts), used
+
+
+def _is_insight_run(root: Path, ast: dict[str, Any]) -> bool:
+    survey_plan = _read_json(root / "survey_plan.json")
+    contract = _read_json(root / "deepdive_requirement_contract.json")
+    profile = str(contract.get("profile") or ast.get("profile") or "").lower()
+    planner_mode = str(survey_plan.get("planner_mode") or ast.get("planner_mode") or "").lower()
+    text = " ".join(
+        str(item or "")
+        for item in [
+            ast.get("title"),
+            ast.get("brief"),
+            contract.get("brief"),
+            contract.get("raw_brief"),
+            profile,
+            planner_mode,
+        ]
+    ).lower()
+    return (
+        planner_mode == "conference_insight"
+        or "insight" in profile
+        or ("cais" in text and "solar" in text)
+        or ("会议" in text and "洞察" in text)
+    )
+
+
+def _count_visible_sources(text: str) -> int:
+    urls = set(re.findall(r"https?://[^\s)>\"]+", text or ""))
+    markdown_links = set(re.findall(r"\[[^\]]+\]\((https?://[^)]+)\)", text or ""))
+    footnotes = set(re.findall(r"\[\^\d+\]|\[[0-9]{1,3}\]", text or ""))
+    return len(urls | markdown_links) + len(footnotes)
+
+
+def _build_insight_quality(root: Path, ast: dict[str, Any], chapters: list[dict[str, Any]]) -> dict[str, Any]:
+    active = _is_insight_run(root, ast)
+    final_text, visible_files = _visible_report_text(root)
+    chapter_titles = [str(row.get("title") or "") for row in chapters if isinstance(row, dict)]
+    issues: list[str] = []
+    warnings: list[str] = []
+    gate_details: dict[str, Any] = {}
+
+    generic_hits = sorted(set(chapter_titles) & INSIGHT_GENERIC_SURVEY_TITLES)
+    generic_ratio = round(len(generic_hits) / max(len(chapter_titles), 1), 4)
+    gate_details["generic_survey_toc"] = {
+        "hits": generic_hits,
+        "ratio": generic_ratio,
+    }
+    if active and len(generic_hits) >= 4:
+        issues.append(f"insight_generic_survey_toc_leak:{len(generic_hits)}")
+
+    repeated_patterns = {
+        pattern: len(re.findall(re.escape(pattern), final_text or "", flags=re.I))
+        for pattern in INSIGHT_REPEATED_TEMPLATE_PATTERNS
+    }
+    excessive_repetitions = {
+        pattern: count for pattern, count in repeated_patterns.items() if count > 2
+    }
+    gate_details["template_repetition"] = excessive_repetitions
+    if active and excessive_repetitions:
+        issues.append("insight_template_repetition:" + ",".join(sorted(excessive_repetitions.keys())[:5]))
+
+    machine_label_hits = {
+        label: len(re.findall(pattern, final_text or "", flags=re.I))
+        for label, pattern in INSIGHT_MACHINE_LABEL_PATTERNS.items()
+    }
+    machine_label_hits = {label: count for label, count in machine_label_hits.items() if count}
+    gate_details["machine_label_leak"] = machine_label_hits
+    if active and machine_label_hits:
+        issues.append("insight_machine_label_leak:" + ",".join(sorted(machine_label_hits.keys())))
+
+    lowered = (final_text or "").lower()
+    solar_terms = {
+        "solar": len(re.findall(r"\bsolar\b", lowered)),
+        "operator": len(re.findall(r"\boperator\b|算子", lowered)),
+        "schema": len(re.findall(r"\bschema\b|ir\b|数据结构|结构", lowered)),
+        "gate": len(re.findall(r"\bgate\b|门禁|质量门", lowered)),
+        "runtime": len(re.findall(r"\bruntime\b|运行时", lowered)),
+    }
+    actionability_score = sum(1 for value in solar_terms.values() if value > 0)
+    gate_details["solar_actionability"] = {
+        "terms": solar_terms,
+        "score": actionability_score,
+    }
+    if active and actionability_score < 4:
+        issues.append(f"insight_solar_actionability_low:{actionability_score}<4")
+
+    figure_files = list((root / "figures").glob("*.svg")) if (root / "figures").exists() else []
+    figures_json = _read_json(root / "figures.json")
+    json_figures = figures_json if isinstance(figures_json, list) else figures_json.get("figures", []) if isinstance(figures_json, dict) else []
+    html_figure_count = len(re.findall(r"<figure\b|class=[\"'][^\"']*figure|\.svg", final_text or "", flags=re.I))
+    figure_count = len(figure_files) + len(json_figures if isinstance(json_figures, list) else []) + html_figure_count
+    gate_details["figure_coverage"] = {
+        "figure_count": figure_count,
+        "svg_files": len(figure_files),
+        "html_mentions": html_figure_count,
+    }
+    if active and figure_count < 1:
+        issues.append("insight_figure_required_missing")
+
+    visible_source_count = _count_visible_sources(final_text)
+    gate_details["citation_visibility"] = {
+        "visible_source_count": visible_source_count,
+        "visible_files": visible_files,
+    }
+    if active and visible_source_count < 5:
+        issues.append(f"insight_visible_citation_count_low:{visible_source_count}<5")
+
+    if active and "cais" in lowered:
+        missing_signals = [signal for signal in INSIGHT_CAIS_REQUIRED_SIGNALS if signal.lower() not in lowered]
+        gate_details["cais_signal_coverage"] = {
+            "required": INSIGHT_CAIS_REQUIRED_SIGNALS,
+            "missing": missing_signals,
+        }
+        if missing_signals:
+            issues.append("insight_cais_signal_missing:" + ",".join(missing_signals[:5]))
+    else:
+        gate_details["cais_signal_coverage"] = {"required": [], "missing": []}
+
+    forecast_terms = [
+        "24",
+        "36",
+        "预测",
+        "forecast",
+        "leading indicator",
+        "领先指标",
+        "falsification",
+        "证伪",
+        "反方条件",
+    ]
+    forecast_hits = [term for term in forecast_terms if term.lower() in lowered]
+    gate_details["prediction_packet"] = {
+        "hits": forecast_hits,
+    }
+    if active and len(forecast_hits) < 3:
+        issues.append(f"insight_prediction_packet_low:{len(forecast_hits)}<3")
+
+    if not active and final_text:
+        warnings.append("insight_gate_inactive")
+    return {
+        "ok": (not active) or not issues,
+        "active": active,
+        "visible_files": visible_files,
+        "issues": issues,
+        "warnings": warnings,
+        "gates": gate_details,
+    }
+
+
 def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs: dict | None = None) -> dict[str, Any]:
     root = Path(output_dir).expanduser()
     ast = ast or _read_json(root / "survey_report_ast.json")
@@ -1038,9 +1244,10 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     chapter_review = _build_chapter_review(root, chapters, sections, pack_rows, section_scorecard)
     chief_editor_review = _build_chief_editor_review(root, chapters, sections, chapter_review, literature_map, controversy_review)
     depth_profile = _build_depth_profile(root, chapters, sections, final_quality, literature_map, controversy_review)
+    insight_quality = _build_insight_quality(root, ast, chapters)
 
     payload = {
-        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"],
+        "ok": taxonomy["ok"] and contradiction_matrix["ok"] and section_factual_audit["ok"] and section_scorecard["ok"] and final_quality["ok"] and source_coverage["ok"] and literature_map["ok"] and controversy_review["ok"] and chapter_review["ok"] and chief_editor_review["ok"] and depth_profile["ok"] and insight_quality["ok"],
         "taxonomy": taxonomy,
         "contradiction_matrix": contradiction_matrix,
         "section_factual_audit": section_factual_audit,
@@ -1052,6 +1259,7 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
         "chapter_review": chapter_review,
         "chief_editor_review": chief_editor_review,
         "depth_profile": depth_profile,
+        "insight_quality": insight_quality,
     }
     (root / "survey_taxonomy.json").write_text(json.dumps(taxonomy, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_contradiction_matrix.json").write_text(json.dumps(contradiction_matrix, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1064,4 +1272,5 @@ def assess_survey_quality(output_dir: str | Path, ast: dict | None = None, packs
     (root / "survey_chapter_review.json").write_text(json.dumps(chapter_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_chief_editor.json").write_text(json.dumps(chief_editor_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (root / "survey_depth_profile.json").write_text(json.dumps(depth_profile, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "survey_insight_quality.json").write_text(json.dumps(insight_quality, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

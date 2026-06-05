@@ -297,6 +297,8 @@ def _clean_human_text(text: str, evidence_numbers: dict[str, int]) -> str:
             lambda match: f"[^{evidence_numbers.setdefault(match.group(1), len(evidence_numbers) + 1)}]",
             line,
         )
+        line = re.sub(r"\bch\d{1,3}(?:#\d+)?::\s*", "", line)
+        line = re.sub(r"\bch\d{1,3}/sec\d{1,3}\b", "该小节", line)
         line = re.sub(r"\s+", " ", line).strip()
         if line:
             cleaned_lines.append(line)

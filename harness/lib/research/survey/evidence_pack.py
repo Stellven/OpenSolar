@@ -28,6 +28,47 @@ def _tokens(text: str) -> set[str]:
     return {part.lower() for part in str(text or "").replace("/", " ").replace("_", " ").split() if len(part) >= 3}
 
 
+def _read_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _matching_paper_trend_ids(root: Path, section: dict, source_ids: list[str], source_by_id: dict[str, dict]) -> list[str]:
+    clusters = _read_json(root / "paper_theme_clusters.json")
+    trends = clusters.get("trends") if isinstance(clusters.get("trends"), list) else []
+    if not trends:
+        return []
+    section_text = " ".join(str(section.get(key) or "") for key in ("title", "research_question", "section_id"))
+    source_text = " ".join(
+        str(source_by_id.get(sid, {}).get(key) or "")
+        for sid in source_ids
+        for key in ("title", "url")
+    )
+    haystack = f"{section_text} {source_text}".lower()
+    matched: list[str] = []
+    for trend in trends:
+        trend_id = str(trend.get("trend_id") or trend.get("id") or "")
+        if not trend_id:
+            continue
+        needles = [
+            str(trend.get("label") or ""),
+            str(trend.get("claim") or ""),
+            str(trend.get("theme_id") or ""),
+        ]
+        needles.extend(str(item) for item in trend.get("representative_titles", []) if str(item)) if isinstance(trend.get("representative_titles"), list) else None
+        trend_tokens = _tokens(" ".join(needles))
+        direct_title_match = any(str(item).lower() in haystack for item in needles if len(str(item)) >= 12)
+        token_overlap = len(trend_tokens & _tokens(haystack))
+        if direct_title_match or token_overlap >= 3:
+            matched.append(trend_id)
+    return list(dict.fromkeys(matched))
+
+
 def _ranked(rows: list[dict], section: dict, text_key: str) -> list[dict]:
     section_tokens = _tokens(" ".join(str(section.get(k, "")) for k in ("title", "research_question", "section_id")))
     scored = []
@@ -113,10 +154,14 @@ def build_evidence_packs(output_dir: str | Path, ast: dict) -> dict:
             status="blocked" if blockers else "ready",
             blockers=blockers,
         )
-        packs.append(to_dict(pack))
+        pack_dict = to_dict(pack)
+        paper_trend_ids = _matching_paper_trend_ids(root, section, source_ids, source_by_id)
+        if paper_trend_ids:
+            pack_dict["paper_trend_ids"] = paper_trend_ids
+        packs.append(pack_dict)
         section_dir = root / "sections" / section_id
         section_dir.mkdir(parents=True, exist_ok=True)
-        (section_dir / "evidence_pack.json").write_text(json.dumps(to_dict(pack), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (section_dir / "evidence_pack.json").write_text(json.dumps(pack_dict, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (section_dir / "section.spec.json").write_text(json.dumps(section, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     payload = {"ok": True, "packs": packs, "ready": sum(1 for p in packs if p["status"] == "ready"), "blocked": sum(1 for p in packs if p["status"] == "blocked")}

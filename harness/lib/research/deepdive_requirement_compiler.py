@@ -176,8 +176,175 @@ def extract_research_questions(brief: str) -> list[DeepDiveQuestion]:
     return questions
 
 
-def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion]) -> dict[str, Any]:
+def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion], *, insight_mode: bool = False) -> dict[str, Any]:
     question_ids = [question.id for question in questions]
+    nodes = [
+        {
+            "id": "D1",
+            "gate": "DD_SCOPE",
+            "logical_operator": "DeepDiveBriefCapture",
+            "goal": "Freeze the DeepDive scope, questions, boundaries, and output contract.",
+            "depends_on": [],
+            "question_ids": question_ids,
+            "acceptance": ["DeepDive scope contract is explicit and bounded."],
+        },
+        {
+            "id": "D2",
+            "gate": "DD_SOURCE",
+            "logical_operator": "DeepDiveSourcePlanner",
+            "goal": "Plan source acquisition across primary, secondary, code, benchmark, and dissenting evidence.",
+            "depends_on": ["D1"],
+            "question_ids": question_ids,
+            "acceptance": ["Source matrix covers every research question."],
+        },
+        {
+            "id": "D3",
+            "gate": "DD_SOURCE",
+            "logical_operator": "DeepDiveSourceCollector",
+            "goal": "Collect sources and write an auditable source manifest.",
+            "depends_on": ["D2"],
+            "question_ids": question_ids,
+            "acceptance": ["Source manifest and fetch status are recorded."],
+        },
+        {
+            "id": "D4",
+            "gate": "DD_EVIDENCE",
+            "logical_operator": "DeepDiveClaimCompiler",
+            "goal": "Compile claims, evidence atoms, methods, limitations, and confidence.",
+            "depends_on": ["D3"],
+            "question_ids": question_ids,
+            "acceptance": ["Claim ledger binds claims to source evidence."],
+        },
+        {
+            "id": "D5",
+            "gate": "DD_EVIDENCE",
+            "logical_operator": "DeepDiveContradictionScanner",
+            "goal": "Find contradictions, weak evidence, missing sources, and overclaim risks.",
+            "depends_on": ["D4"],
+            "question_ids": question_ids,
+            "acceptance": ["Contradiction and evidence-gap matrix is produced."],
+        },
+        {
+            "id": "D6",
+            "gate": "DD_SYNTHESIS",
+            "logical_operator": "DeepDiveChapterPlanner",
+            "goal": "Compile chapter jobs and per-chapter evidence requirements.",
+            "depends_on": ["D4", "D5"],
+            "question_ids": question_ids,
+            "acceptance": ["Each chapter maps to questions and evidence requirements."],
+        },
+        {
+            "id": "D7",
+            "gate": "DD_SYNTHESIS",
+            "logical_operator": "DeepDiveChiefEditor",
+            "goal": "Synthesize the final DeepDive report from verified chapter outputs.",
+            "depends_on": ["D6"],
+            "question_ids": question_ids,
+            "acceptance": ["Final report draft answers each research question with evidence."],
+        },
+        {
+            "id": "D8",
+            "gate": "DD_REVIEW",
+            "logical_operator": "DeepDiveClaimVerifier",
+            "goal": "Verify claim grounding, contradiction handling, and publication readiness.",
+            "depends_on": ["D7"],
+            "question_ids": question_ids,
+            "acceptance": ["Verifier decision and repair requirements are recorded."],
+        },
+        {
+            "id": "D9",
+            "gate": "DD_PUBLISH",
+            "logical_operator": "DeepDiveArtifactPublisher",
+            "goal": "Publish final report, evidence map, traceability report, and closeout decision.",
+            "depends_on": ["D8"],
+            "question_ids": question_ids,
+            "acceptance": ["DeepDive artifact package is complete."],
+        },
+    ]
+    if insight_mode:
+        nodes.extend([
+            {
+                "id": "D10",
+                "gate": "DD_INSIGHT",
+                "logical_operator": "DeepDiveInsightThesisPlanner",
+                "goal": "Build central thesis, chapter theses, and argument load-bearing map.",
+                "depends_on": ["D4", "D5"],
+                "question_ids": question_ids,
+                "acceptance": ["Insight thesis map answers the user questions instead of a generic survey outline."],
+            },
+            {
+                "id": "D11",
+                "gate": "DD_INSIGHT",
+                "logical_operator": "DeepDiveConferenceSignalExtractor",
+                "goal": "Extract conference tracks, papers, demos, and workshops into technical signals.",
+                "depends_on": ["D3"],
+                "question_ids": question_ids,
+                "acceptance": ["Conference signal map binds named papers to technical challenges."],
+            },
+            {
+                "id": "D12",
+                "gate": "DD_INSIGHT",
+                "logical_operator": "DeepDivePaperToSolarMapper",
+                "goal": "Map paper signals to Solar schemas, operators, runtime policies, and quality gates.",
+                "depends_on": ["D11"],
+                "question_ids": question_ids,
+                "acceptance": ["Every major signal has a Solar absorption item."],
+            },
+            {
+                "id": "D13",
+                "gate": "DD_INSIGHT",
+                "logical_operator": "DeepDiveTypedClaimCompiler",
+                "goal": "Classify factual, interpretive, predictive, and strategic claims.",
+                "depends_on": ["D10", "D11", "D12"],
+                "question_ids": question_ids,
+                "acceptance": ["Claims are typed and evidence-bound."],
+            },
+            {
+                "id": "D14",
+                "gate": "DD_INSIGHT",
+                "logical_operator": "DeepDivePredictionPacketBuilder",
+                "goal": "Build forecast packets with drivers, leading indicators, and falsification conditions.",
+                "depends_on": ["D13"],
+                "question_ids": question_ids,
+                "acceptance": ["Prediction packets are explicit and falsifiable."],
+            },
+            {
+                "id": "D15",
+                "gate": "DD_PUBLISH",
+                "logical_operator": "DeepDiveSectionRenderCompiler",
+                "goal": "Compile sections into render cards with body, evidence callouts, takeaways, and figure specs.",
+                "depends_on": ["D13", "D14"],
+                "question_ids": question_ids,
+                "acceptance": ["SectionRender cards are complete for every major chapter."],
+            },
+            {
+                "id": "D16",
+                "gate": "DD_PUBLISH",
+                "logical_operator": "DeepDiveFigureSpecRenderer",
+                "goal": "Render claim-linked diagrams, roadmaps, matrices, and architecture figures.",
+                "depends_on": ["D15"],
+                "question_ids": question_ids,
+                "acceptance": ["Every major chapter has a claim-linked figure."],
+            },
+            {
+                "id": "D17",
+                "gate": "DD_REVIEW",
+                "logical_operator": "DeepDiveChiefInsightEditor",
+                "goal": "Reject correct-but-useless prose and enforce thesis, Solar actionability, forecast, and human-readable evidence.",
+                "depends_on": ["D15", "D16"],
+                "question_ids": question_ids,
+                "acceptance": ["Chief insight review passes all insight gates."],
+            },
+            {
+                "id": "D18",
+                "gate": "DD_PUBLISH",
+                "logical_operator": "DeepDiveInsightArtifactPublisher",
+                "goal": "Publish final HTML, figures, signal map, absorption map, and action roadmap.",
+                "depends_on": ["D17"],
+                "question_ids": question_ids,
+                "acceptance": ["Insight artifact package is complete and status-visible."],
+            },
+        ])
     return {
         "dag_variant": "deepdive_research",
         "runtime_owner": "DeepDive",
@@ -196,89 +363,7 @@ def build_deepdive_evidence_dag(questions: list[DeepDiveQuestion]) -> dict[str, 
             "unsupported_claim_guard": True,
             "normal_requirement_pipeline_import_allowed": False,
         },
-        "nodes": [
-            {
-                "id": "D1",
-                "gate": "DD_SCOPE",
-                "logical_operator": "DeepDiveBriefCapture",
-                "goal": "Freeze the DeepDive scope, questions, boundaries, and output contract.",
-                "depends_on": [],
-                "question_ids": question_ids,
-                "acceptance": ["DeepDive scope contract is explicit and bounded."],
-            },
-            {
-                "id": "D2",
-                "gate": "DD_SOURCE",
-                "logical_operator": "DeepDiveSourcePlanner",
-                "goal": "Plan source acquisition across primary, secondary, code, benchmark, and dissenting evidence.",
-                "depends_on": ["D1"],
-                "question_ids": question_ids,
-                "acceptance": ["Source matrix covers every research question."],
-            },
-            {
-                "id": "D3",
-                "gate": "DD_SOURCE",
-                "logical_operator": "DeepDiveSourceCollector",
-                "goal": "Collect sources and write an auditable source manifest.",
-                "depends_on": ["D2"],
-                "question_ids": question_ids,
-                "acceptance": ["Source manifest and fetch status are recorded."],
-            },
-            {
-                "id": "D4",
-                "gate": "DD_EVIDENCE",
-                "logical_operator": "DeepDiveClaimCompiler",
-                "goal": "Compile claims, evidence atoms, methods, limitations, and confidence.",
-                "depends_on": ["D3"],
-                "question_ids": question_ids,
-                "acceptance": ["Claim ledger binds claims to source evidence."],
-            },
-            {
-                "id": "D5",
-                "gate": "DD_EVIDENCE",
-                "logical_operator": "DeepDiveContradictionScanner",
-                "goal": "Find contradictions, weak evidence, missing sources, and overclaim risks.",
-                "depends_on": ["D4"],
-                "question_ids": question_ids,
-                "acceptance": ["Contradiction and evidence-gap matrix is produced."],
-            },
-            {
-                "id": "D6",
-                "gate": "DD_SYNTHESIS",
-                "logical_operator": "DeepDiveChapterPlanner",
-                "goal": "Compile chapter jobs and per-chapter evidence requirements.",
-                "depends_on": ["D4", "D5"],
-                "question_ids": question_ids,
-                "acceptance": ["Each chapter maps to questions and evidence requirements."],
-            },
-            {
-                "id": "D7",
-                "gate": "DD_SYNTHESIS",
-                "logical_operator": "DeepDiveChiefEditor",
-                "goal": "Synthesize the final DeepDive report from verified chapter outputs.",
-                "depends_on": ["D6"],
-                "question_ids": question_ids,
-                "acceptance": ["Final report draft answers each research question with evidence."],
-            },
-            {
-                "id": "D8",
-                "gate": "DD_REVIEW",
-                "logical_operator": "DeepDiveClaimVerifier",
-                "goal": "Verify claim grounding, contradiction handling, and publication readiness.",
-                "depends_on": ["D7"],
-                "question_ids": question_ids,
-                "acceptance": ["Verifier decision and repair requirements are recorded."],
-            },
-            {
-                "id": "D9",
-                "gate": "DD_PUBLISH",
-                "logical_operator": "DeepDiveArtifactPublisher",
-                "goal": "Publish final report, evidence map, traceability report, and closeout decision.",
-                "depends_on": ["D8"],
-                "question_ids": question_ids,
-                "acceptance": ["DeepDive artifact package is complete."],
-            },
-        ],
+        "nodes": nodes,
     }
 
 
@@ -328,8 +413,35 @@ def compile_deepdive_brief(
     if not normalized:
         raise ValueError("brief is required")
 
+    lowered = normalized.lower()
+    insight_mode = (
+        "insight" in str(options.profile or "").lower()
+        or ("cais" in lowered and "solar" in lowered)
+        or ("会议" in normalized and "洞察" in normalized)
+    )
     questions = extract_research_questions(normalized)
     source_refs = [ref.to_dict() for ref in options.source_refs]
+    must_answer = [question.text for question in questions]
+    if insight_mode:
+        must_answer.extend([
+            "What technical signals does the conference or source cluster release?",
+            "What are the major Agent technical challenges?",
+            "Which Solar schemas, operators, runtime policies, gates, and DAG changes should absorb these signals?",
+            "What should be watched over the next 24-36 months, with drivers, indicators, and falsification conditions?",
+        ])
+    must_not_do = [
+        "Do not dispatch normal PM requirement nodes.",
+        "Do not write raw_intent.json or requirement_ir.json.",
+        "Do not promote unsupported claims into final conclusions.",
+    ]
+    if insight_mode:
+        must_not_do.extend([
+            "Do not use a generic survey taxonomy as the final report structure.",
+            "Do not leak source_type labels, claim_id, evidence_id, or execution metrics into the human-facing report.",
+            "Do not publish without Solar absorption mappings.",
+            "Do not publish without visible citations and claim-linked figures.",
+            "Do not let correct-but-non-actionable prose pass the insight gate.",
+        ])
     contract = {
         "schema_version": SCHEMA_VERSION,
         "id": stable_id("ddc", normalized),
@@ -341,6 +453,7 @@ def compile_deepdive_brief(
             "normal_requirement_pipeline_import_allowed": False,
         },
         "profile": options.profile,
+        "mode": "insight" if insight_mode else "survey",
         "source_channel": options.source_channel,
         "raw_brief": raw_normalized,
         "brief": normalized,
@@ -348,12 +461,8 @@ def compile_deepdive_brief(
         "research_questions": [question.to_dict() for question in questions],
         "source_refs": source_refs,
         "scope_boundaries": {
-            "must_answer": [question.text for question in questions],
-            "must_not_do": [
-                "Do not dispatch normal PM requirement nodes.",
-                "Do not write raw_intent.json or requirement_ir.json.",
-                "Do not promote unsupported claims into final conclusions.",
-            ],
+            "must_answer": must_answer,
+            "must_not_do": must_not_do,
         },
         "output_contract": {
             "reports": ["final_report.md", "final_report.html"],
@@ -362,6 +471,17 @@ def compile_deepdive_brief(
         },
         "operator_mapping": OPERATOR_MAPPING,
     }
+    if insight_mode:
+        contract["output_contract"]["insight"] = [
+            "conference_signal_map.json",
+            "paper_to_solar_absorption_map.json",
+            "agent_technical_challenge_matrix.json",
+            "prediction_packets.jsonl",
+            "section_render_cards/*.json",
+            "figures/*.svg",
+            "survey_insight_quality.json",
+            "chief_insight_review.json",
+        ]
     if expansion:
         contract["brief_expansion"] = {
             "schema_version": expansion.get("schema_version"),
@@ -372,7 +492,7 @@ def compile_deepdive_brief(
             "output_json_path": expansion.get("output_json_path", ""),
             "normal_requirement_pipeline_import_allowed": False,
         }
-    contract["deepdive_dag"] = build_deepdive_evidence_dag(questions)
+    contract["deepdive_dag"] = build_deepdive_evidence_dag(questions, insight_mode=insight_mode)
     contract["traceability"] = build_traceability(contract)
     return contract
 
