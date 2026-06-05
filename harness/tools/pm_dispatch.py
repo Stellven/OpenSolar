@@ -87,6 +87,31 @@ def _transient_operator_failure_text(record: dict[str, Any]) -> str:
         value = record.get(key)
         if value:
             parts.append(str(value))
+    artifact_paths = record.get("artifact_paths") if isinstance(record.get("artifact_paths"), dict) else {}
+    candidate_paths: list[Path] = []
+    for key in ("codex_cli_output_log", "output_log", "stderr_path", "stdout_path"):
+        value = artifact_paths.get(key)
+        if value:
+            candidate_paths.append(Path(str(value)).expanduser())
+    for value in artifact_paths.values():
+        if not value:
+            continue
+        path = Path(str(value)).expanduser()
+        if path.is_dir():
+            for name in ("codex-cli-output.log", "output.log", "stderr.txt", "stdout.txt"):
+                candidate_paths.append(path / name)
+    operator_id = str(record.get("operator_id") or "").strip()
+    task_id = str(record.get("task_id") or "").strip()
+    if operator_id and task_id:
+        result_dir = HARNESS_DIR / "run" / "operator-results" / operator_id / task_id
+        for name in ("codex-cli-output.log", "output.log", "stderr.txt", "stdout.txt"):
+            candidate_paths.append(result_dir / name)
+    for path in candidate_paths:
+        try:
+            if path.exists() and path.is_file():
+                parts.append(path.read_text(encoding="utf-8", errors="replace")[-4000:])
+        except Exception:
+            continue
     return "\n".join(parts).strip()
 
 RATE_LIMIT_PRUNER_LABEL = os.environ.get("SOLAR_RATE_LIMIT_PRUNER_LABEL", "com.solar.harness-rate-limit-pruner")

@@ -151,6 +151,47 @@ def test_multi_role_operator_uses_requested_role_persona(monkeypatch, tmp_path):
     assert "# Builder" not in dispatch_text
 
 
+def test_transient_operator_failure_text_reads_operator_result_logs(tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    pm_dispatch.HARNESS_DIR = tmp_path
+    result_dir = tmp_path / "operator-result"
+    result_dir.mkdir()
+    (result_dir / "codex-cli-output.log").write_text(
+        "ERROR: You've hit your usage limit for GPT-5.3-Codex-Spark. "
+        "Switch to another model now, or try again at Jun 10th, 2026 10:25 PM.",
+        encoding="utf-8",
+    )
+
+    text = pm_dispatch._transient_operator_failure_text(
+        {
+            "failure_reason": "failed",
+            "artifact_paths": {"operator_result_dir": str(result_dir)},
+        }
+    )
+
+    assert "usage limit" in text
+    assert pm_dispatch.TRANSIENT_OPERATOR_FAILURE_RE.search(text)
+
+
+def test_transient_operator_failure_text_infers_operator_result_dir(tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    pm_dispatch.HARNESS_DIR = tmp_path
+    result_dir = tmp_path / "run" / "operator-results" / "spark-builder" / "task-1"
+    result_dir.mkdir(parents=True)
+    (result_dir / "output.log").write_text("ERROR: rate limit reached", encoding="utf-8")
+
+    text = pm_dispatch._transient_operator_failure_text(
+        {
+            "task_id": "task-1",
+            "operator_id": "spark-builder",
+            "failure_reason": "failed",
+        }
+    )
+
+    assert "rate limit reached" in text
+    assert pm_dispatch.TRANSIENT_OPERATOR_FAILURE_RE.search(text)
+
+
 def test_cmd_submit_reads_task_graph_capsule_metadata(monkeypatch):
     pm_dispatch = _load_pm_dispatch()
     with tempfile.TemporaryDirectory() as td:
