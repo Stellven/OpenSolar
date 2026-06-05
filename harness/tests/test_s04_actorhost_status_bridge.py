@@ -224,3 +224,52 @@ def test_operator_pool_dispatch_result_surfaces_selected_actorhost(monkeypatch, 
     assert result["host_type"] == "claude_code_session"
     assert result["lease_state"] == "idle"
     assert result["actorhost"]["resolution_source"] == "actor_hosts"
+
+
+def test_operator_pool_dispatch_honors_evaluator_graph_node_role(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_run(cmd, *args, **kwargs):
+        captured["cmd"] = list(cmd)
+        return SimpleNamespace(
+            returncode=0,
+            stdout="task_id = pm-1\noperator = mini-codex-gpt55-medium-builder-1\ndispatch = dispatch.json\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(gnd, "HARNESS_DIR", tmp_path)
+    monkeypatch.setattr(gnd, "SPRINTS_DIR", tmp_path / "sprints")
+    monkeypatch.setattr(gnd, "_builder_operator_pool_enabled", lambda: True)
+    monkeypatch.setattr(gnd.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        gnd,
+        "resolve_actorhost_status",
+        lambda **kw: {
+            "actor_id": kw.get("actor_id") or "mini-codex-gpt55-medium-builder-1",
+            "host_id": "mini",
+            "host_type": "claude_code_session",
+            "lease_state": "idle",
+            "capability_match": {"required": kw.get("required_capabilities", []), "matched": [], "missing": [], "observed": []},
+            "compat_fallback": False,
+            "compat_maps_to": None,
+            "resolution_source": "actor_hosts",
+            "canonical_host_type": True,
+        },
+    )
+
+    result = gnd._submit_builder_to_operator_pool(
+        item={"payload": {}},
+        payload={"assignment": {"dispatch_role": "evaluator"}},
+        sid="sprint-test",
+        node={"id": "E2", "role": "evaluator", "required_capabilities": ["code.review"]},
+        node_id="E2",
+        graph_path=str(tmp_path / "sprint-test.task_graph.json"),
+        pane="operator-pool:builder.0",
+        dispatch_id="dispatch-1",
+        dry_run=True,
+    )
+
+    assert result["ok"] is True
+    assert result["dispatch_mode"] == "operator_pool_evaluator"
+    assert captured["cmd"][captured["cmd"].index("--role") + 1] == "evaluator"
+    assert result["capability_match"]["matched"] == ["code.review"]
