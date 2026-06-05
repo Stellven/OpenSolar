@@ -651,6 +651,43 @@ def test_grouped_report_render_hides_internal_ids_and_labels():
     assert "正式洞察周报" in markdown
 
 
+def test_hf_weekly_report_display_period_uses_week_id():
+    ns = _load_namespace()
+    context = {
+        "cadence": "weekly",
+        "week_id": "2026-W23",
+        "window_label": "2026-W23 · 2026-06-01 ~ 2026-06-07",
+    }
+    grouped_report = {
+        "plan": {"headline": "HF 论文周报", "executive_summary": "一页判断", "closing_watchpoints": []},
+        "sections": [],
+    }
+
+    markdown = ns["_hf_render_grouped_report_markdown"](
+        date_str="2026-06-05",
+        report_variant="premium_insight_report",
+        premium_count=1,
+        fallback_count=0,
+        public_records=[{"title": "paper"}],
+        grouped_report=grouped_report,
+        report_context=context,
+    )
+    html = ns["_hf_render_grouped_report_html"](
+        date_str="2026-06-05",
+        report_variant="premium_insight_report",
+        premium_count=1,
+        fallback_count=0,
+        public_records=[{"title": "paper"}],
+        grouped_report=grouped_report,
+        report_context=context,
+    )
+
+    assert "报告周期：`2026-W23`" in markdown
+    assert "2026-W23 · 2026-06-01 ~ 2026-06-07" not in markdown
+    assert "<strong>2026-W23</strong>" in html
+    assert "2026-W23 · 2026-06-01 ~ 2026-06-07" not in html
+
+
 def test_grouped_report_render_repairs_empty_cleanup_shells():
     ns = _load_namespace()
     grouped_report = {
