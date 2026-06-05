@@ -24,7 +24,7 @@ def test_discover_evaluators_includes_lab_evaluator_lane(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_has_active_lease", lambda pane: False)
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
-    monkeypatch.setattr(gnd, "_models_for_pane", lambda pane: ["opus"] if pane == "solar-harness:0.3" else ["claude-sonnet"])
+    monkeypatch.setattr(gnd, "_models_for_pane", lambda pane, *_: ["opus"] if pane == "solar-harness:0.3" else ["claude-sonnet"])
     monkeypatch.setattr(
         gnd,
         "_pane_title",
@@ -46,5 +46,7 @@ def test_discover_evaluators_includes_lab_evaluator_lane(monkeypatch) -> None:
 
     assert "solar-harness:0.3" in panes
     assert "solar-harness-lab:0.1" in panes
-    assert "solar-harness-lab:0.0" not in panes
-    assert "solar-harness-lab:0.3" not in panes
+    by_pane = {item["pane"]: item for item in evaluators}
+    assert by_pane["solar-harness-lab:0.1"]["evaluator_host_role"] == "evaluator"
+    assert by_pane["solar-harness-lab:0.0"]["evaluator_host_role"] == "lab_builder_spillover"
+    assert by_pane["solar-harness-lab:0.3"]["evaluator_host_role"] == "lab_builder_spillover"

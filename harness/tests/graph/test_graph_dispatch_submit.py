@@ -199,6 +199,62 @@ class TestSendToPaneLiteral:
 
         assert handoff == sprints / handoff_name
 
+    def test_existing_handoff_uses_top_level_handoff_md(self, tmp_harness):
+        """Resolver must not miss handoffs stored outside the artifacts map."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        handoff_name = f"{sid}.N1-handoff.md"
+        (sprints / handoff_name).write_text("# Node handoff\n", encoding="utf-8")
+        node = graph["nodes"][0]
+        node["handoff_md"] = handoff_name
+
+        handoff = gnd._existing_node_handoff(sid, node, graph)
+
+        assert handoff == sprints / handoff_name
+
+    def test_existing_handoff_uses_nested_artifact_ref(self, tmp_harness):
+        """Resolver accepts structured artifact refs emitted by newer workers."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        handoff_name = f"{sid}.N1-handoff.md"
+        (sprints / handoff_name).write_text("# Node handoff\n", encoding="utf-8")
+        node = graph["nodes"][0]
+        node["artifact_refs"] = [{"handoff_md": {"path": handoff_name}}]
+
+        handoff = gnd._existing_node_handoff(sid, node, graph)
+
+        assert handoff == sprints / handoff_name
+
+    def test_dispatch_evals_reconciles_existing_eval_before_discovery(self, tmp_harness, monkeypatch):
+        """Existing eval sidecars should close reviewing nodes before slow evaluator discovery."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        node = graph["nodes"][0]
+        node["status"] = "reviewing"
+        node["handoff_md"] = f"{sid}.N1-handoff.md"
+        graph["node_results"]["N1"] = {"status": "reviewing"}
+        (sprints / f"{sid}.N1-handoff.md").write_text("# handoff\n", encoding="utf-8")
+        (sprints / f"{sid}.N1-eval.json").write_text(
+            json.dumps({"verdict": "PASS", "node_id": "N1"}) + "\n",
+            encoding="utf-8",
+        )
+        (sprints / f"{sid}.task_graph.json").write_text(json.dumps(graph) + "\n", encoding="utf-8")
+        discovery_calls = []
+        monkeypatch.setattr(gnd, "_discover_evaluators", lambda *_: discovery_calls.append(True) or [])
+        monkeypatch.setattr(gnd, "release_lease", lambda *a, **k: {"released": True})
+
+        result = gnd.dispatch_node_evals(str(sprints / f"{sid}.task_graph.json"), dry_run=False)
+
+        saved = gnd.load_graph(sprints / f"{sid}.task_graph.json")
+        assert result["ok"] is True
+        assert result["reconciled"][0]["reason"] == "eval_sidecar_exists"
+        assert gnd.node_status(saved, "N1") == "passed"
+        assert saved["nodes"][0]["status"] == "passed"
+        assert discovery_calls == []
+
     def test_stale_submit_ack_without_live_lease_does_not_resurrect_dispatch(self, tmp_harness, monkeypatch):
         """Old ack files are not proof of a current dispatch after the lease expired."""
         tmp_path, sprints, sid, graph = tmp_harness
