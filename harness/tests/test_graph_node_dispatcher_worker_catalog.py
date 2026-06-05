@@ -23,6 +23,9 @@ def test_fake_worker_catalog_includes_spec_and_codex_bridge(monkeypatch) -> None
     worker = workers[0]
     assert "spec.write" in worker["skills"]
     assert "provider.contract" in worker["skills"]
+    assert "schemas" in worker["capabilities"]
+    assert "structured-data" in worker["capabilities"]
+    assert "structured-results" in worker["capabilities"]
     assert "codex.bridge" in worker["capabilities"]
     assert "pane3.bridge" in worker["capabilities"]
 
@@ -50,3 +53,26 @@ def test_worker_discovery_keeps_planner_panes_for_role_aware_dispatch(monkeypatc
     roles = {item["pane"]: item["dispatch_role"] for item in workers}
     assert roles["solar-harness:0.1"] == "planner"
     assert roles["solar-harness-lab:0.0"] == "builder"
+
+
+def test_operator_pool_capability_match_falls_back_when_resolver_unavailable() -> None:
+    actorhost = {
+        "actor_id": "mini-glm51-builder-2",
+        "host_id": "N/A",
+        "host_type": "unknown",
+        "capability_match": {
+            "required": ["schemas"],
+            "matched": [],
+            "missing": ["schemas"],
+            "observed": [],
+        },
+    }
+
+    fixed = mod._ensure_operator_pool_capability_match(actorhost, ["schemas"])
+
+    assert fixed["capability_match"] == {
+        "required": ["schemas"],
+        "matched": ["schemas"],
+        "missing": [],
+        "observed": ["schemas"],
+    }

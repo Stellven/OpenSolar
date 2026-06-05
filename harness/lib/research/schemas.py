@@ -13,8 +13,10 @@ ledger.py).
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
@@ -583,11 +585,12 @@ class ReportAST:
 class FigureSpec:
     figure_id: str
     title: str
-    figure_type: str  # "architecture_diagram" or "timeline"
+    figure_type: str
     grounding_ids: list[str] = field(default_factory=list)
     spec_data: dict[str, Any] = field(default_factory=dict)
     renderer: str = "mermaid"
     caption: Optional[str] = None
+    artifact_path: Optional[str] = None
     created_at: str = field(default_factory=_utc_now_iso)
     schema_version: str = "v1"
 
@@ -596,10 +599,25 @@ class FigureSpec:
             raise ValueError("FigureSpec.figure_id must be non-empty")
         if not self.title:
             raise ValueError("FigureSpec.title must be non-empty")
-        if self.figure_type not in {"architecture_diagram", "timeline"}:
+        if self.figure_type not in {
+            "architecture_diagram",
+            "timeline",
+            "causal_map",
+            "evidence_map",
+            "roadmap",
+            "matrix",
+        }:
             raise ValueError(f"FigureSpec.figure_type {self.figure_type!r} invalid")
         if not isinstance(self.grounding_ids, list):
             raise ValueError("FigureSpec.grounding_ids must be a list of strings")
+        if any(not isinstance(item, str) or not item for item in self.grounding_ids):
+            raise ValueError("FigureSpec.grounding_ids must contain non-empty strings")
+        if not isinstance(self.spec_data, dict):
+            raise ValueError("FigureSpec.spec_data must be a dict")
+        if not self.grounding_ids and self.figure_type != "timeline":
+            raise ValueError("FigureSpec.grounding_ids must be non-empty for grounded figures")
+        if self.artifact_path is not None:
+            _validate_relative_artifact_path(self.artifact_path, "FigureSpec.artifact_path")
 
 
 # ---------------------------------------------------------------------------
@@ -796,4 +814,43 @@ def model_field_names(model_cls: type) -> tuple[str, ...]:
 
 def to_dict(record: Any) -> dict:
     """Return a JSON-serializable dict for any dataclass record in this module."""
-    return asdict(record)
+    if is_dataclass(record):
+        return asdict(record)
+    if isinstance(record, dict):
+        return record
+    raise TypeError(f"to_dict expected dataclass or dict, got {type(record).__name__}")
+
+
+def _validate_relative_artifact_path(path_value: str, field_name: str = "artifact_path") -> None:
+    path = Path(path_value)
+    if not path_value:
+        raise ValueError(f"{field_name} must be non-empty")
+    if path.is_absolute():
+        raise ValueError(f"{field_name} must be relative, got {path_value!r}")
+    if any(part == ".." for part in path.parts):
+        raise ValueError(f"{field_name} must not contain parent traversal, got {path_value!r}")
+
+
+def deterministic_json_bytes(record: Any) -> bytes:
+    """Serialize a dataclass/dict artifact deterministically for evaluator sidecars."""
+    return (
+        json.dumps(to_dict(record), ensure_ascii=False, sort_keys=True, indent=2)
+        + "\n"
+    ).encode("utf-8")
+
+
+def write_json_artifact(record: Any, path: str | Path) -> Path:
+    """Write a deterministic JSON artifact and return its resolved path."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(deterministic_json_bytes(record))
+    return target
+
+
+def write_jsonl_artifact(records: list[Any], path: str | Path) -> Path:
+    """Write deterministic JSONL records without embedding production facts."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(to_dict(record), ensure_ascii=False, sort_keys=True) for record in records]
+    target.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    return target

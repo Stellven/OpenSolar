@@ -9,6 +9,7 @@ from pathlib import Path
 from .schemas import SurveyScorecard, to_dict
 from .quality import assess_survey_quality
 from .golden_style_gate import assess_audience_hygiene, assess_golden_style
+from .insight_gates import run_all_insight_gates
 
 
 def _read_json(path: Path) -> dict:
@@ -156,6 +157,13 @@ def evaluate_survey(
         if require_complete:
             for issue in final_quality.get("issues", []):
                 issues.append(str(issue))
+    insight_gate_results: list[dict] = []
+    if insight_quality.get("active"):
+        insight_gate_results = run_all_insight_gates(root, ast)
+        for gate in insight_gate_results:
+            if not gate.get("ok"):
+                for req_id in gate.get("failed_requirement_ids", []):
+                    issues.append(f"insight_gate:{gate['gate_id']}:{req_id}")
     required_finalized = len(sections) if require_complete else (min_finalized if min_finalized is not None else 3)
     if strict and finalized < required_finalized:
         issues.append(f"finalized_sections_low:{finalized}<{required_finalized}")
@@ -233,6 +241,7 @@ def evaluate_survey(
         "golden_style": golden_style,
         "require_golden_style": require_golden_style,
         "audience_hygiene": audience_hygiene,
+        "insight_gates": insight_gate_results,
     }
     (root / "survey_eval.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return payload

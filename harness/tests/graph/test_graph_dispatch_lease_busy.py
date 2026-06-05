@@ -875,6 +875,7 @@ def test_evaluator_discovery_ignores_expired_lease(monkeypatch) -> None:
     monkeypatch.setattr(gnd, "_pane_hygiene_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_tui_busy", lambda pane: False)
+    monkeypatch.setattr(gnd, "_pane_tail", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_cooldown_reason", lambda pane: "")
     monkeypatch.setattr(gnd, "_pane_runtime_unavailable_reason", lambda pane, title="": "")
     monkeypatch.setattr(gnd, "_pane_current_command", lambda pane: "bash")
