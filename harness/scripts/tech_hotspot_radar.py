@@ -9324,6 +9324,15 @@ def hf_default_report_headline(report_context: dict[str, Any], *, premium: bool 
     return f"AI Influence HF Paper {label} — {report_context.get('window_label') or report_context.get('date') or ''}".strip()
 
 
+def hf_report_display_period(report_context: dict[str, Any] | None, date_str: str = "") -> str:
+    context = report_context or {}
+    if str(context.get("cadence") or "").strip().lower() == "weekly":
+        week_id = str(context.get("week_id") or "").strip()
+        if week_id:
+            return week_id
+    return str(context.get("window_label") or context.get("date") or date_str or "").strip()
+
+
 def hf_radar_db_path(config: dict[str, Any] | None) -> Path:
     output = (config or {}).get("output") or {}
     return Path(output.get("database") or "/Users/lisihao/.solar/harness/state/tech-hotspot-radar/tech-hotspot-radar.sqlite").expanduser()
@@ -10597,10 +10606,11 @@ def _hf_render_grouped_report_markdown(
     plan = grouped_report.get("plan") or {}
     sections = grouped_report.get("sections") or []
     public_variant = hf_public_report_variant_label(report_variant)
+    display_period = hf_report_display_period(context, date_str)
     lines = [
         f"# {hf_public_headline(plan.get('headline'), context, premium=True)}",
         "",
-        f"> 报告周期：`{context.get('window_label') or date_str}` ｜ 报告类型：`{public_variant}` ｜ 论文数：`{len(public_records)}` ｜ 分组章节：`{len(sections)}`",
+        f"> 报告周期：`{display_period}` ｜ 报告类型：`{public_variant}` ｜ 论文数：`{len(public_records)}` ｜ 分组章节：`{len(sections)}`",
         "",
     ]
     if report_variant != "premium_insight_report":
@@ -10620,7 +10630,7 @@ def _hf_render_grouped_report_markdown(
         f"| 报告类型 | `{public_variant}` |",
         f"| 论文数量 | {len(public_records)} |",
         f"| 分组章节 | {len(sections)} |",
-        f"| 周期 | {context.get('window_label') or date_str} |",
+        f"| 周期 | {display_period} |",
         "",
     ])
     lines.extend(_hf_render_heat_overview_markdown(heat_overview))
@@ -10687,11 +10697,12 @@ def _hf_render_grouped_report_html(
     plan = grouped_report.get("plan") or {}
     sections = grouped_report.get("sections") or []
     public_variant = hf_public_report_variant_label(report_variant)
+    display_period = hf_report_display_period(context, date_str)
     metric_cards = [
         ("报告类型", public_variant),
         ("论文数量", str(len(public_records))),
         ("分组章节", str(len(sections))),
-        ("报告周期", str(context.get("window_label") or date_str)),
+        ("报告周期", display_period),
     ]
     metric_html = "\n".join(
         f'<div class="hf-metric"><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>'
@@ -10800,7 +10811,7 @@ def _hf_render_grouped_report_html(
       <span class="hf-kicker">{html.escape(public_variant)}</span>
       <h1>{html.escape(title)}</h1>
       <p>{html.escape(hf_clean_public_text(subtitle))}</p>
-      <p>{html.escape('报告周期：' + str(context.get('window_label') or date_str))}</p>
+	      <p>{html.escape('报告周期：' + display_period)}</p>
       <div class="hf-metrics">{metric_html}</div>
     </section>
     {_hf_render_heat_overview_html(heat_overview)}
@@ -10826,10 +10837,11 @@ def _hf_render_public_report_markdown(
 ) -> str:
     context = report_context or hf_report_context(date_str, {})
     public_variant = hf_public_report_variant_label(report_variant)
+    display_period = hf_report_display_period(context, date_str)
     lines = [
         f"# {hf_public_headline(None, context, premium=(report_variant == 'premium_insight_report'))}",
         "",
-        f"> 报告周期：`{context.get('window_label') or date_str}` ｜ 报告类型：`{public_variant}` ｜ 论文数：`{len(public_records)}`",
+        f"> 报告周期：`{display_period}` ｜ 报告类型：`{public_variant}` ｜ 论文数：`{len(public_records)}`",
         "",
     ]
     if report_variant != "premium_insight_report":
@@ -10848,7 +10860,7 @@ def _hf_render_public_report_markdown(
         "| --- | --- |",
         f"| 报告类型 | `{public_variant}` |",
         f"| 论文数量 | {len(public_records)} |",
-        f"| 报告周期 | {context.get('window_label') or date_str} |",
+        f"| 报告周期 | {display_period} |",
         "",
         "## Top 论文洞察",
         "",
@@ -10979,10 +10991,11 @@ def _hf_render_public_report_html(
     title = hf_public_headline(None, context, premium=(report_variant == "premium_insight_report"))
     hero_badge = hf_public_report_variant_label(report_variant)
     hero_note = hf_report_core_judgment(public_records, report_variant=report_variant)
+    display_period = hf_report_display_period(context, date_str)
     metric_cards = [
         ("报告类型", hero_badge),
         ("论文数量", str(len(public_records))),
-        ("报告周期", str(context.get("window_label") or date_str)),
+        ("报告周期", display_period),
     ]
     metric_html = "\n".join(
         f'<div class="hf-metric"><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>'
@@ -11218,7 +11231,7 @@ def _hf_render_public_report_html(
       <span class="hf-kicker">{html.escape(hero_badge)}</span>
       <h1>{html.escape(title)}</h1>
       <p class="hf-subtitle">{html.escape(hf_clean_public_text(hero_note))}</p>
-      <p class="hf-subtitle">报告周期：{html.escape(str(context.get('window_label') or date_str))}</p>
+      <p class="hf-subtitle">报告周期：{html.escape(display_period)}</p>
       <div class="hf-metrics">{metric_html}</div>
     </section>
 
