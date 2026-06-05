@@ -1047,6 +1047,79 @@ def test_cmd_complete_marks_builder_graph_node_reviewing(monkeypatch, tmp_path):
     assert record["graph_reviewing"]["marked"] is True
 
 
+def test_cmd_complete_reopens_failed_node_for_fresh_repair_handoff(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    inbox = tmp_path / "run" / "pm-inbox"
+    sprints.mkdir(parents=True)
+    inbox.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+    monkeypatch.setattr(pm_dispatch, "PM_INBOX_DIR", inbox)
+
+    task_id = "pm-sprint-repair-B1-test"
+    graph_path = sprints / "sprint-repair.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-repair",
+                "nodes": [{"id": "B1", "status": "failed", "updated_at": "2026-06-05T01:00:00Z"}],
+                "node_results": {"B1": {"status": "failed", "pm_task_id": "old-task"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-repair.status.json").write_text(
+        json.dumps({"sprint_id": "sprint-repair", "status": "active", "phase": "planning_complete"}),
+        encoding="utf-8",
+    )
+    (sprints / "sprint-repair.B1-eval.md").write_text("old fail", encoding="utf-8")
+    (sprints / "sprint-repair.B1-eval.json").write_text('{"verdict":"FAIL"}', encoding="utf-8")
+    (sprints / "sprint-repair.B1-eval-dispatch-q1.md").write_text("old dispatch", encoding="utf-8")
+    ack_dir = sprints / "graph-acks"
+    ack_dir.mkdir()
+    (ack_dir / "sprint-repair.B1-submit-ack.json").write_text('{"submitted_at":"2026-06-05T00:59:00Z"}', encoding="utf-8")
+    (sprints / "sprint-repair.B1-handoff.md").write_text("# Repaired handoff\n", encoding="utf-8")
+    pm_dispatch.write_pm_task_record(
+        task_id,
+        {
+            "task_id": task_id,
+            "status": "submitted",
+            "sprint_id": "sprint-repair",
+            "node_id": "B1",
+            "operator_id": "mini-glm51-builder-1",
+            "requested_role": "builder",
+            "objective": "Repair failed DAG node B1 and produce a fresh handoff.",
+            "submitted_at": "2026-06-05T01:00:00Z",
+        },
+    )
+
+    rc = pm_dispatch.cmd_complete(argparse.Namespace(task_id=task_id))
+
+    assert rc == 0
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert node["status"] == "reviewing"
+    assert node["completion_history"][0]["reason"] == "pm_builder_repair_complete"
+    assert node["eval_retry_reason"] == "pm_repair_archived_stale_eval_sidecars"
+    assert not (sprints / "sprint-repair.B1-eval.md").exists()
+    assert not (sprints / "sprint-repair.B1-eval.json").exists()
+    assert not (sprints / "sprint-repair.B1-eval-dispatch-q1.md").exists()
+    assert not (ack_dir / "sprint-repair.B1-submit-ack.json").exists()
+    assert len(node["last_eval_sidecar_archive"]) == 4
+    result_entry = graph["node_results"]["B1"]
+    assert result_entry["status"] == "reviewing"
+    assert result_entry["eval_retry_reason"] == "pm_repair_archived_stale_eval_sidecars"
+    state = json.loads((sprints / "sprint-repair.task_dag.state.json").read_text(encoding="utf-8"))
+    state_result = state["node_results"]["B1"]
+    assert state_result["status"] == "reviewing"
+    assert state_result["completion_history"][0]["reason"] == "pm_builder_repair_complete"
+    assert state_result["eval_retry_reason"] == "pm_repair_archived_stale_eval_sidecars"
+    record = json.loads((inbox / f"{task_id}.json").read_text(encoding="utf-8"))
+    assert record["graph_reviewing"]["repair_completion"] is True
+    assert record["graph_reviewing"]["state_sync"]["ok"] is True
+    assert len(record["graph_reviewing"]["archived_eval_sidecars"]) == 4
+
+
 def test_evaluator_dispatch_marks_graph_assignment(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     sprints = tmp_path / "sprints"

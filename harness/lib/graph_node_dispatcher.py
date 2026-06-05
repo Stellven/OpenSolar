@@ -2489,6 +2489,60 @@ def _clear_eval_assignments(node: dict[str, Any]) -> None:
     node.pop("eval_dispatched_at", None)
 
 
+def _normalized_utc(dt: datetime.datetime | None) -> datetime.datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
+
+
+def _latest_repair_completion_at(node: dict[str, Any], result_entry: dict[str, Any]) -> datetime.datetime | None:
+    latest: datetime.datetime | None = None
+    histories: list[dict[str, Any]] = []
+    for source in (node, result_entry):
+        history = source.get("completion_history") if isinstance(source, dict) else None
+        if isinstance(history, list):
+            histories.extend(item for item in history if isinstance(item, dict))
+    for item in histories:
+        if str(item.get("reason") or "") != "pm_builder_repair_complete":
+            continue
+        parsed = _normalized_utc(_parse_utc(str(item.get("ts") or "")))
+        if parsed and (latest is None or parsed > latest):
+            latest = parsed
+    return latest
+
+
+def _eval_dispatch_at(node: dict[str, Any]) -> datetime.datetime | None:
+    latest = _normalized_utc(_parse_utc(str(node.get("eval_dispatched_at") or "")))
+    assignments = node.get("eval_assignments")
+    if isinstance(assignments, list):
+        for item in assignments:
+            if not isinstance(item, dict):
+                continue
+            parsed = _normalized_utc(_parse_utc(str(item.get("dispatched_at") or item.get("ts") or "")))
+            if parsed and (latest is None or parsed > latest):
+                latest = parsed
+    return latest
+
+
+def _stale_eval_verdict_after_repair(graph: dict[str, Any], node_id: str, node: dict[str, Any]) -> dict[str, Any]:
+    result_entry = (graph.get("node_results") or {}).get(node_id)
+    if not isinstance(result_entry, dict):
+        result_entry = {}
+    repair_at = _latest_repair_completion_at(node, result_entry)
+    if repair_at is None:
+        return {"stale": False}
+    eval_at = _eval_dispatch_at(node)
+    if eval_at is not None and eval_at >= repair_at:
+        return {"stale": False}
+    return {
+        "stale": True,
+        "repair_completed_at": repair_at.isoformat().replace("+00:00", "Z"),
+        "eval_dispatched_at": eval_at.isoformat().replace("+00:00", "Z") if eval_at else "",
+    }
+
+
 def _queue_file(sprint_id: str) -> Path:
     qdir = HARNESS_DIR / "run" / "queue"
     qdir.mkdir(parents=True, exist_ok=True)
@@ -6098,6 +6152,17 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
         status = "failed"
     else:
         return {"ok": False, "reason": "invalid_verdict", "verdict": verdict}
+
+    stale_verdict = _stale_eval_verdict_after_repair(graph, node_id, node)
+    if stale_verdict.get("stale"):
+        return {
+            "ok": False,
+            "reason": "stale_eval_verdict_after_repair",
+            "node": node_id,
+            "status": "blocked",
+            "eval_json": str(eval_json or ""),
+            **stale_verdict,
+        }
 
     proof_gate: dict[str, Any] = {"required": False}
     if status == "passed":

@@ -1393,6 +1393,7 @@ def _sync_task_dag_state_node(
     assigned_to: str = "",
     dispatch_id: str = "",
     note: str = "",
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     state_io = _load_task_graph_state_io_module()
     if state_io is None:
@@ -1411,6 +1412,10 @@ def _sync_task_dag_state_node(
         )
         if not dispatch_id and isinstance(state.get("dispatch_ids"), dict):
             state["dispatch_ids"].pop(node_id, None)
+        if extra:
+            result_entry = state.setdefault("node_results", {}).setdefault(node_id, {})
+            if isinstance(result_entry, dict):
+                result_entry.update(extra)
         state_io.save_state(sprint_id, state, SPRINTS_DIR)
         return {"ok": True, "sprint_id": sprint_id, "node_id": node_id, "status": status}
     except Exception as exc:
@@ -2863,6 +2868,84 @@ def release_evaluator_assignment_on_transient_failure(record: dict[str, Any]) ->
     return _release_graph_eval_on_transient_operator_failure(record)
 
 
+def _parse_record_time(value: object) -> datetime.datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def _handoff_is_fresh_for_record(record: dict[str, Any], handoff_path: Path) -> bool:
+    submitted_at = _parse_record_time(record.get("submitted_at") or record.get("issued_at"))
+    if submitted_at is None:
+        return False
+    try:
+        handoff_mtime = datetime.datetime.fromtimestamp(handoff_path.stat().st_mtime, tz=datetime.timezone.utc)
+    except OSError:
+        return False
+    # Filesystem mtimes can lose sub-second precision, so allow a tiny skew.
+    return handoff_mtime >= submitted_at - datetime.timedelta(seconds=2)
+
+
+def _is_terminal_repair_completion(
+    record: dict[str, Any],
+    target: dict[str, Any],
+    result_entry: dict[str, Any],
+    handoff_path: Path,
+) -> bool:
+    target_status = str(target.get("status") or "").strip().lower()
+    result_status = str(result_entry.get("status") or "").strip().lower()
+    if target_status not in {"failed", "skipped"} and result_status not in {"failed", "skipped"}:
+        return False
+    repair_text = "\n".join(
+        str(record.get(key) or "")
+        for key in ("objective", "pm_context", "failure_reason", "task_type")
+    ).lower()
+    if not any(token in repair_text for token in ("repair", "retry", "fix", "requeue", "修复", "重跑", "重派")):
+        return False
+    return _handoff_is_fresh_for_record(record, handoff_path)
+
+
+def _archive_stale_eval_sidecars_for_pm_repair(sprint_id: str, node_id: str, target: dict[str, Any]) -> list[dict[str, str]]:
+    stamp = _now().replace(":", "").replace("-", "")
+    archived: list[dict[str, str]] = []
+    paths = [
+        SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.md",
+        SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.json",
+        SPRINTS_DIR / f"{sprint_id}.{node_id}-eval-dispatch.md",
+        SPRINTS_DIR / f"{sprint_id}.{node_id}-eval-dispatch-q1.md",
+        SPRINTS_DIR / f"{sprint_id}.{node_id}-eval-dispatch-q1.md.intent.json",
+        SPRINTS_DIR / f"{sprint_id}.{node_id}-eval-dispatch-q1.md.runtime-context.json",
+        SPRINTS_DIR / "graph-acks" / f"{sprint_id}.{node_id}-submit-ack.json",
+    ]
+    paths.extend(SPRINTS_DIR.glob(f"{sprint_id}.{node_id}-eval-peer-*.json"))
+    paths.extend(SPRINTS_DIR.glob(f"{sprint_id}.{node_id}-eval-dispatch-q*.md"))
+    paths.extend(SPRINTS_DIR.glob(f"{sprint_id}.{node_id}-eval-dispatch-q*.md.intent.json"))
+    paths.extend(SPRINTS_DIR.glob(f"{sprint_id}.{node_id}-eval-dispatch-q*.md.runtime-context.json"))
+    seen: set[Path] = set()
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        if not path.exists():
+            continue
+        archive = path.with_name(f"{path.name}.stale-{stamp}")
+        path.replace(archive)
+        archived.append({"from": str(path), "to": str(archive)})
+    if archived:
+        target["last_eval_sidecar_archive"] = archived
+        target["eval_retry_reason"] = "pm_repair_archived_stale_eval_sidecars"
+    return archived
+
+
 def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> dict[str, Any]:
     if normalize_role(str(record.get("requested_role") or "")) != "builder":
         return {"ok": False, "marked": False, "reason": "not_builder_task"}
@@ -2907,7 +2990,10 @@ def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> di
         str(result_entry.get("dispatch_id") or ""),
         str(result_entry.get("pm_task_id") or ""),
     }
+    repair_completion = False
     if task_id not in dispatch_ids:
+        repair_completion = _is_terminal_repair_completion(record, target, result_entry, handoff_path)
+    if task_id not in dispatch_ids and not repair_completion:
         return {"ok": False, "marked": False, "reason": "dispatch_mismatch", "node_id": node_id}
 
     now = _now()
@@ -2919,12 +3005,13 @@ def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> di
     target.setdefault("completion_history", []).append(
         {
             "ts": now,
-            "reason": "pm_builder_complete",
+            "reason": "pm_builder_repair_complete" if repair_completion else "pm_builder_complete",
             "task_id": task_id,
             "previous_dispatch": previous,
             "handoff": str(handoff_path),
         }
     )
+    archived_eval_sidecars = _archive_stale_eval_sidecars_for_pm_repair(sprint_id, node_id, target) if repair_completion else []
     target["status"] = "reviewing"
     target["updated_at"] = now
     target["handoff_path"] = str(handoff_path)
@@ -2938,8 +3025,11 @@ def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> di
     result_entry["updated_at"] = now
     result_entry["handoff_path"] = str(handoff_path)
     result_entry.setdefault("completion_history", []).append(
-        {"ts": now, "reason": "pm_builder_complete", "task_id": task_id}
+        {"ts": now, "reason": "pm_builder_repair_complete" if repair_completion else "pm_builder_complete", "task_id": task_id}
     )
+    if archived_eval_sidecars:
+        result_entry["last_eval_sidecar_archive"] = archived_eval_sidecars
+        result_entry["eval_retry_reason"] = "pm_repair_archived_stale_eval_sidecars"
     for key in ("assigned_to", "dispatch_id", "dispatched_via", "pm_task_id", "operator_id"):
         result_entry.pop(key, None)
 
@@ -2965,6 +3055,20 @@ def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> di
         }
     )
     status_path.write_text(json.dumps(status_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    state_extra: dict[str, Any] = {
+        "handoff_path": str(handoff_path),
+        "completion_history": result_entry.get("completion_history", []),
+    }
+    if archived_eval_sidecars:
+        state_extra["last_eval_sidecar_archive"] = archived_eval_sidecars
+        state_extra["eval_retry_reason"] = "pm_repair_archived_stale_eval_sidecars"
+    state_sync = _sync_task_dag_state_node(
+        sprint_id,
+        node_id,
+        "reviewing",
+        note="pm_dispatch builder repair complete" if repair_completion else "pm_dispatch builder complete",
+        extra=state_extra,
+    )
     return {
         "ok": True,
         "marked": True,
@@ -2972,6 +3076,9 @@ def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> di
         "status_path": str(status_path),
         "sprint_id": sprint_id,
         "node_id": node_id,
+        "repair_completion": repair_completion,
+        "archived_eval_sidecars": archived_eval_sidecars,
+        "state_sync": state_sync,
     }
 
 

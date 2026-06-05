@@ -949,6 +949,35 @@ def test_force_eval_retry_allows_failed_node_after_repair_artifact(monkeypatch, 
     assert gnd._node_eval_needed(graph, "sid-force-retry", node, force=True) is True
 
 
+def test_node_verdict_rejects_stale_eval_dispatched_before_pm_repair(tmp_path) -> None:
+    graph_path = tmp_path / "sid-stale-repair.task_graph.json"
+    graph_path.write_text(
+        """{
+  "sprint_id": "sid-stale-repair",
+  "nodes": [
+    {
+      "id": "N1",
+      "status": "reviewing",
+      "eval_dispatched_at": "2026-06-05T00:59:00Z",
+      "completion_history": [
+        {"ts": "2026-06-05T01:00:00Z", "reason": "pm_builder_repair_complete", "task_id": "pm-repair"}
+      ]
+    }
+  ],
+  "node_results": {"N1": {"status": "reviewing"}}
+}
+""",
+        encoding="utf-8",
+    )
+
+    result = gnd.node_verdict(str(graph_path), "N1", "fail", eval_json=str(tmp_path / "N1-eval.json"))
+
+    assert result["ok"] is False
+    assert result["reason"] == "stale_eval_verdict_after_repair"
+    graph = gnd.load_graph(str(graph_path))
+    assert graph["nodes"][0]["status"] == "reviewing"
+
+
 def test_clear_stale_prompt_residue_uses_ctrl_c_fallback(monkeypatch) -> None:
     prompt_residue = "────────────────\n❯\u00a0继续执行下一个 dispatch 文件\n────────────────\n"
     idle_prompt = "────────────────\n❯\u00a0\n────────────────\n"
