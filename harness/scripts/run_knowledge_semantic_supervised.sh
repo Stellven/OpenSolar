@@ -18,6 +18,15 @@ if pgrep -f "knowledge-semantic-extract.py .*supervised-backfill" >/dev/null 2>&
   echo "[knowledge-semantic-supervised] another supervised-backfill process is already running; skip $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   exit 0
 fi
+if [[ -d "$LOCK_DIR" ]]; then
+  lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [[ "$lock_pid" =~ ^[0-9]+$ ]] && kill -0 "$lock_pid" 2>/dev/null; then
+    echo "[knowledge-semantic-supervised] already running pid=$lock_pid; skip $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    exit 0
+  fi
+  echo "[knowledge-semantic-supervised] stale lock detected pid=${lock_pid:-N/A}; clearing $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  rm -rf "$LOCK_DIR"
+fi
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "[knowledge-semantic-supervised] already running; skip $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   exit 0
