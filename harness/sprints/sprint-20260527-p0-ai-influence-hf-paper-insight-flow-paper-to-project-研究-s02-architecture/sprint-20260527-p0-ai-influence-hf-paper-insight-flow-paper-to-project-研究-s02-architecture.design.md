@@ -45,7 +45,7 @@ downstream: S03 core-runtime · S04 orchestration-ui
 |--------|------|---------|----------|
 | D1 | PaperSnapshot/PaperCanonical/Enrichment/Taxonomy 持久化引擎 (SQLite vs PG vs MongoDB) + schema 物理实现 | OQ-01 | A2 |
 | D2 | 5 enrichment provider rate limit + backoff + retry 策略 (HF/arXiv/HF assets/Semantic Scholar/GitHub) | OQ-02 | A1/A4 |
-| D3 | Browser Agent ChatGPT 5.5 Thinking high 接入实现 (复用现有 vs 新建) | OQ-03 | A1/A3/A4 |
+| D3 | Browser Agent ChatGPT 5.5 Thinking high 与 `TechnologyDiagramPainter` 共用接入实现 (复用现有 vs 新建) | OQ-03 | A1/A3/A4 |
 | D4 | 36 评分权重存储方式 (硬编码 vs YAML config vs DB) + profile 差异化 | OQ-04 | A2/A4 |
 | D5 | Knowledge ingest 4 通道写入顺序与 fallback (raw→extracted→QMD→graph 串行/并行) | OQ-05 | A1/A4 |
 
@@ -64,18 +64,19 @@ A4_open_questions_resolutions ┘   (与 A1 并行)
 
 ## 4. 节点产出结构
 
-### A1 `architecture.md` 必须 10 节
+### A1 `architecture.md` 必须 11 节
 
-1. **系统全景图** + 6 大组件 (Collector / Canonicalizer / Enricher / Classifier / Scoring+Packet / Reasoning+Resonance / Compiler+Store / Watch / CLI / Config)
+1. **系统全景图** + 7 大组件 (Collector / Canonicalizer / Enricher / Classifier / Scoring+Packet / Reasoning+Resonance / Compiler+FigureBundle / Store / Watch / CLI / Config)
 2. **模块划分** — 与 S01 O1-O7 outcome 对齐 + 10 层 L0-L10 拓扑
 3. **control plane** (CLI + Config + Watch trigger) **vs data plane** (raw → canonical → enriched → scored → packet → resonance → compiled → store)
 4. **L0-L10 pipeline 时序图** (含 5 评分 + 4 信号 + R0-R5 + High Model 路由 + 3 质量门)
 5. **持久化引擎决议** (per D1+OQ-01): 选定方案 + schema 物理实现
 6. **5 Provider 限流 + retry** (per D2+OQ-02): per-provider 速率 + 失败 backoff + circuit breaker
-7. **Browser Agent 接入** (per D3+OQ-03): 复用 / 新建 + 调用路径 + 失败回退
+7. **Browser Agent 接入** (per D3+OQ-03): 复用 / 新建 + ChatGPT reasoning 与 `TechnologyDiagramPainter` 的共享调用路径 + 失败回退
 8. **Knowledge ingest 4 通道** (per D5+OQ-05): 写入顺序 (raw 先, extracted/QMD/graph 后) + 失败 fallback + 部分写入处理
-9. **失败恢复 / 观测**: 4 信号 retry / High Model quota / Packet Gate fail / 全 pipeline dashboard
-10. **冲突 / 依赖 / 降级 / 非目标 / S03+S04 接力**
+9. **Figure Bundle 架构**: `figure-spec` 编译、`TechnologyDiagramPainter` 调度、`figure-manifest`、图文渲染位置与 evidence-grounding gate
+10. **失败恢复 / 观测**: 4 信号 retry / High Model quota / Packet Gate fail / figure paint fail / 全 pipeline dashboard
+11. **冲突 / 依赖 / 降级 / 非目标 / S03+S04 接力**
 
 ### A2 `data_models.md` 必须 6 节
 
@@ -94,7 +95,8 @@ A4_open_questions_resolutions ┘   (与 A1 并行)
 4. **Classifier API** (L3): classify_paper 签名 + taxonomy 输出
 5. **Scoring + Packet API** (L4+L5): compute_scores (5 公式) / build_packet_v2 / packet_gate_check 签名
 6. **Reasoning + Resonance API** (L6+L7): match_resonance / call_high_model (Browser Agent) / insight_gate_check / resonance_gate_check 签名
-7. **Compiler + Store + Watch API** (L8+L9+L10): compile_outputs (7 资产) / store_to_knowledge (4 通道) / trigger_watch 签名 + CLI 入口签名 + Config schema
+7. **Figure API**: `build_figure_specs(report_plan, sections, packets) -> list[FigureSpec]` / `paint_figure(spec) -> FigureResult` / `validate_figure_bundle(bundle) -> FigureValidation`
+8. **Compiler + Store + Watch API** (L8+L9+L10): compile_outputs (7 资产 + figure bundle) / store_to_knowledge (4 通道) / trigger_watch 签名 + CLI 入口签名 + Config schema
 
 ### A4 `open_questions_resolutions.md` 每 OQ 6 字段
 
@@ -109,7 +111,7 @@ A4_open_questions_resolutions ┘   (与 A1 并行)
 5 OQ 推荐方向 (planner 视角):
 - **OQ-01** (持久化引擎): SQLite (WAL 模式) + JSON 字段; 数据量 ≤100k papers 可控; 后期 PG 迁移 in scope
 - **OQ-02** (provider 限流): HF 5/s + arXiv 3/s + HF assets 5/s + Semantic Scholar 100/5min (API key) + GitHub 5000/h (token); per-provider circuit breaker + exponential backoff 3 retry
-- **OQ-03** (Browser Agent): 复用现有 Browser Agent skill (gstack browser.browse); ChatGPT 5.5 Thinking high 通过 web 调用而非 API
+- **OQ-03** (Browser Agent): 复用现有 Browser Agent skill；ChatGPT 5.5 Thinking high 与 `TechnologyDiagramPainter` 共用同一浏览器控制面与 profile/lease/session 体系
 - **OQ-04** (权重存储): YAML config (`~/.solar/config/hf_paper_insight_weights.yaml`) per profile (ai-influence / research-radar / experiment-only); hot-reload 支持
 - **OQ-05** (Knowledge ingest): raw 先同步写盘 → 异步触发 extracted/QMD/graph (并行) → 失败 fallback file 缓冲 + ATLAS structured repair
 

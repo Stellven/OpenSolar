@@ -28,6 +28,9 @@ Video Pool
   -> Chapter Verifier
   -> Repair Loop
   -> Report Synthesizer
+  -> Figure Spec Builder
+  -> TechnologyDiagramPainter
+  -> Figure Grounding Gate
   -> Global Verifier
   -> Copy Editor
   -> Markdown / HTML / Knowledge Raw
@@ -40,7 +43,8 @@ P0 实现目标：
 5. 每章必须经过 Chapter Verifier，缺章、弱证据、unsupported claim、内部字段泄露必须触发 repair，而不是整份报告直接 blocked。
 6. 所有章节通过后由 Synthesizer 合成整篇报告，再由 Global Verifier + Copy Editor 生成 final/report.md 和 final/report.html。
 7. 质量结果必须落盘：quality-score.json、claim-verification.json、chapter-validation-summary.json、report-validation-result.json。
-8. 保留 Browser Agent / ChatGPT 项目“杂项”归档要求，账号、profile、secret 必须走环境变量，不得写入仓库。
+8. 在证据充分时，调用 `TechnologyDiagramPainter` 产出 1-3 张架构图 / 流程图 / 技术堆栈图，并把图片、caption、evidence 绑定嵌入 final report。
+9. 保留 Browser Agent / ChatGPT 项目“杂项”归档要求，账号、profile、secret 必须走环境变量，不得写入仓库。
 
 Report IR 要求：
 - 新增 compile_report_ir(report_plan, catalog, video_groups, config) -> dict。
@@ -69,6 +73,7 @@ Browser Agent Operator 使用规则：
 - VerifierOperator：检查证据、结构、内部字段、缺章、unsupported claim；可先用 deterministic verifier + 可选 high model verifier。
 - SynthesizerOperator：合并章节，统一叙事，不新增事实。
 - CopyEditorOperator：只清理语言、重复、内部字段、标题密度，不新增事实。
+- TechnologyDiagramPainter：只根据结构化 `figure-spec` 生成正式 Figure 风格图；必须保留 image/result/proof；证据不足时必须 `skipped/warn`，不得硬画。
 
 Chapter Writer 验收：
 - 每章必须有一句话判断。
@@ -139,6 +144,9 @@ reports/<report_id>/
   validation/report-validation-result.json
   validation/claim-verification.json
   validation/quality-score.json
+  figures/fig_01.spec.json
+  figures/fig_01.result.json
+  figures/figure-manifest.json
   final/report.md
   final/report.html
   final/transcripts.txt
@@ -155,9 +163,14 @@ reports/<report_id>/
   run_chapter_verifier
   run_chapter_repair_loop
   synthesize_report
+  compile_report_figure_specs
+  run_technology_diagram_painter
+  validate_report_figures
+  render_report_with_figures
   run_global_report_verifier
   run_copy_editor
 - tools/chatgpt_report_operator.py 已有 planner/chapter_writer/deep_writer 基础能力，本单重点是把它们接入 YouTube 报告主链路，并补 verifier/synthesizer/copy editor operator policy。
+  `TechnologyDiagramPainter` 则作为 figure-stage browser operator 接到最终渲染链路。
 
 硬性禁止：
 - 禁止用 Codex/direct GPT/local Qwen 替代最终 Planner/Chapter/Deep Writer。
@@ -182,9 +195,10 @@ S06 Verification：用 W21/W22 新 transcript fixture 跑端到端，不使用 l
 4. P0/P1 章节有 Deep Writer proof；没有 proof 不能通过。
 5. 缺章、弱章、内部字段泄露、unsupported claim 会进入 repair loop。
 6. 最终 report.md/report.html 来自 Synthesizer + Copy Editor，不是单次 writer 直出。
-7. validation/quality-score.json 存在，并给出 A/B/C/D 决策。
-8. W21/W22 fixture 端到端通过：只使用 T0/T1/T2 新 transcript；T3/legacy ASR 不进入核心证据。
-9. pytest/py_compile 通过，新增测试覆盖 Report IR、chapter evidence selection、deep proof enforcement、repair loop、quality scoring、final validation。
+7. `figures/figure-manifest.json` 存在，并记录 `painted/skipped/failed` 与 evidence 绑定。
+8. 最终 report.md/report.html 在证据充分时包含至少 1 张 `TechnologyDiagramPainter` 生成图及 caption。
+9. W21/W22 fixture 端到端通过：只使用 T0/T1/T2 新 transcript；T3/legacy ASR 不进入核心证据。
+10. pytest/py_compile 通过，新增测试覆盖 Report IR、chapter evidence selection、deep proof enforcement、repair loop、quality scoring、figure grounding、final validation。
 
 ## 本切片目标
 

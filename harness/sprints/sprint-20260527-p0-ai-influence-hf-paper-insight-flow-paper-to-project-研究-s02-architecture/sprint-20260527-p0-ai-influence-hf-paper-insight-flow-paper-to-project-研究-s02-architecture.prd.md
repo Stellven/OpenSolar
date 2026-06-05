@@ -29,7 +29,7 @@ L4 Signal Scoring：输出 research_signal_score、insight_report_score、experi
 L5 Evidence Packet：生成 PaperEvidencePacket v2，给高级模型使用，不把 raw list 直接喂给模型。
 L6 Resonance Matcher：匹配 Paper ↔ Code ↔ Influence，输出 R0-R5 共振等级。
 L7 High Reasoning：通过 Browser Agent 调用 ChatGPT 5.5 Thinking high，做技术路线、趋势、噪声、选题、项目建议。
-L8 Compiler：生成 HF insight report、Paper Insight Cards、Three-source Resonance Seeds、AI Influence Topic Pool、Experiment Tasks、Open-source Project Briefs、Deep Research Seed Packs。
+L8 Compiler：生成 HF insight report、Paper Insight Cards、Three-source Resonance Seeds、AI Influence Topic Pool、Experiment Tasks、Open-source Project Briefs、Deep Research Seed Packs，以及由 `TechnologyDiagramPainter` 驱动的 Figure Bundle（架构图 / 流程图 / 技术栈图）。
 L9 Knowledge Store：写 raw/extracted/QMD/graph/claim。
 L10 Watch Trigger：把高价值论文/路线送入持续追踪、三源共振、Deep Research 或开源孵化队列。
 
@@ -123,6 +123,7 @@ High Model 输出必须包括：
 5. Experiment / Reproduction Tasks
 6. Open-source Project Briefs
 7. Deep Research Seed Packs
+8. Figure Bundle（至少覆盖 `research_route_map`、`paper_to_project_flow`、`technology_stack_map` 中的充分证据图）
 
 报告模板：
 # AI Influence HF Paper Research Signal Report
@@ -138,6 +139,7 @@ High Model 输出必须包括：
 9. Open-source Project Briefs
 10. Deep Research Seed Packs
 11. Watchlist
+12. Research Route / Flow / Stack Figures
 
 CLI：
 solar radar hf-papers run \
@@ -226,9 +228,10 @@ Resonance Gate 必须检查 paper source >=1；code/influence 可选但要可回
 6. 高模型输出不允许只复述摘要，必须有技术路线、为什么重要、风险、推荐动作。
 7. 输出 R0-R5 resonance_level。
 8. 至少生成 report/cards/seeds/topics/experiments/projects/deep-research 七类资产。
-9. 产物写入 Knowledge raw/extracted，QMD 可搜索。
-10. 用 2026-05-27 的 HF daily/weekly/monthly 数据跑通第一条完整闭环。
-11. py_compile 和相关最小回归通过。
+9. 在 evidence 充分时，额外生成 `figure-spec`、`figure-manifest` 与至少 1 张 `TechnologyDiagramPainter` 图；证据不足时明确 `skipped/warn`。
+10. 产物写入 Knowledge raw/extracted，QMD 可搜索。
+11. 用 2026-05-27 的 HF daily/weekly/monthly 数据跑通第一条完整闭环。
+12. py_compile 和相关最小回归通过。
 
 边界：
 - 不把 YouTube 低质量 transcript 作为强证据；YouTube match 默认为 gated。

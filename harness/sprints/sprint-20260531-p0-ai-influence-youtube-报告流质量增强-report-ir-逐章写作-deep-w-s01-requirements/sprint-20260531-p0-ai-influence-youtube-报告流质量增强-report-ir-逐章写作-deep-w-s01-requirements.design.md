@@ -33,6 +33,7 @@ Knowledge Context: solar-harness context inject used
 | **RG6** | **Synthesizer 与 Copy Editor 策略** | 负责开头核心判断、章节过渡去重、语言风格统一及敏感/调度字段净化，严禁 Synthesizer 和 Copy Editor 新增或拔高任何事实。 | S02 / S03 | 避免 Synthesizer 在合成时出现二次幻想或信息泄露。 |
 | **RG7** | **Quality Score 量化评分体系** | 基于 9 项加权评分公式落盘 `quality-score.json`，并划分 A/B/C/D 等级指导发布决策。 | S02 / S03 / S04 | 评分公式的各项权值之和必须严格为 1.0。 |
 | **RG8** | **Browser Agent Operator 规范与 Proof 验证** | 明确定义 6 类 Operator 的 Thinking 级别与 UI/Deep Research proof 强校验规则，缺 proof 视为任务失败。 | S02 / S03 / S05 | 严禁使用普通 direct GPT 输出冒充 Deep Research proof。 |
+| **RG9** | **TechnologyDiagramPainter 图文报告契约** | 以结构化 `figure-spec` 驱动 `TechnologyDiagramPainter` 生成架构图 / 流程图 / 技术堆栈图，最终报告必须产 `figure-manifest.json` 并在 Markdown/HTML 中嵌入图和 caption。 | S02 / S03 / S04 / S05 | 图必须 evidence-grounded；证据不足时允许 skip/warn，严禁生成装饰性假图。 |
 
 ## 4. Data Specification Contracts
 
@@ -95,6 +96,32 @@ $$QualityScore = 0.20 \times G + 0.15 \times C + 0.15 \times D + 0.15 \times X +
 - $60 \le Score < 75$: **C级** (内部审阅参考，严禁对外发布，`internal_only`)
 - $Score < 60$: **D级** (进入 repair 流程，修补失败则直接 blocked，`blocked`)
 
+### 4.4 Figure Bundle Contract (`figures/*.json`, `figure-manifest.json`)
+S02 必须定义图生成与嵌入契约，供 YouTube 报告 runtime 调用 `TechnologyDiagramPainter`：
+- `figure-spec.json`:
+  - `figure_id`: string (格式：`fig_XX`)
+  - `figure_type`: string (`architecture_overview` | `trend_flow` | `technology_stack`)
+  - `placement`: string (`report_lead` | `chapter_inline` | `appendix`)
+  - `title`: string
+  - `caption`: string
+  - `source_chapter_ids`: list[string]
+  - `evidence_refs`: list[string]
+  - `input_outline`: list[string]
+  - `render_prompt`: string
+  - `status`: string (`queued` | `painted` | `skipped` | `failed`)
+- `figure-result.json`:
+  - `figure_id`, `status`, `image_path`, `request_dir`, `chatgpt_url`, `browser_session_id`, `original_image_ok`, `error`
+- `figure-manifest.json`:
+  - `report_id`, `figures`, `painted_count`, `skipped_count`, `failed_count`, `validator_overall`
+
+图生成规则：
+- 每份报告默认目标 1-3 张图，不允许无限制生图。
+- `architecture_overview` 用于总结核心技术路线或系统结构。
+- `trend_flow` 用于表达趋势演进、因果链或执行流程。
+- `technology_stack` 用于表达生态分层、模型/数据/工具栈关系。
+- 每张图必须绑定 `source_chapter_ids + evidence_refs`，不得脱离正文和证据独立臆造。
+- 若 `evidence_refs` 不足、章节未通过 verifier、或 Deep Writer proof 缺失，对应图必须 `skipped/warn`，不得继续生成。
+
 ## 5. Verifier & Repair Loop Flow
 
 ### 5.1 Chapter Verifier 检查项
@@ -130,6 +157,22 @@ graph TD
     K -- No --> L[标记为 failed / 降级为 internal_only]
 ```
 
+### 5.3 Figure Grounding Gate
+`TechnologyDiagramPainter` 不是装饰性后处理，而是 verifier 之后的受控图生成阶段：
+1. `Synthesizer` 产出结构化章节结果后，`Figure Spec Builder` 从 `report-ir + chapter_outputs + evidence_map` 编译候选图。
+2. 仅 `passed` 章节可进入 `figure-spec` 编译。
+3. `TechnologyDiagramPainter` 只吃 `figure-spec`，不直接吃整份自由文本报告。
+4. `Figure Validator` 必须检查：
+   - `has_evidence_refs`
+   - `source_chapters_passed`
+   - `image_exists`
+   - `caption_not_empty`
+   - `no_internal_field_leak`
+5. `Figure Validator` 失败时：
+   - 可单图降级为 `skipped`
+   - 不应伪装为“已有图”
+   - 不得把无图报告渲染成“图文并茂已完成”
+
 ## 6. Traceability Matrix
 
 | 父级 Epic 缺口描述 | S01 Requirements 定义 | 下游承接切片与验证目标 |
@@ -140,6 +183,7 @@ graph TD
 | 缺章或验证失败时整份报告直接 blocked，无法容错和自动修补 | **RG5**: 制定 Repair Loop 流程，限制最多 3 轮的 5 大场景定向修补。 | **S03 Core Runtime**: 实现修补状态流转与重试调度。<br>**S05 Verification**: 验证缺章能够自动触发重写并最终通过。 |
 | 最终输出泄露 video_id、json key 等内部敏感信息 | **RG6**: 定义 Synthesizer 和 Copy Editor 的事实净化约束和信息密度合并约束。 | **S03 Core Runtime**: 编写 Copy Editor 净化正则与模型 prompt 拦截规则。<br>**S05 Verification**: 验证生成产物中没有 harness 及 raw video 敏感元数据。 |
 | 缺乏可对报告产物客观衡量的多维度质量评分指标 | **RG7**: 定义包含 9 项加权评分公式的 `report_quality_score` 决策层。 | **S04 Orchestration/UI**: UI 面集成 quality-score.json 状态。<br>**S05 Verification**: 生成最终 A/B/C/D 分数报告。 |
+| YouTube 洞察报告缺少结构图、流程图、技术栈图，图和文脱节 | **RG9**: 定义 `figure-spec -> TechnologyDiagramPainter -> figure-manifest` 契约，并要求最终 `report.md/report.html` 嵌入图、caption 和 evidence 绑定。 | **S03 Core Runtime**: 增加 Figure Spec Builder、Painter dispatch、Figure Validator、render/embed。<br>**S05 Verification**: 验证至少 1 张 evidence-grounded 图能落盘，缺证据时显式 skip/warn。 |
 
 ## 7. 下游边界
 
@@ -149,9 +193,11 @@ graph TD
 - **S03 Core Runtime**:
   - **必须消费**：S02 设计的架构、接口与 schema 规范。
   - **严禁**：保留旧版“整篇报告一次性生成”作为默认执行方式。
+  - **必须新增**：`figure-spec` 编译、`TechnologyDiagramPainter` 调度、`figure-manifest.json` 与最终 markdown/html 内嵌图能力。
 - **S04 Orchestration / UI**:
   - **必须消费**：S01 和 S02 输出的质量评分、校验文件及任务运行状态数据。
   - **严禁**：只渲染文本总结，忽视对 quality-score.json 细项和 chapter validation 状态的可视化。
+  - **必须新增**：figure pane/status，显示 `painted/skipped/failed`、image path、caption、source chapters。
 - **S05 Verification / Release**:
   - **必须消费**：S01 定义的 Traceability Map、验收指标和负控测试点。
   - **严禁**：在没有 TDD 回归测试套件和 activation-proof 的情况下标记 Epic 完成。
@@ -164,7 +210,9 @@ graph TD
 4. P0/P1 章节没有提取到合规的 Deep Research proof 凭证，必须将其标记为 failed 阻断发布。
 5. 最终生成的报告 markdown 文本中，若包含任何 video_id、json key 等 harness 敏感词汇，必须被 Copy Editor 拦截。
 6. 不得使用 T3/failed 的 transcript 段落支持任何 P0/P1/P2 章节的核心趋势判断。
+7. `TechnologyDiagramPainter` 生成的图若没有 `evidence_refs` 或 `figure-manifest.json` 缺字段，不得嵌入最终报告。
+8. 缺证据或 validator 未过时，必须 `skipped/warn`，不得用装饰图补位。
 
 ## 9. Handoff
 
-子 S01 需求拆解与追踪矩阵已在 requirements 层全面锁定。所有 8 个核心需求组（RG1-RG8）已完全映射到 S02-S05 下游阶段。后续 S02 架构阶段必须在 design.md 中严格遵照本规约进行数据模型与状态机接口的设计。
+子 S01 需求拆解与追踪矩阵已在 requirements 层全面锁定。所有 9 个核心需求组（RG1-RG9）已完全映射到 S02-S05 下游阶段。后续 S02 架构阶段必须在 design.md 中严格遵照本规约进行数据模型、图生成契约与状态机接口的设计。
