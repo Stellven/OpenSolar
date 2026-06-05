@@ -397,6 +397,98 @@ def _run_graph_drain_phase(controller_mod: Any, *, apply: bool, capacity: dict[s
     )
 
 
+def _run_evaluator_closeout_control_plane_phase(
+    graph_adapter_mod: Any,
+    pm_mod: Any,
+    *,
+    apply: bool,
+) -> tuple[dict[str, Any], set[str]]:
+    enforcer = getattr(graph_adapter_mod, "enforce_evaluator_closeout_control_plane", None)
+    if not callable(enforcer):
+        return (
+            _phase_entry(
+                "evaluator_closeout_control_plane",
+                "skipped",
+                skipped=[{"reason": "evaluator_closeout_control_plane_unavailable"}],
+            ),
+            set(),
+        )
+
+    actions: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    handled_task_ids: set[str] = set()
+    counters = {
+        "deterministic_eval_gate_checked": 0,
+        "sidecar_closeout_enforced": 0,
+        "evaluator_retry_routed": 0,
+        "released": 0,
+        "would_release": 0,
+    }
+
+    for path, record in _iter_pm_records(pm_mod, include_probe_records=False):
+        if not isinstance(record, dict):
+            continue
+        task_id = str(record.get("task_id") or path.stem)
+        role = str(record.get("requested_role") or "").strip().lower()
+        if role != "evaluator":
+            continue
+        status = str(record.get("status") or "").strip().lower()
+        if status not in {"completed", "failed_contract_closeout"} and not status.startswith("failed"):
+            continue
+        try:
+            result = enforcer(record, apply=apply)
+        except Exception as exc:
+            skipped.append({"reason": f"control_plane_failed:{type(exc).__name__}", "target": task_id, "error": str(exc)})
+            continue
+        if not isinstance(result, dict):
+            skipped.append({"reason": "invalid_control_plane_response", "target": task_id})
+            continue
+
+        control_plane = result.get("control_plane") if isinstance(result.get("control_plane"), dict) else {}
+        if control_plane.get("deterministic_eval_gate"):
+            counters["deterministic_eval_gate_checked"] += 1
+        sidecar_enforcer = control_plane.get("sidecar_closeout_enforcer")
+        if isinstance(sidecar_enforcer, dict) and sidecar_enforcer.get("status") == "required":
+            counters["sidecar_closeout_enforced"] += 1
+        retry_router = control_plane.get("evaluator_retry_router")
+        routed = isinstance(retry_router, dict) and retry_router.get("status") in {"applied", "would_apply"}
+        if routed:
+            counters["evaluator_retry_routed"] += 1
+            handled_task_ids.add(task_id)
+        if result.get("released"):
+            counters["released"] += 1
+        if result.get("would_release"):
+            counters["would_release"] += 1
+
+        if routed:
+            actions.append(
+                _action(
+                    "evaluator_retry_route",
+                    task_id,
+                    "applied" if result.get("released") else "skipped",
+                    f"{task_id}|{result.get('graph','')}|{result.get('node_id','')}",
+                    reason=str(result.get("requeue_reason") or result.get("reason") or "evaluator_retry_route"),
+                    meta=result,
+                )
+            )
+        else:
+            skipped.append({"reason": str(result.get("reason") or "not_routed"), "target": task_id})
+
+    if actions or skipped:
+        phase = _phase_entry(
+            "evaluator_closeout_control_plane",
+            "ok",
+            actions=actions,
+            skipped=skipped,
+            counters=counters,
+        )
+        return _attach_skipped_index(phase, skipped), handled_task_ids
+    return (
+        _phase_entry("evaluator_closeout_control_plane", "skipped", skipped=[{"reason": "nothing_to_enforce"}]),
+        handled_task_ids,
+    )
+
+
 def _is_capacity_probe_record(pm_mod: Any, record: dict[str, Any], path: Path) -> bool:
     helper = getattr(pm_mod, "is_capacity_probe_record", None)
     if callable(helper):
@@ -539,6 +631,9 @@ def run_watchdog(
         "graph_nodes_released": 0,
         "stale_leases_released": 0,
         "drain_submitted": 0,
+        "deterministic_eval_gate_checked": 0,
+        "sidecar_closeout_enforced": 0,
+        "evaluator_retry_routed": 0,
     }
     last_exit_code = 0
     summary = {
@@ -706,6 +801,29 @@ def run_watchdog(
             phases.append(_phase_entry("reconcile_pm_failures", "error", blockers=[str(exc)]))
             reconcile_payload = {"ok": False, "error": str(exc)}
 
+        evaluator_control_phase, evaluator_control_handled = _run_evaluator_closeout_control_plane_phase(
+            graph_adapter_mod,
+            pm_mod,
+            apply=apply,
+        )
+        evaluator_control_counters = evaluator_control_phase.get("counters") if isinstance(evaluator_control_phase.get("counters"), dict) else {}
+        counters["deterministic_eval_gate_checked"] += _coerce_int(
+            evaluator_control_counters.get("deterministic_eval_gate_checked"), 0, min_value=0
+        )
+        counters["sidecar_closeout_enforced"] += _coerce_int(
+            evaluator_control_counters.get("sidecar_closeout_enforced"), 0, min_value=0
+        )
+        counters["evaluator_retry_routed"] += _coerce_int(
+            evaluator_control_counters.get("evaluator_retry_routed"), 0, min_value=0
+        )
+        routed_releases = _coerce_int(evaluator_control_counters.get("released"), 0, min_value=0)
+        counters["graph_nodes_released"] += routed_releases
+        summary["releases"] += routed_releases
+        actions.extend(
+            item for item in evaluator_control_phase.get("actions", []) if isinstance(item, dict) and item.get("status") == "applied"
+        )
+        phases.append(evaluator_control_phase)
+
         release_actions: list[dict[str, Any]] = []
         release_skips: list[dict[str, Any]] = []
         graph_node_releaser = getattr(
@@ -738,8 +856,11 @@ def run_watchdog(
             if not status.startswith("failed"):
                 continue
 
-            node_release = graph_node_releaser(record)
-            eval_release = graph_eval_releaser(record)
+            node_release = graph_node_releaser(record) if apply else {"ok": True, "released": False, "reason": "dry_run"}
+            if task_id in evaluator_control_handled:
+                eval_release = {"ok": True, "released": False, "reason": "handled_by_evaluator_closeout_control_plane"}
+            else:
+                eval_release = graph_eval_releaser(record) if apply else {"ok": True, "released": False, "reason": "dry_run"}
             if apply and isinstance(node_release, dict) and node_release.get("released"):
                 counters["graph_nodes_released"] += 1
                 summary["releases"] += 1
@@ -907,6 +1028,9 @@ def run_watchdog(
 
         drain_phase, drain_submitted = _run_safe_drain_phase(pm_mod, apply=apply, capacity=capacity)
         counters["drain_submitted"] += drain_submitted
+        summary["deterministic_eval_gate_checked"] = counters["deterministic_eval_gate_checked"]
+        summary["sidecar_closeout_enforced"] = counters["sidecar_closeout_enforced"]
+        summary["evaluator_retry_routed"] = counters["evaluator_retry_routed"]
         summary["pm_drain_submitted"] = drain_submitted
         summary["drain_submitted"] = counters["drain_submitted"]
         phases.append(drain_phase)
@@ -1140,6 +1264,9 @@ def command_status(
                 "graph_nodes_released": 0,
                 "stale_leases_released": 0,
                 "drain_submitted": 0,
+                "deterministic_eval_gate_checked": 0,
+                "sidecar_closeout_enforced": 0,
+                "evaluator_retry_routed": 0,
             },
             "blockers": ["missing latest report"],
             "degraded_reason": "run latest.json not found; run --once first",
@@ -1162,6 +1289,9 @@ def command_status(
                     "graph_nodes_released": 0,
                     "stale_leases_released": 0,
                     "drain_submitted": 0,
+                    "deterministic_eval_gate_checked": 0,
+                    "sidecar_closeout_enforced": 0,
+                    "evaluator_retry_routed": 0,
                 },
                 "blockers": ["latest report parse failed"],
                 "degraded_reason": "latest report unreadable",
@@ -1188,6 +1318,9 @@ def command_status(
                         ]
                     ),
                     "drain_submitted": summary.get("drain_submitted", 0),
+                    "deterministic_eval_gate_checked": summary.get("deterministic_eval_gate_checked", 0),
+                    "sidecar_closeout_enforced": summary.get("sidecar_closeout_enforced", 0),
+                    "evaluator_retry_routed": summary.get("evaluator_retry_routed", 0),
                 },
                 "blockers": latest_payload.get("blockers", []),
                 "degraded_reason": latest_payload.get("degraded_reason"),

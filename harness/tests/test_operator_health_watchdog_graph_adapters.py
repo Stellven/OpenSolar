@@ -271,3 +271,116 @@ def test_release_evaluator_assignment_ignores_non_evaluator_role(tmp_path):
     assert result["reason"] == "not_evaluator_task"
     graph = _load_graph(graph_path)
     assert graph["nodes"][0]["status"] == "reviewing"
+
+
+def test_evaluator_closeout_control_plane_dry_run_reports_without_mutating(tmp_path):
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    graph_path = sprints / "sprint-eval-closeout.task_graph.json"
+    task_id = "pm-sprint-eval-closeout-E1-test"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-eval-closeout",
+                "nodes": [
+                    {
+                        "id": "E1",
+                        "status": "reviewing",
+                        "eval_dispatch_id": task_id,
+                        "eval_assignments": [{"task_id": task_id, "operator_id": "gpt55-evaluator"}],
+                    }
+                ],
+                "node_results": {"E1": {"status": "reviewing", "eval_dispatch_id": task_id}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    adapter = _load_adapter(sprints)
+    result = adapter.enforce_evaluator_closeout_control_plane(
+        {
+            "requested_role": "evaluator",
+            "sprint_id": "sprint-eval-closeout",
+            "node_id": "E1",
+            "task_id": task_id,
+            "status": "failed_contract_closeout",
+            "failure_reason": "completed_without_required_artifacts",
+            "closeout_status": {
+                "ok": False,
+                "expected_artifacts": [
+                    str(sprints / "sprint-eval-closeout.E1-eval.md"),
+                    str(sprints / "sprint-eval-closeout.E1-eval.json"),
+                ],
+                "missing_artifacts": [
+                    str(sprints / "sprint-eval-closeout.E1-eval.md"),
+                    str(sprints / "sprint-eval-closeout.E1-eval.json"),
+                ],
+                "stale_artifacts": [],
+            },
+        },
+        apply=False,
+    )
+
+    assert result["released"] is False
+    assert result["would_release"] is True
+    assert result["control_plane"]["deterministic_eval_gate"]["status"] == "checked"
+    assert result["control_plane"]["sidecar_closeout_enforcer"]["status"] == "required"
+    assert result["control_plane"]["evaluator_retry_router"]["status"] == "would_apply"
+    graph = _load_graph(graph_path)
+    assert graph["nodes"][0]["eval_dispatch_id"] == task_id
+
+
+def test_evaluator_closeout_control_plane_apply_releases_sidecar_contract_failure(tmp_path):
+    sprints = tmp_path / "sprints"
+    sprints.mkdir()
+    graph_path = sprints / "sprint-eval-apply.task_graph.json"
+    task_id = "pm-sprint-eval-apply-E1-test"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-eval-apply",
+                "nodes": [
+                    {
+                        "id": "E1",
+                        "status": "reviewing",
+                        "eval_dispatch_id": task_id,
+                        "eval_operator_id": "gpt55-evaluator",
+                        "eval_assignments": [{"task_id": task_id, "operator_id": "gpt55-evaluator"}],
+                    }
+                ],
+                "node_results": {"E1": {"status": "reviewing", "eval_dispatch_id": task_id}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    adapter = _load_adapter(sprints)
+    result = adapter.enforce_evaluator_closeout_control_plane(
+        {
+            "requested_role": "evaluator",
+            "sprint_id": "sprint-eval-apply",
+            "node_id": "E1",
+            "task_id": task_id,
+            "status": "failed_contract_closeout",
+            "failure_reason": "result_path_exists_but_required_artifacts_missing",
+            "closeout_status": {
+                "ok": False,
+                "expected_artifacts": [
+                    str(sprints / "sprint-eval-apply.E1-eval.md"),
+                    str(sprints / "sprint-eval-apply.E1-eval.json"),
+                ],
+                "missing_artifacts": [str(sprints / "sprint-eval-apply.E1-eval.json")],
+                "stale_artifacts": [],
+            },
+        },
+        apply=True,
+    )
+
+    assert result["released"] is True
+    assert result["requeue_reason"] == "sidecar_contract_closeout"
+    assert result["control_plane"]["evaluator_retry_router"]["status"] == "applied"
+    graph = _load_graph(graph_path)
+    node = graph["nodes"][0]
+    assert "eval_dispatch_id" not in node
+    assert "eval_assignments" not in node
+    assert node["eval_requeue_history"][0]["reason"] == "sidecar_contract_closeout"

@@ -111,6 +111,67 @@ def _is_transient_provider_failure(reason: str) -> bool:
     return bool(pattern.search(str(reason or "")))
 
 
+def _is_evaluator_record(record: dict[str, Any]) -> bool:
+    return str(record.get("requested_role") or "").strip().lower() == "evaluator"
+
+
+def _expected_eval_sidecars(record: dict[str, Any]) -> tuple[Path, Path]:
+    sprint_id = str(record.get("sprint_id") or "").strip()
+    node_id = str(record.get("node_id") or "").strip()
+    closeout = record.get("closeout_status")
+    expected = closeout.get("expected_artifacts") if isinstance(closeout, dict) else []
+    eval_md = Path("")
+    eval_json = Path("")
+    for item in expected if isinstance(expected, list) else []:
+        path = Path(str(item))
+        name = path.name
+        if name.endswith("-eval.md"):
+            eval_md = path
+        elif name.endswith("-eval.json"):
+            eval_json = path
+    if not str(eval_md) or str(eval_md) == ".":
+        eval_md = SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.md"
+    if not str(eval_json) or str(eval_json) == ".":
+        eval_json = SPRINTS_DIR / f"{sprint_id}.{node_id}-eval.json"
+    return eval_md, eval_json
+
+
+def _sidecar_path_state(record: dict[str, Any]) -> dict[str, Any]:
+    eval_md, eval_json = _expected_eval_sidecars(record)
+    closeout = record.get("closeout_status")
+    missing = closeout.get("missing_artifacts") if isinstance(closeout, dict) else []
+    stale = closeout.get("stale_artifacts") if isinstance(closeout, dict) else []
+    return {
+        "eval_md": str(eval_md),
+        "eval_json": str(eval_json),
+        "eval_md_exists": bool(str(eval_md) and eval_md.exists() and eval_md.stat().st_size > 0),
+        "eval_json_exists": bool(str(eval_json) and eval_json.exists() and eval_json.stat().st_size > 0),
+        "missing_artifacts": [str(item) for item in missing] if isinstance(missing, list) else [],
+        "stale_artifacts": [str(item) for item in stale] if isinstance(stale, list) else [],
+    }
+
+
+def _is_sidecar_contract_closeout(record: dict[str, Any]) -> bool:
+    if not _is_evaluator_record(record):
+        return False
+    status = str(record.get("status") or "").strip().lower()
+    failure_reason = str(record.get("failure_reason") or "").strip().lower()
+    closeout = record.get("closeout_status")
+    artifact_gap = False
+    if isinstance(closeout, dict):
+        artifact_gap = bool(closeout.get("missing_artifacts") or closeout.get("stale_artifacts"))
+    return status == "failed_contract_closeout" or (artifact_gap and "required_artifacts" in failure_reason)
+
+
+def _evaluator_retry_route(record: dict[str, Any]) -> tuple[str, str] | None:
+    reason = str(record.get("failure_reason") or record.get("stderr") or record.get("error") or "").strip()
+    if _is_transient_provider_failure(reason):
+        return "transient_provider_failure", reason
+    if _is_sidecar_contract_closeout(record):
+        return "sidecar_contract_closeout", reason or "failed_contract_closeout"
+    return None
+
+
 def _is_exact_task_dispatch_match(task_id: str, target: dict[str, Any] | None, result_entry: dict[str, Any] | None) -> bool:
     dispatch_ids = set()
     dispatch_ids.update(_dispatch_ids_for_item(target))
@@ -213,13 +274,22 @@ def release_builder_assignment_on_transient_failure(record: dict[str, Any]) -> d
 
 def release_evaluator_assignment_on_transient_provider_failure(record: dict[str, Any]) -> dict[str, Any]:
     """Clear evaluator assignment only on transient provider failure and exact task identity."""
-    if str(record.get("requested_role") or "").strip().lower() != "evaluator":
+    if not _is_evaluator_record(record):
         return {"ok": False, "released": False, "reason": "not_evaluator_task"}
 
     reason = str(record.get("failure_reason") or "").strip()
     if not _is_transient_provider_failure(reason):
         return {"ok": False, "released": False, "reason": "not_transient_provider_failure"}
+    return _release_evaluator_assignment(record, route_reason="transient_provider_failure", failure_reason=reason, apply=True)
 
+
+def _release_evaluator_assignment(
+    record: dict[str, Any],
+    *,
+    route_reason: str,
+    failure_reason: str,
+    apply: bool,
+) -> dict[str, Any]:
     sprint_id = str(record.get("sprint_id") or "").strip()
     node_id = str(record.get("node_id") or "").strip()
     task_id = str(record.get("task_id") or "").strip()
@@ -261,13 +331,25 @@ def release_evaluator_assignment_on_transient_provider_failure(record: dict[str,
         return {"ok": True, "released": False, "reason": "dispatch_mismatch", "graph": str(graph_path), "node_id": node_id}
 
     now = _now()
+    if not apply:
+        return {
+            "ok": True,
+            "released": False,
+            "would_release": True,
+            "reason": route_reason,
+            "graph": str(graph_path),
+            "sprint_id": sprint_id,
+            "node_id": node_id,
+        }
+
     target["updated_at"] = now
     target.setdefault("eval_requeue_history", []).append(
         {
             "ts": now,
-            "reason": "transient_provider_failure",
+            "reason": route_reason,
             "task_id": task_id,
-            "failure_reason": reason[:500],
+            "failure_reason": failure_reason[:500],
+            "closeout_status": record.get("closeout_status"),
         }
     )
 
@@ -280,12 +362,97 @@ def release_evaluator_assignment_on_transient_provider_failure(record: dict[str,
     return {
         "ok": True,
         "released": True,
+        "would_release": True,
         "graph": str(graph_path),
         "sprint_id": sprint_id,
         "node_id": node_id,
+        "requeue_reason": route_reason,
     }
 
 
 def release_evaluator_assignment_on_transient_failure(record: dict[str, Any]) -> dict[str, Any]:
     """Public watchdog helper name used by the core runtime."""
     return release_evaluator_assignment_on_transient_provider_failure(record)
+
+
+def enforce_evaluator_closeout_control_plane(record: dict[str, Any], *, apply: bool = True) -> dict[str, Any]:
+    """Formal evaluator closeout control-plane pass.
+
+    DeterministicEvalGate only observes sidecar/proof artifact presence. It does
+    not synthesize a PASS/FAIL verdict. SidecarCloseoutEnforcer detects missing
+    or stale evaluator sidecars. EvaluatorRetryRouter releases the exact graph
+    assignment only for retry-safe causes.
+    """
+    task_id = str(record.get("task_id") or "").strip()
+    if not _is_evaluator_record(record):
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "released": False,
+            "would_release": False,
+            "reason": "not_evaluator_task",
+            "control_plane": {
+                "deterministic_eval_gate": {"status": "skipped", "reason": "not_evaluator_task"},
+                "sidecar_closeout_enforcer": {"status": "skipped", "reason": "not_evaluator_task"},
+                "evaluator_retry_router": {"status": "skipped", "reason": "not_evaluator_task"},
+            },
+        }
+
+    sidecars = _sidecar_path_state(record)
+    deterministic_gate = {
+        "name": "DeterministicEvalGate",
+        "status": "checked",
+        "eval_json_present": bool(sidecars["eval_json_exists"]),
+        "eval_md_present": bool(sidecars["eval_md_exists"]),
+        "eval_json": sidecars["eval_json"],
+        "eval_md": sidecars["eval_md"],
+    }
+    sidecar_closeout_required = _is_sidecar_contract_closeout(record)
+    sidecar_enforcer = {
+        "name": "SidecarCloseoutEnforcer",
+        "status": "required" if sidecar_closeout_required else "not_required",
+        "missing_artifacts": sidecars["missing_artifacts"],
+        "stale_artifacts": sidecars["stale_artifacts"],
+    }
+
+    route = _evaluator_retry_route(record)
+    if route is None:
+        return {
+            "ok": True,
+            "task_id": task_id,
+            "released": False,
+            "would_release": False,
+            "reason": "not_retryable_evaluator_record",
+            "control_plane": {
+                "deterministic_eval_gate": deterministic_gate,
+                "sidecar_closeout_enforcer": sidecar_enforcer,
+                "evaluator_retry_router": {
+                    "name": "EvaluatorRetryRouter",
+                    "status": "skipped",
+                    "reason": "not_retryable_evaluator_record",
+                },
+            },
+        }
+
+    route_reason, failure_reason = route
+    release = _release_evaluator_assignment(
+        record,
+        route_reason=route_reason,
+        failure_reason=failure_reason,
+        apply=apply,
+    )
+    router_status = "applied" if release.get("released") else "would_apply" if release.get("would_release") else "skipped"
+    return {
+        **release,
+        "task_id": task_id,
+        "control_plane": {
+            "deterministic_eval_gate": deterministic_gate,
+            "sidecar_closeout_enforcer": sidecar_enforcer,
+            "evaluator_retry_router": {
+                "name": "EvaluatorRetryRouter",
+                "status": router_status,
+                "route_reason": route_reason,
+                "apply": bool(apply),
+            },
+        },
+    }

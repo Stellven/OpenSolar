@@ -375,6 +375,106 @@ def test_watchdog_runs_graph_drain_controller_before_pm_drain(monkeypatch, tmp_p
     assert payload["summary"]["drain_submitted"] == 2
 
 
+def test_watchdog_runs_evaluator_closeout_control_plane(monkeypatch, tmp_path):
+    watchdog = _load_core_watchdog()
+    monkeypatch.setattr(watchdog, "LOCK_PATH", tmp_path / "lock")
+    monkeypatch.setattr(watchdog, "LATEST_REPORT_PATH", tmp_path / "latest.json")
+    monkeypatch.setattr(watchdog, "HISTORY_PATH", tmp_path / "history.jsonl")
+    calls: list[tuple[str, bool]] = []
+
+    class FakePM:
+        PM_INBOX_DIR = tmp_path / "pm-inbox"
+
+        def __init__(self):
+            self.PM_INBOX_DIR.mkdir(parents=True, exist_ok=True)
+            (self.PM_INBOX_DIR / "pm-eval.json").write_text(
+                json.dumps(
+                    {
+                        "task_id": "pm-eval",
+                        "requested_role": "evaluator",
+                        "status": "failed_contract_closeout",
+                        "sprint_id": "sprint-eval",
+                        "node_id": "E1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        def cmd_reconcile(self, args):
+            print('{"ok": true, "summary": {}}')
+            return 0
+
+        def cmd_drain_builder_ready(self, args):
+            print('{"ok": true, "submitted": [], "skipped": []}')
+            return 0
+
+    class FakeQuota:
+        def refresh_snapshot(self, *, apply=False):
+            return {
+                "ok": True,
+                "operators_total": 2,
+                "operators_usable": 2,
+                "operators_hard_blocked": 0,
+                "recommended_level": "normal",
+                "backlog": 1,
+                "groups": {},
+            }
+
+    class FakeGraphAdapter:
+        def enforce_evaluator_closeout_control_plane(self, record, *, apply=True):
+            calls.append((record.get("task_id"), apply))
+            return {
+                "ok": True,
+                "task_id": record.get("task_id"),
+                "released": apply,
+                "would_release": True,
+                "graph": "/tmp/graph.json",
+                "node_id": "E1",
+                "requeue_reason": "sidecar_contract_closeout",
+                "control_plane": {
+                    "deterministic_eval_gate": {"status": "checked"},
+                    "sidecar_closeout_enforcer": {"status": "required"},
+                    "evaluator_retry_router": {"status": "applied" if apply else "would_apply"},
+                },
+            }
+
+        def release_builder_assignment_on_transient_failure(self, record):
+            return {"ok": False, "released": False, "reason": "not_failed"}
+
+        def release_evaluator_assignment_on_transient_failure(self, record):
+            raise AssertionError("handled evaluator task should not hit legacy retry releaser")
+
+    def fake_load_tool(name):
+        if name == "pm_dispatch":
+            return FakePM()
+        if name == "operator_runtime":
+            return SimpleNamespace()
+        if name == "quota_refresh":
+            return FakeQuota()
+        if name == "operator_health_watchdog_graph_adapters":
+            return FakeGraphAdapter()
+        raise FileNotFoundError(name)
+
+    monkeypatch.setattr(watchdog, "_load_tool", fake_load_tool)
+
+    payload = watchdog.run_watchdog(
+        apply=True,
+        max_age_minutes=15,
+        lock_path=tmp_path / "lock",
+        latest_path=tmp_path / "latest.json",
+        history_path=tmp_path / "history.jsonl",
+    )
+    phases = {phase["phase"]: phase for phase in payload["phases"]}
+
+    assert calls == [("pm-eval", True)]
+    assert phases["evaluator_closeout_control_plane"]["status"] == "ok"
+    assert phases["evaluator_closeout_control_plane"]["counters"]["sidecar_closeout_enforced"] == 1
+    assert payload["counters"]["deterministic_eval_gate_checked"] == 1
+    assert payload["counters"]["sidecar_closeout_enforced"] == 1
+    assert payload["counters"]["evaluator_retry_routed"] == 1
+    assert payload["summary"]["evaluator_retry_routed"] == 1
+
+
 def test_command_status_reads_launchagent_runtime_state(monkeypatch, tmp_path):
     watchdog = _load_core_watchdog()
     latest = tmp_path / "latest.json"
@@ -384,7 +484,12 @@ def test_command_status_reads_launchagent_runtime_state(monkeypatch, tmp_path):
                 "ok": True,
                 "finished_at": "2026-06-05T14:10:00Z",
                 "last_exit_code": 0,
-                "summary": {"drain_submitted": 1},
+                "summary": {
+                    "drain_submitted": 1,
+                    "deterministic_eval_gate_checked": 4,
+                    "sidecar_closeout_enforced": 2,
+                    "evaluator_retry_routed": 1,
+                },
                 "installed": False,
                 "launchd_loaded": False,
             }
@@ -409,6 +514,9 @@ def test_command_status_reads_launchagent_runtime_state(monkeypatch, tmp_path):
     assert payload["launchd_state"] == "waiting"
     assert payload["launchagent"]["plist_path"] == str(run_plist)
     assert payload["last_actions"]["drain_submitted"] == 1
+    assert payload["last_actions"]["deterministic_eval_gate_checked"] == 4
+    assert payload["last_actions"]["sidecar_closeout_enforced"] == 2
+    assert payload["last_actions"]["evaluator_retry_routed"] == 1
 
 
 def test_watchdog_indexes_large_skipped_lists(monkeypatch):
