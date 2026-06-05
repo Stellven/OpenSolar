@@ -62,8 +62,20 @@ def run_watchdog(
 ) -> dict[str, Any]:
     core = _load_core()
     pm_mod = _load_tool("pm_dispatch")
-    quota_mod = _load_tool("quota_refresh")
-    prune_mod = pm_mod if apply else None
+    try:
+        operator_adapter_mod = _load_tool("operator_health_watchdog_operator_adapters")
+    except FileNotFoundError:
+        operator_adapter_mod = None
+    if operator_adapter_mod is not None and hasattr(operator_adapter_mod, "refresh_snapshot"):
+        quota_mod = operator_adapter_mod
+    else:
+        quota_mod = _load_tool("quota_refresh")
+    prune_mod = None
+    if apply:
+        if operator_adapter_mod is not None and hasattr(operator_adapter_mod, "prune_expired_operator_config_blocks"):
+            prune_mod = operator_adapter_mod
+        else:
+            prune_mod = pm_mod
 
     payload = core.run_watchdog(
         apply=bool(apply),
