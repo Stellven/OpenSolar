@@ -50,6 +50,22 @@ def test_compile_deepdive_brief_uses_separate_schema_and_nodes():
     assert all(item["mapped_nodes"] for item in contract["traceability"]["items"])
 
 
+def test_compile_deepdive_insight_contract_extends_runtime_gates():
+    contract = compiler.compile_deepdive_brief(
+        "DeepDive: 通过洞察 CAIS 2026 学术会议，分析 Agent 技术挑战和 Solar 吸收路线"
+    )
+    validation = compiler.validate_deepdive_contract(contract)
+    node_ids = {node["id"] for node in contract["deepdive_dag"]["nodes"]}
+    operators = {node["logical_operator"] for node in contract["deepdive_dag"]["nodes"]}
+
+    assert validation["ok"], validation
+    assert contract["mode"] == "insight"
+    assert {"D10", "D11", "D12", "D17", "D18"} <= node_ids
+    assert "DeepDiveChiefInsightEditor" in operators
+    assert "conference_signal_map.json" in contract["output_contract"]["insight"]
+    assert any("generic survey taxonomy" in item for item in contract["scope_boundaries"]["must_not_do"])
+
+
 def test_deepdive_brief_expander_writes_separate_artifacts(tmp_path):
     payload = expander.expand_deepdive_brief("DeepDive: agent runtime 趋势是什么？", tmp_path)
 

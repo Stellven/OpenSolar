@@ -3526,7 +3526,8 @@ def cmd_survey_continue(args: argparse.Namespace) -> int:
     )
     
     # Intercept and run final closeout gate
-    if payload.get("ok"):
+    should_run_closeout = payload.get("ok") and (payload.get("completed") or not args.allow_pending)
+    if should_run_closeout:
         closeout = evaluate_final_closeout(
             args.output_dir,
             strict=True,

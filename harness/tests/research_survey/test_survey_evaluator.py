@@ -45,6 +45,54 @@ def test_strict_eval_fails_five_section_brief(tmp_path):
     assert "section_count_low:5<30" in result["scorecard"]["issues"]
 
 
+def test_conference_insight_eval_rejects_correct_but_generic_report(tmp_path):
+    ast = {
+        "title": "深度报告：CAIS 2026 Agent 发展、技术挑战与 Solar 路线",
+        "planner_mode": "conference_insight",
+        "chapters": [
+            {"chapter_id": f"ch{i}", "title": title}
+            for i, title in enumerate([
+                "问题定义与研究边界",
+                "历史脉络与技术演进",
+                "核心架构范式",
+                "方法分类与代表系统",
+                "评估方法与基准体系",
+                "工程实现与部署约束",
+                "风险、安全与可解释性",
+                "产业生态与开源实现",
+            ], start=1)
+        ],
+        "sections": [{"section_id": "ch1/sec1", "chapter_id": "ch1", "title": "研究问题与术语边界"}],
+    }
+    (tmp_path / "survey_report_ast.json").write_text(json.dumps(ast), encoding="utf-8")
+    (tmp_path / "survey_plan.json").write_text(json.dumps({"planner_mode": "conference_insight"}), encoding="utf-8")
+    (tmp_path / "survey_evidence_packs.json").write_text(json.dumps({"blocked": 0, "packs": []}), encoding="utf-8")
+    (tmp_path / "human_final.md").write_text(
+        """
+        # CAIS 2026 Survey
+
+        ## 问题定义与研究边界
+        研究问题与术语边界。official_doc 和 paper 需要区分。claim_id=e1。
+
+        ## 核心架构范式
+        研究问题与术语边界。机制可行性不等于工程可控性。
+        研究问题与术语边界。机制可行性不等于工程可控性。
+        研究问题与术语边界。机制可行性不等于工程可控性。
+        """,
+        encoding="utf-8",
+    )
+
+    result = evaluate_survey(tmp_path, strict=True)
+
+    assert result["ok"] is False
+    assert result["insight_quality"]["active"] is True
+    issues = result["scorecard"]["issues"]
+    assert any(issue.startswith("insight_generic_survey_toc_leak") for issue in issues)
+    assert any(issue.startswith("insight_machine_label_leak") for issue in issues)
+    assert any(issue.startswith("insight_solar_actionability_low") for issue in issues)
+    assert "insight_figure_required_missing" in issues
+
+
 def test_strict_eval_passes_controlled_strong_fixture(tmp_path):
     plan = create_survey_plan("latent reasoning", target_chars=50000)
     write_survey_plan(plan, tmp_path)
