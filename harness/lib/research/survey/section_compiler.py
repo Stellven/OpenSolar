@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+import os
 import re
+import shlex
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -419,6 +424,8 @@ SUPPORTED_FIGURE_TYPES = {
     "risk_map": "风险图",
     "insight_argument_map": "论证图",
 }
+
+PREMIUM_FIGURE_TYPES = {"architecture_map", "roadmap_timeline", "process_flow"}
 
 
 def _explicit_figure_type(text: str) -> str:
@@ -849,10 +856,138 @@ def _render_figure_svg(figure: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _write_figure_assets(root: Path, cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _boolish(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _profile_premium_figures(root: Path) -> bool:
+    for path in (root / "survey_plan.json", root / "deepdive_requirement_contract.json"):
+        payload = _read_json(path)
+        if not payload:
+            continue
+        for container_key in ("rendering", "publication", "output", "profile"):
+            container = payload.get(container_key)
+            if isinstance(container, dict) and _boolish(container.get("premium_figures")):
+                return True
+        if _boolish(payload.get("premium_figures")):
+            return True
+    return False
+
+
+def _resolve_premium_figures(root: Path, enabled: bool | None) -> bool:
+    if enabled is not None:
+        return bool(enabled)
+    if _boolish(os.environ.get("SOLAR_DEEPDIVE_PREMIUM_FIGURES")):
+        return True
+    return _profile_premium_figures(root)
+
+
+def _premium_figure_prompt(figure: dict[str, Any]) -> str:
+    nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
+    lines = [
+        f"Figure type: {figure.get('type') or 'insight_argument_map'}",
+        f"Title: {figure.get('title') or 'N/A'}",
+        f"Label: {figure.get('label') or 'N/A'}",
+        "",
+        "Nodes:",
+    ]
+    for node in nodes:
+        lines.append(f"- {node.get('kind')}: {node.get('label')}")
+    lines.extend([
+        "",
+        "Render requirements:",
+        "- 技术白皮书风格，克制、清晰、可发布。",
+        "- 只使用上述节点内容，不新增事实。",
+        "- 根据 figure type 选择架构图、路线图、流程图或论证图布局。",
+    ])
+    return "\n".join(lines)
+
+
+def _copy_premium_asset(source: str, target: Path) -> str:
+    source_path = Path(source).expanduser()
+    if not source_path.exists() or not source_path.is_file():
+        raise FileNotFoundError(f"premium figure asset missing: {source}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, target)
+    return str(target)
+
+
+def _run_premium_figure_command(
+    *,
+    root: Path,
+    figure: dict[str, Any],
+    task_dir: Path,
+    command: str,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    request = {
+        "input_text": _premium_figure_prompt(figure),
+        "figure_spec": figure,
+        "timeout_seconds": timeout_seconds,
+        "max_retries": 1,
+        "request_dir": str((task_dir / "request").resolve()),
+    }
+    if command:
+        proc = subprocess.run(
+            shlex.split(command),
+            input=json.dumps(request, ensure_ascii=False),
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            cwd=str(root),
+        )
+        (task_dir / "premium-command.stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
+        (task_dir / "premium-command.stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+        if proc.returncode != 0:
+            raise RuntimeError(f"premium figure command failed:{proc.returncode}:{(proc.stderr or proc.stdout)[-800:]}")
+        return json.loads(proc.stdout or "{}")
+
+    harness_root = Path(__file__).resolve().parents[3]
+    operator = harness_root / "tools" / "technology_diagram_painter_operator.py"
+    envelope_path = task_dir / "operator-envelope.json"
+    envelope = {
+        "operator_id": "technology-diagram-painter",
+        "technology_diagram_request": request,
+        "timeout_seconds": timeout_seconds,
+        "max_retries": 1,
+        "defer_on_auth": True,
+        "defer_on_cooldown": True,
+    }
+    envelope_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["SOLAR_OPERATOR_ENVELOPE_JSON"] = str(envelope_path)
+    env["TASK_DIR"] = str(task_dir)
+    proc = subprocess.run(
+        [sys.executable, str(operator)],
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=timeout_seconds + 120,
+        cwd=str(harness_root),
+    )
+    (task_dir / "technology-diagram.stdout.txt").write_text(proc.stdout or "", encoding="utf-8")
+    (task_dir / "technology-diagram.stderr.txt").write_text(proc.stderr or "", encoding="utf-8")
+    result_path = task_dir / "operator-results" / "result.json"
+    if not result_path.exists():
+        result_path = task_dir / "tech-diagram-result.json"
+    if not result_path.exists() or proc.returncode != 0:
+        raise RuntimeError(f"technology diagram painter failed:{proc.returncode}:{(proc.stderr or proc.stdout)[-800:]}")
+    return _read_json(result_path)
+
+
+def _write_figure_assets(
+    root: Path,
+    cards: list[dict[str, Any]],
+    *,
+    premium_figures: bool = False,
+    premium_figure_command: str = "",
+    premium_figure_limit: int = 3,
+    premium_timeout_seconds: int = 600,
+) -> list[dict[str, Any]]:
     figure_dir = root / "assets" / "figures"
     figure_dir.mkdir(parents=True, exist_ok=True)
     assets: list[dict[str, Any]] = []
+    premium_attempts = 0
     for index, card in enumerate(cards, start=1):
         figure = card.get("figure_spec") if isinstance(card.get("figure_spec"), dict) else {}
         nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
@@ -866,13 +1001,52 @@ def _write_figure_assets(root: Path, cards: list[dict[str, Any]]) -> list[dict[s
         rel = f"assets/figures/{filename}"
         figure["asset_path"] = rel
         figure["asset_format"] = "svg"
-        assets.append({
+        asset = {
             "figure_id": figure_id,
             "figure_type": figure_type,
             "asset_path": rel,
             "node_count": len(nodes),
             "status": "rendered",
-        })
+            "renderer": "svg",
+        }
+        if premium_figures and premium_attempts < max(premium_figure_limit, 0) and (
+            figure_type in PREMIUM_FIGURE_TYPES or _boolish(figure.get("premium_required"))
+        ):
+            premium_attempts += 1
+            task_dir = root / "premium_figures" / figure_id
+            task_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                result = _run_premium_figure_command(
+                    root=root,
+                    figure=figure,
+                    task_dir=task_dir,
+                    command=premium_figure_command,
+                    timeout_seconds=premium_timeout_seconds,
+                )
+                image_path = str(result.get("image_path") or result.get("asset_path") or "").strip()
+                suffix = Path(image_path).suffix or ".png"
+                premium_filename = f"{index:03d}_{figure_id}_{figure_type}_premium{suffix}"
+                premium_rel = f"assets/figures/{premium_filename}"
+                _copy_premium_asset(image_path, root / premium_rel)
+                figure["fallback_asset_path"] = rel
+                figure["asset_path"] = premium_rel
+                figure["asset_format"] = suffix.lstrip(".").lower()
+                figure["premium_status"] = "rendered"
+                asset.update({
+                    "asset_path": premium_rel,
+                    "fallback_asset_path": rel,
+                    "status": "premium_rendered",
+                    "renderer": "technology_diagram_painter" if not premium_figure_command else "custom_premium_command",
+                    "operator_result": result,
+                })
+            except Exception as exc:
+                figure["premium_status"] = "fallback_svg"
+                figure["premium_error"] = f"{type(exc).__name__}: {exc}"
+                asset.update({
+                    "status": "premium_failed_fallback_svg",
+                    "premium_error": figure["premium_error"],
+                })
+        assets.append(asset)
     return assets
 
 
@@ -943,14 +1117,35 @@ def _render_section_card_html(card: dict[str, Any]) -> str:
     ])
 
 
-def _render_insight_html(root: Path, ast: dict, contribution: dict, section_render: dict[str, Any]) -> dict:
+def _render_insight_html(
+    root: Path,
+    ast: dict,
+    contribution: dict,
+    section_render: dict[str, Any],
+    *,
+    premium_figures: bool | None = None,
+    premium_figure_command: str = "",
+    premium_figure_limit: int = 3,
+    premium_timeout_seconds: int = 600,
+) -> dict:
     cards = section_render.get("cards", []) if isinstance(section_render.get("cards"), list) else []
-    figure_assets = _write_figure_assets(root, cards)
+    resolved_premium_figures = _resolve_premium_figures(root, premium_figures)
+    figure_assets = _write_figure_assets(
+        root,
+        cards,
+        premium_figures=resolved_premium_figures,
+        premium_figure_command=premium_figure_command,
+        premium_figure_limit=premium_figure_limit,
+        premium_timeout_seconds=premium_timeout_seconds,
+    )
     visual_audit = {
         "ok": True,
         "schema_version": "solar.deepdive.visual_audit.v1",
         "figure_count": len(figure_assets),
         "svg_asset_count": len([asset for asset in figure_assets if asset.get("asset_path", "").endswith(".svg")]),
+        "premium_figures_enabled": resolved_premium_figures,
+        "premium_rendered_count": len([asset for asset in figure_assets if asset.get("status") == "premium_rendered"]),
+        "premium_failed_count": len([asset for asset in figure_assets if asset.get("status") == "premium_failed_fallback_svg"]),
         "assets": figure_assets,
         "renderer": "section_render_svg_renderer",
     }
@@ -1068,6 +1263,9 @@ def _render_insight_html(root: Path, ast: dict, contribution: dict, section_rend
         "section_render_card_count": len(cards),
         "figure_count": figure_count,
         "svg_asset_count": len(figure_assets),
+        "premium_figures_enabled": resolved_premium_figures,
+        "premium_rendered_count": visual_audit["premium_rendered_count"],
+        "premium_failed_count": visual_audit["premium_failed_count"],
         "visual_audit": str(root / "visual_audit.json"),
         "publisher": "section_render_card_html",
     }
@@ -1145,7 +1343,14 @@ def _build_human_readable_final(root: Path, ast: dict, contribution: dict) -> di
     return summary
 
 
-def compile_survey(output_dir: str | Path) -> dict:
+def compile_survey(
+    output_dir: str | Path,
+    *,
+    premium_figures: bool | None = None,
+    premium_figure_command: str = "",
+    premium_figure_limit: int = 3,
+    premium_timeout_seconds: int = 600,
+) -> dict:
     root = Path(output_dir).expanduser()
     ast = _read_json(root / "survey_report_ast.json")
     contribution = _build_contribution_matrix(root, ast)
@@ -1232,7 +1437,20 @@ def compile_survey(output_dir: str | Path) -> dict:
         if insight_mode
         else _build_human_readable_final(root, ast, contribution)
     )
-    html_summary = _render_insight_html(root, ast, contribution, section_render) if insight_mode else {}
+    html_summary = (
+        _render_insight_html(
+            root,
+            ast,
+            contribution,
+            section_render,
+            premium_figures=premium_figures,
+            premium_figure_command=premium_figure_command,
+            premium_figure_limit=premium_figure_limit,
+            premium_timeout_seconds=premium_timeout_seconds,
+        )
+        if insight_mode
+        else {}
+    )
     return {
         "ok": True,
         "final_md": str(final_path),

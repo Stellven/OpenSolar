@@ -187,6 +187,46 @@ def test_compile_insight_survey_emits_section_render_cards(tmp_path):
     assert "2026 年的 Agentic Runtime" not in human_text
 
 
+def test_compile_insight_survey_can_render_premium_figure_with_svg_fallback(tmp_path):
+    _strong_insight_fixture(tmp_path)
+    spec_path = tmp_path / "sections" / "ch01" / "sec01" / "section.spec.json"
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["suggested_figure_type"] = "architecture_map"
+    spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    result = compile_section(tmp_path, "ch01/sec01")
+    assert result["ok"] is True
+
+    fake_cmd = tmp_path / "fake_premium_figure.py"
+    fake_cmd.write_text(
+        "import json, pathlib, sys\n"
+        "req = json.loads(sys.stdin.read())\n"
+        "out = pathlib.Path(req['request_dir']).parent / 'premium.png'\n"
+        "out.write_bytes(b'premium-image')\n"
+        "print(json.dumps({'image_path': str(out)}))\n",
+        encoding="utf-8",
+    )
+
+    compiled = compile_survey(
+        tmp_path,
+        premium_figures=True,
+        premium_figure_command=f"{sys.executable} {fake_cmd}",
+        premium_figure_limit=1,
+    )
+
+    assert compiled["ok"] is True
+    visual_audit = json.loads((tmp_path / "visual_audit.json").read_text(encoding="utf-8"))
+    assert visual_audit["premium_figures_enabled"] is True
+    assert visual_audit["premium_rendered_count"] == 1
+    first_asset = visual_audit["assets"][0]
+    assert first_asset["status"] == "premium_rendered"
+    assert first_asset["fallback_asset_path"].endswith(".svg")
+    assert first_asset["asset_path"].endswith("_premium.png")
+    assert (tmp_path / first_asset["asset_path"]).exists()
+    assert (tmp_path / first_asset["fallback_asset_path"]).exists()
+    html = (tmp_path / "final.html").read_text(encoding="utf-8")
+    assert "_premium.png" in html
+
+
 def test_insight_writer_uses_section_render_policy(tmp_path):
     _strong_insight_fixture(tmp_path)
     packet = build_section_prompt_packet(tmp_path, "ch01/sec01")
