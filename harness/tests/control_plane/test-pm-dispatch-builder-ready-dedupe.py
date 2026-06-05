@@ -77,3 +77,12 @@ def test_node_builder_objective_requires_canonical_handoff(tmp_path: Path, monke
     assert "canonical handoff" in objective
     assert "sprint-test.N1-handoff.md" in objective
     assert ".pm-result.md" in objective
+
+
+def test_bare_capsule_id_without_task_type_does_not_trigger_capsule_submit(tmp_path: Path, monkeypatch):
+    pm_dispatch = _load_pm_dispatch(tmp_path, monkeypatch)
+
+    assert pm_dispatch._capsule_submit_metadata({"capability_capsule_id": "cap.flashmlx-performance-debugger"}) == {}
+    assert pm_dispatch._capsule_submit_metadata(
+        {"capability_capsule_id": "cap.flashmlx-performance-debugger", "dispatch_task_type": "PERFORMANCE_REGRESSION"}
+    )["dispatch_task_type"] == "PERFORMANCE_REGRESSION"
