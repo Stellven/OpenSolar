@@ -104,6 +104,21 @@ def _node_eval_needed(gnd: Any, graph: dict[str, Any], sid: str, node: dict[str,
 
 
 def _has_builder_ready_nodes(gnd: Any, graph: dict[str, Any]) -> bool:
+    autopilot_ready = getattr(gnd, "autopilot_ready_decision", None)
+    if callable(autopilot_ready):
+        try:
+            decision = autopilot_ready(graph, emit_shadow=False)
+            ready_nodes = decision.get("ready_nodes") if isinstance(decision, dict) else []
+            return bool(ready_nodes)
+        except TypeError:
+            try:
+                decision = autopilot_ready(graph)
+                ready_nodes = decision.get("ready_nodes") if isinstance(decision, dict) else []
+                return bool(ready_nodes)
+            except Exception:
+                pass
+        except Exception:
+            pass
     ready_checker = getattr(gnd, "ready_nodes", None)
     if callable(ready_checker):
         try:
@@ -300,6 +315,7 @@ def run_graph_drain(
                 drain = ready_result.get("drain") if isinstance(ready_result.get("drain"), dict) else {}
                 enqueue = ready_result.get("enqueue") if isinstance(ready_result.get("enqueue"), dict) else {}
                 results = drain.get("results") if isinstance(drain.get("results"), list) else []
+                queued = enqueue.get("queued") if isinstance(enqueue.get("queued"), list) else []
                 counters["skipped"] += 1
                 skipped.append(
                     {
@@ -312,6 +328,11 @@ def run_graph_drain(
                         "drain_reasons": [
                             str(item.get("reason") or "")
                             for item in results
+                            if isinstance(item, dict) and str(item.get("reason") or "")
+                        ][:5],
+                        "enqueue_reasons": [
+                            str(item.get("reason") or "")
+                            for item in queued
                             if isinstance(item, dict) and str(item.get("reason") or "")
                         ][:5],
                     }
