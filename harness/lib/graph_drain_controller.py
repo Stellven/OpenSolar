@@ -253,6 +253,16 @@ def run_graph_drain(
                 if isinstance(item, dict):
                     skipped.append({"graph": str(graph_path), **item})
                     counters["skipped"] += 1
+            if not eval_would_submit and not reconciled and not eval_skipped:
+                counters["skipped"] += 1
+                skipped.append(
+                    {
+                        "graph": str(graph_path),
+                        "sprint_id": sid,
+                        "reason": "eval_drain_no_dispatch",
+                        "ok": bool(eval_result.get("ok", True)),
+                    }
+                )
 
         builder_budget = max(0, int(max_builders) - counters["builder_attempts"])
         if has_builder_ready and builder_budget > 0:
@@ -284,6 +294,26 @@ def run_graph_drain(
                         "would_submit": builder_would_submit,
                         "reconciled": len(ready_reconciled),
                         "payload": ready_result,
+                    }
+                )
+            if not builder_would_submit and not ready_reconciled:
+                drain = ready_result.get("drain") if isinstance(ready_result.get("drain"), dict) else {}
+                enqueue = ready_result.get("enqueue") if isinstance(ready_result.get("enqueue"), dict) else {}
+                results = drain.get("results") if isinstance(drain.get("results"), list) else []
+                counters["skipped"] += 1
+                skipped.append(
+                    {
+                        "graph": str(graph_path),
+                        "sprint_id": sid,
+                        "reason": "builder_drain_no_dispatch",
+                        "ok": bool(ready_result.get("ok", True)),
+                        "enqueue_count": len(enqueue.get("enqueued") or []) if isinstance(enqueue.get("enqueued"), list) else 0,
+                        "drain_processed": _coerce_int(drain.get("processed"), 0, min_value=0),
+                        "drain_reasons": [
+                            str(item.get("reason") or "")
+                            for item in results
+                            if isinstance(item, dict) and str(item.get("reason") or "")
+                        ][:5],
                     }
                 )
 
