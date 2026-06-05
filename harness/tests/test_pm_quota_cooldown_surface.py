@@ -78,6 +78,7 @@ class TestQuotaTextClassification:
         "Upgrade your plan to continue",
         "Individual quota reached",
         "resets in 30 minutes",
+        "你的请求过于频繁。为保障数据安全，我们已暂时限制你访问对话记录。请稍等几分钟后再重试。",
     ]
 
     @pytest.mark.parametrize("text", QUOTA_SAMPLES)
@@ -327,3 +328,45 @@ class TestApplyFailureFlowControl:
 
         assert result["runtime_state"] == ""
         assert len(calls) == 0
+
+    def test_browser_history_throttle_defers_for_ten_minutes(self, tmp_path, monkeypatch):
+        import operator_flow_control as ofc
+
+        task_dir = tmp_path / "task3"
+        task_dir.mkdir()
+        calls: list[dict] = []
+
+        import operator_runtime as rt
+        monkeypatch.delenv("SOLAR_BROWSER_AGENT_HISTORY_THROTTLE_COOLDOWN_SECONDS", raising=False)
+        monkeypatch.setattr(
+            rt,
+            "set_operator_status",
+            lambda op_id, state, ttl_seconds=None: calls.append(
+                {"op_id": op_id, "state": state, "ttl": ttl_seconds}
+            ) or {"operator_id": op_id, "runtime_state": state},
+        )
+        monkeypatch.setattr(
+            ofc,
+            "persist_operator_block",
+            lambda *args, **kwargs: {
+                "ok": True,
+                "reason": kwargs.get("reason"),
+                "runtime_state": args[1],
+            },
+        )
+
+        result = ofc.apply_failure_flow_control(
+            task_dir,
+            operator_id="chatgpt-report-writer",
+            failure_text="你的请求过于频繁。为保障数据安全，我们已暂时限制你访问对话记录。请稍等几分钟后再重试。",
+            rate_limit_cooldown_seconds=3600,
+            auth_cooldown_seconds=21600,
+            defer_on_cooldown=True,
+        )
+
+        assert result["runtime_state"] == "cooldown"
+        assert calls == [{"op_id": "chatgpt-report-writer", "state": "cooldown", "ttl": 600}]
+        assert result["task_control"]["action"] == "defer"
+        assert result["task_control"]["delay_seconds"] == 600
+        assert result["task_control"]["reason"] == "browser_history_throttle"
+        assert result["config_block"]["reason"] == "browser_history_throttle"
