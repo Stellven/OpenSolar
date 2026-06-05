@@ -9887,20 +9887,22 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
     <section class="hf-panel hf-heat">
       <h2>日 / 周 / 月热度总览</h2>
       <ul>{notes}</ul>
-      <div class="hf-heat-grid">
-        <div>
+      <div class="hf-heat-daily">
+        <div class="hf-heat-block">
           <h3>每日热度基线</h3>
           <table><thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th></tr></thead><tbody>{daily_rows}</tbody></table>
         </div>
-        <div>
+      </div>
+      <div class="hf-heat-secondary">
+        <div class="hf-heat-block">
           <h3>本周持续热点</h3>
           <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>均值</th><th>最近</th></tr></thead><tbody>{week_rows}</tbody></table>
         </div>
-        <div>
+        <div class="hf-heat-block">
           <h3>本月持续热点</h3>
           <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>均值</th><th>最近</th></tr></thead><tbody>{month_rows}</tbody></table>
         </div>
-        <div>
+        <div class="hf-heat-block">
           <h3>新晋爆发候选</h3>
           <table><thead><tr><th>论文</th><th>天数</th><th>最佳</th><th>首次</th><th>最近</th></tr></thead><tbody>{breakout_rows}</tbody></table>
         </div>
@@ -10659,7 +10661,10 @@ def _hf_render_grouped_report_html(
     .hf-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin: 18px 0; padding: 16px; background: #fbf6ef; border-radius: 18px; border: 1px solid var(--line); }}
     .hf-panel {{ padding: 22px; margin-top: 24px; }}
     .hf-heat h2 {{ font-size: 28px; }}
-    .hf-heat-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 18px; }}
+    .hf-heat-daily {{ margin-top: 18px; overflow-x: auto; }}
+    .hf-heat-secondary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 18px; }}
+    .hf-heat-block {{ min-width: 0; }}
+    .hf-heat-daily table {{ min-width: 760px; }}
     h1, h2, h3 {{ margin: 0 0 12px; line-height: 1.15; }}
     h1 {{ font-size: clamp(32px, 4vw, 52px); max-width: 16ch; margin-top: 18px; }}
     table {{ width: 100%; border-collapse: collapse; font: 14px/1.45 "Avenir Next", sans-serif; }}
@@ -11047,12 +11052,18 @@ def _hf_render_public_report_html(
     }}
     .hf-panel {{ padding: 22px; }}
     .hf-heat h2 {{ font-size: 28px; }}
-    .hf-heat-grid {{
+    .hf-heat-daily {{
+      margin-top: 18px;
+      overflow-x: auto;
+    }}
+    .hf-heat-secondary {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 18px;
       margin-top: 18px;
     }}
+    .hf-heat-block {{ min-width: 0; }}
+    .hf-heat-daily table {{ min-width: 760px; }}
     table {{ width: 100%; border-collapse: collapse; }}
     th, td {{ padding: 12px 0; text-align: left; border-bottom: 1px solid var(--line); }}
     th {{
