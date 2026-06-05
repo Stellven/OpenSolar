@@ -56,6 +56,7 @@ def test_dispatch_node_evals_falls_back_dual_plan_to_staged_with_single_evaluato
     monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
     monkeypatch.setattr(gnd, "_dispatch_file", lambda sid, node_id: Path("/tmp/dispatch.md"))
     monkeypatch.setattr(gnd, "_eval_dispatch_file", lambda sid, node_id: Path("/tmp/eval-dispatch.md"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_member_file", lambda sid, node_id, idx: Path(f"/tmp/eval-dispatch-{idx}.md"))
     monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
     monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
     monkeypatch.setattr(gnd, "_send_to_pane", lambda *args, **kwargs: True)
@@ -84,6 +85,66 @@ def test_dispatch_node_evals_falls_back_dual_plan_to_staged_with_single_evaluato
     assert plan["capacity"]["dispatchable_now"] is True
 
 
+def test_dispatch_node_evals_send_failed_restores_reviewing(monkeypatch) -> None:
+    graph = {
+        "sprint_id": "sid-eval-send-failed",
+        "nodes": [
+            {
+                "id": "N2",
+                "goal": "needs retryable eval",
+                "status": "dispatched",
+                "eval_assignments": [
+                    {
+                        "pane": "solar-harness:0.3",
+                        "dispatch_id": "old-eval-dispatch",
+                    }
+                ],
+                "eval_dispatched_at": "2026-06-05T00:00:00Z",
+            }
+        ],
+    }
+    released: list[tuple[str, str, str]] = []
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(gnd, "load_graph", lambda path: graph)
+    monkeypatch.setattr(gnd, "save_graph", lambda path, data: saved.setdefault("graph", data))
+    monkeypatch.setattr(gnd, "_node_eval_needed", lambda *args, **kwargs: True)
+    monkeypatch.setattr(gnd, "_existing_node_handoff", lambda sid, node, graph: Path("/tmp/handoff.md"))
+    monkeypatch.setattr(gnd, "_node_handoff_candidates", lambda sid, node, graph: [Path("/tmp/handoff.md")])
+    monkeypatch.setattr(gnd, "_eval_md_file", lambda sid, node_id: Path("/tmp/eval.md"))
+    monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
+    monkeypatch.setattr(gnd, "_dispatch_file", lambda sid, node_id: Path("/tmp/dispatch.md"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_file", lambda sid, node_id: Path("/tmp/eval-dispatch.md"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_member_file", lambda sid, node_id, idx: Path(f"/tmp/eval-dispatch-{idx}.md"))
+    monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_send_to_pane", lambda *args, **kwargs: False)
+    monkeypatch.setattr(gnd, "_pane_unavailable_reason", lambda pane: "test_send_failed")
+    monkeypatch.setattr(gnd, "_mark_pane_recover_retryable", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_mark_pane_recover_cooldown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gnd, "_ensure_lease", lambda *args, **kwargs: {"acquired": True, "reason": "ok"})
+    monkeypatch.setattr(gnd, "release_lease", lambda pane, dispatch_id, reason: released.append((pane, dispatch_id, reason)) or {"released": True})
+    monkeypatch.setattr(
+        gnd,
+        "_discover_evaluators",
+        lambda dry_run=False: [
+            {"pane": "solar-harness:0.3", "busy": False, "models": ["opus"], "skills": ["review"]},
+        ],
+    )
+
+    result = gnd.dispatch_node_evals("/tmp/sid-eval-send-failed.task_graph.json", dry_run=False)
+
+    node = graph["nodes"][0]
+    assert result["ok"] is False
+    assert result["skipped"][0]["reason"] == "send_failed"
+    assert node["status"] == "reviewing"
+    assert node["eval_retry_reason"] == "eval_dispatch_send_failed"
+    assert "eval_assignments" not in node
+    assert "eval_dispatched_at" not in node
+    assert released[0][2] == "graph_eval_dispatch_send_failed"
+    assert saved["graph"] is graph
+
+
 def test_dispatch_node_evals_keeps_dual_plan_when_quorum_capacity_exists(monkeypatch) -> None:
     graph = {
         "sprint_id": "sid-eval-plan-quorum",
@@ -110,6 +171,7 @@ def test_dispatch_node_evals_keeps_dual_plan_when_quorum_capacity_exists(monkeyp
     monkeypatch.setattr(gnd, "_eval_json_file", lambda sid, node_id: Path("/tmp/eval.json"))
     monkeypatch.setattr(gnd, "_dispatch_file", lambda sid, node_id: Path("/tmp/dispatch.md"))
     monkeypatch.setattr(gnd, "_eval_dispatch_file", lambda sid, node_id: Path("/tmp/eval-dispatch.md"))
+    monkeypatch.setattr(gnd, "_eval_dispatch_member_file", lambda sid, node_id, idx: Path(f"/tmp/eval-dispatch-{idx}.md"))
     monkeypatch.setattr(gnd, "_inject_dispatch_context", lambda *args, **kwargs: None)
     monkeypatch.setattr(gnd, "_write_submit_ack", lambda *args, **kwargs: None)
     monkeypatch.setattr(gnd, "_send_to_pane", lambda *args, **kwargs: True)

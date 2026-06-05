@@ -5739,6 +5739,9 @@ def dispatch_node_evals(graph_path: str, dry_run: bool = False, ttl: int = 900,
                 for assignment in planned_assignments:
                     release_lease(str(assignment["pane"]), str(assignment["dispatch_id"]), "graph_eval_dispatch_send_failed")
             _clear_eval_assignments(node)
+            node["status"] = "reviewing"
+            node["updated_at"] = _utc_now()
+            node["eval_retry_reason"] = "eval_dispatch_send_failed"
             skipped.append({
                 "node": node_id,
                 "pane": str(send_failed["assignment"]["pane"]),
