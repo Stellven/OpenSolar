@@ -271,14 +271,38 @@ def run_watchdog(
     max_age_minutes = max(1, _coerce_int(max_age_minutes, 45))
     lock_timeout_seconds = max(1, _coerce_int(lock_timeout_seconds, 5))
 
+    operator_adapter_mod = None
+    try:
+        operator_adapter_mod = _load_tool("operator_health_watchdog_operator_adapters")
+    except Exception:
+        operator_adapter_mod = None
+
     pm_mod = pm_dispatch_module if pm_dispatch_module is not None else _load_tool("pm_dispatch")
-    quota_mod = quota_refresh_module if quota_refresh_module is not None else _load_tool("quota_refresh")
+    if quota_refresh_module is not None:
+        quota_mod = quota_refresh_module
+    elif operator_adapter_mod is not None and hasattr(operator_adapter_mod, "refresh_snapshot"):
+        quota_mod = operator_adapter_mod
+    else:
+        quota_mod = _load_tool("quota_refresh")
     if prune_module is None:
-        try:
-            prune_module = _load_tool("operator_flow_control")
-        except FileNotFoundError:
-            prune_module = pm_mod
+        if operator_adapter_mod is not None and hasattr(operator_adapter_mod, "prune_expired_operator_config_blocks"):
+            prune_module = operator_adapter_mod
+        else:
+            try:
+                prune_module = _load_tool("operator_flow_control")
+            except FileNotFoundError:
+                prune_module = pm_mod
     runtime_mod = _load_tool("operator_runtime")
+    graph_adapter_mod = None
+    try:
+        graph_adapter_mod = _load_tool("operator_health_watchdog_graph_adapters")
+    except Exception:
+        graph_adapter_mod = None
+    lease_adapter_mod = None
+    try:
+        lease_adapter_mod = _load_tool("operator_health_watchdog_lease_adapters")
+    except Exception:
+        lease_adapter_mod = None
 
     phases: list[dict[str, Any]] = []
     actions: list[dict[str, Any]] = []
@@ -462,27 +486,34 @@ def run_watchdog(
 
         release_actions: list[dict[str, Any]] = []
         release_skips: list[dict[str, Any]] = []
-        tx_pattern = getattr(pm_mod, "TRANSIENT_OPERATOR_FAILURE_RE", re.compile(r"quota|cooldown|auth"))
         graph_node_releaser = getattr(
-            pm_mod,
-            "_release_graph_node_on_transient_operator_failure",
-            lambda *_: {"ok": False, "released": False},
+            graph_adapter_mod,
+            "release_builder_assignment_on_transient_failure",
+            getattr(pm_mod, "release_builder_assignment_on_transient_failure", None),
         )
+        if graph_node_releaser is None:
+            graph_node_releaser = getattr(
+                pm_mod,
+                "_release_graph_node_on_transient_operator_failure",
+                lambda *_: {"ok": False, "released": False},
+            )
         graph_eval_releaser = getattr(
-            pm_mod,
-            "_release_graph_eval_on_transient_operator_failure",
-            lambda *_: {"ok": False, "released": False},
+            graph_adapter_mod,
+            "release_evaluator_assignment_on_transient_failure",
+            getattr(pm_mod, "release_evaluator_assignment_on_transient_failure", None),
         )
+        if graph_eval_releaser is None:
+            graph_eval_releaser = getattr(
+                pm_mod,
+                "_release_graph_eval_on_transient_operator_failure",
+                lambda *_: {"ok": False, "released": False},
+            )
         for path, record in _iter_pm_records(pm_mod):
             if not isinstance(record, dict):
                 continue
             task_id = str(record.get("task_id") or path.stem)
             status = str(record.get("status") or "")
             if not status.startswith("failed"):
-                continue
-            reason = str(record.get("failure_reason") or "")
-            if not tx_pattern.search(reason):
-                release_skips.append({"reason": "not_transient_operator_failure", "target": task_id})
                 continue
 
             node_release = graph_node_releaser(record)
@@ -543,52 +574,67 @@ def run_watchdog(
 
         lease_actions: list[dict[str, Any]] = []
         lease_skips: list[dict[str, Any]] = []
-        lease_dir = getattr(runtime_mod, "OPERATOR_LEASE_DIR", HARNESS_DIR / "run" / "operator-leases")
-        status_dir = getattr(runtime_mod, "OPERATOR_STATUS_DIR", HARNESS_DIR / "run" / "operator-status")
-        release_fn = getattr(runtime_mod, "release_operator_lease", None)
-        for lease_path in sorted(lease_dir.glob("*.json")):
-            lease = _load_json(lease_path, {})
-            if not isinstance(lease, dict):
-                continue
-            operator_id = str(lease_path.stem)
-            lease_id = str(lease.get("lease_id") or lease.get("id") or "")
-            expires_at = _parse_time(lease.get("expires_at"))
-            state = str(lease.get("state") or "")
-            status_data = _load_json(status_dir / f"{operator_id}.json", {})
-            pid_raw = status_data.get("worker_pid") if isinstance(status_data, dict) else None
-            worker_pid: int | None = None
-            try:
-                worker_pid = int(pid_raw) if pid_raw is not None else None
-            except Exception:
-                worker_pid = None
-            stale_ttl = expires_at is not None and datetime.datetime.now(datetime.timezone.utc) >= expires_at
-            dead_pid = worker_pid is not None and not _is_pid_alive(worker_pid)
-
-            if not stale_ttl and not dead_pid:
-                lease_skips.append({"reason": "active_pid_or_ttl", "target": operator_id})
-                continue
-            released = False
-            if callable(release_fn):
-                try:
-                    released = bool(release_fn(operator_id, reason="watchdog_stale_recovery"))
-                except Exception as exc:
-                    lease_skips.append({"reason": str(exc), "target": operator_id, "lease_id": lease_id})
-            if released:
-                counters["stale_leases_released"] += 1
-                action = _action(
-                    "release_stale_lease",
-                    operator_id,
-                    "applied",
-                    f"{lease_id}|{operator_id}",
-                    reason="stale_lease",
-                    meta={"state": state, "stale_ttl": stale_ttl, "dead_pid": dead_pid},
-                )
-                lease_actions.append(action)
-                actions.append(action)
+        if lease_adapter_mod is not None and hasattr(lease_adapter_mod, "reconcile_stale_leases"):
+            lease_payload = lease_adapter_mod.reconcile_stale_leases(runtime_module=runtime_mod, apply=apply)
+            if isinstance(lease_payload, dict):
+                lease_actions = [
+                    item for item in lease_payload.get("actions", []) if isinstance(item, dict)
+                ]
+                lease_skips = [
+                    item for item in lease_payload.get("skipped", []) if isinstance(item, dict)
+                ]
+                released_count = int((lease_payload.get("summary") or {}).get("released") or 0)
+                counters["stale_leases_released"] += released_count
+                actions.extend(item for item in lease_actions if item.get("status") == "applied")
             else:
-                lease_skips.append(
-                    {"reason": "release_failed_or_not_mutated", "target": operator_id, "lease_id": lease_id}
-                )
+                lease_skips.append({"reason": "invalid_lease_adapter_response"})
+        else:
+            lease_dir = getattr(runtime_mod, "OPERATOR_LEASE_DIR", HARNESS_DIR / "run" / "operator-leases")
+            status_dir = getattr(runtime_mod, "OPERATOR_STATUS_DIR", HARNESS_DIR / "run" / "operator-status")
+            release_fn = getattr(runtime_mod, "release_operator_lease", None)
+            for lease_path in sorted(lease_dir.glob("*.json")):
+                lease = _load_json(lease_path, {})
+                if not isinstance(lease, dict):
+                    continue
+                operator_id = str(lease_path.stem)
+                lease_id = str(lease.get("lease_id") or lease.get("id") or "")
+                expires_at = _parse_time(lease.get("expires_at"))
+                state = str(lease.get("state") or "")
+                status_data = _load_json(status_dir / f"{operator_id}.json", {})
+                pid_raw = status_data.get("worker_pid") if isinstance(status_data, dict) else None
+                worker_pid: int | None = None
+                try:
+                    worker_pid = int(pid_raw) if pid_raw is not None else None
+                except Exception:
+                    worker_pid = None
+                stale_ttl = expires_at is not None and datetime.datetime.now(datetime.timezone.utc) >= expires_at
+                dead_pid = worker_pid is not None and not _is_pid_alive(worker_pid)
+
+                if not stale_ttl and not dead_pid:
+                    lease_skips.append({"reason": "active_pid_or_ttl", "target": operator_id})
+                    continue
+                released = False
+                if callable(release_fn):
+                    try:
+                        released = bool(release_fn(operator_id, reason="watchdog_stale_recovery"))
+                    except Exception as exc:
+                        lease_skips.append({"reason": str(exc), "target": operator_id, "lease_id": lease_id})
+                if released:
+                    counters["stale_leases_released"] += 1
+                    action = _action(
+                        "release_stale_lease",
+                        operator_id,
+                        "applied",
+                        f"{lease_id}|{operator_id}",
+                        reason="stale_lease",
+                        meta={"state": state, "stale_ttl": stale_ttl, "dead_pid": dead_pid},
+                    )
+                    lease_actions.append(action)
+                    actions.append(action)
+                else:
+                    lease_skips.append(
+                        {"reason": "release_failed_or_not_mutated", "target": operator_id, "lease_id": lease_id}
+                    )
         phases.append(
             _phase_entry(
                 "reconcile_stale_leases",
@@ -599,7 +645,34 @@ def run_watchdog(
             )
         )
 
-        phases.append(_phase_entry("repair_status_projection", "skipped", skipped=[{"reason": "not_implemented_in_b1"}]))
+        projection_actions: list[dict[str, Any]] = []
+        projection_skips: list[dict[str, Any]] = []
+        if lease_adapter_mod is not None and hasattr(lease_adapter_mod, "repair_status_projection"):
+            for _path, record in _iter_pm_records(pm_mod):
+                if not isinstance(record, dict):
+                    continue
+                projection_payload = lease_adapter_mod.repair_status_projection(record, apply=apply)
+                if not isinstance(projection_payload, dict):
+                    projection_skips.append({"reason": "invalid_projection_adapter_response"})
+                    continue
+                projection_actions.extend(
+                    item for item in projection_payload.get("actions", []) if isinstance(item, dict)
+                )
+                projection_skips.extend(
+                    item for item in projection_payload.get("skipped", []) if isinstance(item, dict)
+                )
+            actions.extend(item for item in projection_actions if item.get("status") == "applied")
+            phases.append(
+                _phase_entry(
+                    "repair_status_projection",
+                    "ok" if projection_actions else "skipped",
+                    actions=projection_actions,
+                    skipped=projection_skips,
+                    counters={"applied": len(projection_actions)},
+                )
+            )
+        else:
+            phases.append(_phase_entry("repair_status_projection", "skipped", skipped=[{"reason": "adapter_missing"}]))
         phases.append(_phase_entry("drain_if_capacity_available", "skipped", skipped=[{"reason": "not_implemented_in_b1"}]))
         backlog_after = _read_pm_backlog(pm_mod)
     finally:

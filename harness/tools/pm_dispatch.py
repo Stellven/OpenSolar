@@ -2383,6 +2383,11 @@ def _release_graph_node_on_transient_operator_failure(record: dict[str, Any]) ->
     return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
 
 
+def release_builder_assignment_on_transient_failure(record: dict[str, Any]) -> dict[str, Any]:
+    """Safe public helper: release builder graph assignment for transient provider failures."""
+    return _release_graph_node_on_transient_operator_failure(record)
+
+
 def _mark_graph_node_evaluation_dispatched(record: dict[str, Any]) -> dict[str, Any]:
     if normalize_role(str(record.get("requested_role") or "")) != "evaluator":
         return {"ok": False, "marked": False, "reason": "not_evaluator_task"}
@@ -2516,6 +2521,11 @@ def _release_graph_eval_on_transient_operator_failure(record: dict[str, Any]) ->
 
     graph_path.write_text(json.dumps(graph, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"ok": True, "released": True, "graph": str(graph_path), "sprint_id": sprint_id, "node_id": node_id}
+
+
+def release_evaluator_assignment_on_transient_failure(record: dict[str, Any]) -> dict[str, Any]:
+    """Safe public helper: release evaluator graph assignment for transient provider failures."""
+    return _release_graph_eval_on_transient_operator_failure(record)
 
 
 def _mark_graph_node_reviewing_on_builder_complete(record: dict[str, Any]) -> dict[str, Any]:
