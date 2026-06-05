@@ -410,6 +410,62 @@ def _figure_edges(nodes: list[dict[str, str]]) -> list[dict[str, str]]:
     return edges
 
 
+SUPPORTED_FIGURE_TYPES = {
+    "architecture_map": "架构图",
+    "roadmap_timeline": "路线图",
+    "process_flow": "流程图",
+    "comparison_matrix": "对比图",
+    "evidence_map": "证据图",
+    "risk_map": "风险图",
+    "insight_argument_map": "论证图",
+}
+
+
+def _explicit_figure_type(text: str) -> str:
+    match = re.search(r"figure_type\s*:\s*([a-zA-Z0-9_-]+)", text or "", flags=re.I)
+    if match and match.group(1) in SUPPORTED_FIGURE_TYPES:
+        return match.group(1)
+    try:
+        json_match = re.search(r"```json\s*(\{.*?\})\s*```", text or "", flags=re.S)
+        if json_match:
+            payload = json.loads(json_match.group(1))
+            figure = payload.get("figure_spec") if isinstance(payload, dict) else {}
+            figure_type = str(figure.get("type") or "")
+            if figure_type in SUPPORTED_FIGURE_TYPES:
+                return figure_type
+    except Exception:
+        return ""
+    return ""
+
+
+def _infer_figure_type(section: dict, text: str, takeaways: list[str]) -> str:
+    explicit = _explicit_figure_type(text)
+    if explicit:
+        return explicit
+    suggested = str(section.get("suggested_figure_type") or "")
+    if suggested in SUPPORTED_FIGURE_TYPES:
+        return suggested
+    corpus = " ".join([
+        str(section.get("title") or ""),
+        str(section.get("research_question") or ""),
+        str(text or ""),
+        " ".join(takeaways),
+    ]).lower()
+    if re.search(r"风险|反证|边界|缺口|失败|risk|gap|limit|falsification", corpus):
+        return "risk_map"
+    if re.search(r"路线图|下一步|roadmap|预测|forecast|观察指标|watchlist|priority|p0|p1", corpus):
+        return "roadmap_timeline"
+    if re.search(r"架构|runtime|系统|operator|schema|gate|规格|协议|组件|architecture", corpus):
+        return "architecture_map"
+    if re.search(r"流程|pipeline|process|工作流|阶段|步骤", corpus):
+        return "process_flow"
+    if re.search(r"分歧|比较|对比|取舍|矩阵|matrix|tradeoff|versus|vs", corpus):
+        return "comparison_matrix"
+    if re.search(r"证据|来源|强度|coverage|source|evidence|signal", corpus):
+        return "evidence_map"
+    return "insight_argument_map"
+
+
 def _build_section_render_card(root: Path, section: dict, row: dict) -> dict[str, Any]:
     section_id = str(section.get("section_id") or row.get("section_id") or "")
     text = _section_final(root, section_id)
@@ -438,11 +494,13 @@ def _build_section_render_card(root: Path, section: dict, row: dict) -> dict[str
     evidence_callouts = _evidence_callouts(root, evidence_ids, max_items=4)
     title = str(section.get("title") or row.get("title") or section_id)
     figure_nodes = _figure_nodes(thesis_candidates, evidence_callouts, takeaways)
+    figure_type = _infer_figure_type(section, text, takeaways)
     figure_spec = {
         "figure_id": re.sub(r"[^a-zA-Z0-9_-]+", "_", section_id).strip("_"),
-        "type": "section_render_card",
+        "type": figure_type,
+        "label": SUPPORTED_FIGURE_TYPES.get(figure_type, "论证图"),
         "title": title,
-        "render_rule": "draw_when_section_render_card_has_thesis_and_evidence",
+        "render_rule": f"draw_{figure_type}_from_section_card",
         "content_sources": {
             "thesis": thesis_candidates[:3],
             "evidence_callout_ids": [str(callout.get("evidence_id") or "") for callout in evidence_callouts[:4]],
@@ -698,15 +756,33 @@ def _render_takeaway_box(takeaways: list[Any]) -> str:
     ])
 
 
+def _figure_lane_labels(figure_type: str) -> dict[str, str]:
+    if figure_type == "architecture_map":
+        return {"thesis": "组件/机制", "evidence": "支撑材料", "takeaway": "设计动作"}
+    if figure_type == "roadmap_timeline":
+        return {"thesis": "当前判断", "evidence": "驱动因素", "takeaway": "下一步"}
+    if figure_type == "process_flow":
+        return {"thesis": "输入", "evidence": "处理依据", "takeaway": "输出"}
+    if figure_type == "comparison_matrix":
+        return {"thesis": "比较对象", "evidence": "证据差异", "takeaway": "取舍判断"}
+    if figure_type == "risk_map":
+        return {"thesis": "待检验判断", "evidence": "风险证据", "takeaway": "降级条件"}
+    if figure_type == "evidence_map":
+        return {"thesis": "核心判断", "evidence": "证据来源", "takeaway": "证据边界"}
+    return {"thesis": "中心判断", "evidence": "支撑证据", "takeaway": "行动/观察"}
+
+
 def _render_figure_block(card: dict[str, Any]) -> str:
     figure = card.get("figure_spec") if isinstance(card.get("figure_spec"), dict) else {}
     nodes = figure.get("nodes") if isinstance(figure.get("nodes"), list) else []
     if not figure or not nodes:
         return ""
+    figure_type = str(figure.get("type") or "insight_argument_map")
+    labels = _figure_lane_labels(figure_type)
     lanes = {
-        "thesis": ("中心判断", [node for node in nodes if node.get("kind") == "thesis"]),
-        "evidence": ("支撑证据", [node for node in nodes if node.get("kind") == "evidence"]),
-        "takeaway": ("行动/观察", [node for node in nodes if node.get("kind") == "takeaway"]),
+        "thesis": (labels["thesis"], [node for node in nodes if node.get("kind") == "thesis"]),
+        "evidence": (labels["evidence"], [node for node in nodes if node.get("kind") == "evidence"]),
+        "takeaway": (labels["takeaway"], [node for node in nodes if node.get("kind") == "takeaway"]),
     }
     lane_html: list[str] = []
     for kind, (label, lane_nodes) in lanes.items():
@@ -715,8 +791,8 @@ def _render_figure_block(card: dict[str, Any]) -> str:
         cards = "\n".join(f'<div class="figure-node {kind}">{_h(node.get("label"))}</div>' for node in lane_nodes)
         lane_html.append(f'<div class="figure-lane"><span>{_h(label)}</span>{cards}</div>')
     return "\n".join([
-        '<div class="figure-block">',
-        f'  <div class="figure-title">{_h(figure.get("title") or card.get("title") or "图示")}</div>',
+        f'<div class="figure-block" data-figure-type="{_h(figure_type)}">',
+        f'  <div class="figure-title"><span>{_h(figure.get("label") or SUPPORTED_FIGURE_TYPES.get(figure_type, "图示"))}</span>{_h(figure.get("title") or card.get("title") or "图示")}</div>',
         '  <div class="figure-flow">',
         *lane_html,
         "  </div>",
@@ -818,6 +894,7 @@ def _render_insight_html(root: Path, ast: dict, contribution: dict, section_rend
     .takeaway-box ul {{ margin: 0; padding-left: 20px; }}
     .figure-block {{ margin: 18px 0; padding: 18px; border-radius: 22px; border: 1px dashed #bc855e; background: #fff3df; }}
     .figure-title {{ font-weight: 800; margin-bottom: 14px; color: var(--accent-2); }}
+    .figure-title span {{ display: inline-flex; margin-right: 10px; padding: 3px 9px; border-radius: 999px; background: #153f38; color: #fff9ee; font-size: 12px; vertical-align: middle; }}
     .figure-flow {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
     .figure-lane {{ min-height: 120px; padding: 12px; border-radius: 18px; background: rgba(255,255,255,.62); border: 1px solid #ead6bd; }}
     .figure-lane span {{ display: block; font-size: 13px; font-weight: 800; color: var(--accent); margin-bottom: 8px; }}
