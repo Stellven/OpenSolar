@@ -209,7 +209,13 @@ def test_watchdog_prefers_operator_and_lease_adapters(monkeypatch, tmp_path):
 
     monkeypatch.setattr(watchdog, "_load_tool", fake_load_tool)
 
-    payload = watchdog.run_watchdog(apply=True, max_age_minutes=15)
+    payload = watchdog.run_watchdog(
+        apply=True,
+        max_age_minutes=15,
+        lock_path=tmp_path / "lock",
+        latest_path=tmp_path / "latest.json",
+        history_path=tmp_path / "history.jsonl",
+    )
     phases = {phase["phase"]: phase for phase in payload["phases"]}
 
     assert payload["ok"] is True
@@ -270,10 +276,99 @@ def test_watchdog_safe_drain_uses_pm_drain_dry_run_by_default(monkeypatch, tmp_p
     monkeypatch.setattr(watchdog, "_load_tool", fake_load_tool)
     monkeypatch.delenv("SOLAR_OHW_ENABLE_DRAIN_APPLY", raising=False)
 
-    payload = watchdog.run_watchdog(apply=True, max_age_minutes=15)
+    payload = watchdog.run_watchdog(
+        apply=True,
+        max_age_minutes=15,
+        lock_path=tmp_path / "lock",
+        latest_path=tmp_path / "latest.json",
+        history_path=tmp_path / "history.jsonl",
+    )
     phases = {phase["phase"]: phase for phase in payload["phases"]}
 
     assert calls == [("drain", {"dry_run": True, "max_items": 3, "json": True})]
     assert phases["drain_if_capacity_available"]["status"] == "ok"
     assert phases["drain_if_capacity_available"]["counters"]["dry_run"] == 1
     assert payload["counters"]["drain_submitted"] == 0
+
+
+def test_watchdog_runs_graph_drain_controller_before_pm_drain(monkeypatch, tmp_path):
+    watchdog = _load_core_watchdog()
+    monkeypatch.setattr(watchdog, "LOCK_PATH", tmp_path / "lock")
+    monkeypatch.setattr(watchdog, "LATEST_REPORT_PATH", tmp_path / "latest.json")
+    monkeypatch.setattr(watchdog, "HISTORY_PATH", tmp_path / "history.jsonl")
+    calls: list[str] = []
+
+    class FakePM:
+        PM_INBOX_DIR = tmp_path / "pm-inbox"
+
+        def __init__(self):
+            self.PM_INBOX_DIR.mkdir(parents=True, exist_ok=True)
+
+        def cmd_reconcile(self, args):
+            print('{"ok": true, "summary": {}}')
+            return 0
+
+        def cmd_drain_builder_ready(self, args):
+            calls.append("pm_drain")
+            print('{"ok": true, "submitted": [], "skipped": []}')
+            return 0
+
+    class FakeQuota:
+        def refresh_snapshot(self, *, apply=False):
+            return {
+                "ok": True,
+                "operators_total": 2,
+                "operators_usable": 2,
+                "operators_hard_blocked": 0,
+                "recommended_level": "normal",
+                "backlog": 2,
+                "groups": {},
+            }
+
+    class FakeGraphDrain:
+        def run_graph_drain(self, **kwargs):
+            calls.append("graph_drain")
+            return {
+                "ok": True,
+                "dry_run": False,
+                "counters": {
+                    "drain_submitted": 2,
+                    "evals_dispatched": 1,
+                    "builders_dispatched": 1,
+                    "reconciled": 0,
+                },
+                "actions": [
+                    {"action_type": "graph_eval_drain", "target": "sprint-a", "status": "applied", "submitted": 1},
+                    {"action_type": "graph_builder_drain", "target": "sprint-b", "status": "applied", "submitted": 1},
+                ],
+                "skipped": [],
+            }
+
+    def fake_load_tool(name):
+        if name == "pm_dispatch":
+            return FakePM()
+        if name == "operator_runtime":
+            return SimpleNamespace()
+        if name == "quota_refresh":
+            return FakeQuota()
+        if name == "graph_drain_controller":
+            return FakeGraphDrain()
+        raise FileNotFoundError(name)
+
+    monkeypatch.setattr(watchdog, "_load_tool", fake_load_tool)
+
+    payload = watchdog.run_watchdog(
+        apply=True,
+        max_age_minutes=15,
+        lock_path=tmp_path / "lock",
+        latest_path=tmp_path / "latest.json",
+        history_path=tmp_path / "history.jsonl",
+    )
+    phases = {phase["phase"]: phase for phase in payload["phases"]}
+
+    assert calls[:2] == ["graph_drain", "pm_drain"]
+    assert phases["graph_drain_controller"]["status"] == "ok"
+    assert phases["graph_drain_controller"]["counters"]["submitted"] == 2
+    assert payload["counters"]["drain_submitted"] == 2
+    assert payload["summary"]["graph_drain_submitted"] == 2
+    assert payload["summary"]["drain_submitted"] == 2

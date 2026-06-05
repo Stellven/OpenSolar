@@ -76,6 +76,10 @@ def run_watchdog(
             prune_mod = operator_adapter_mod
         else:
             prune_mod = pm_mod
+    try:
+        graph_drain_mod = _load_tool("graph_drain_controller")
+    except FileNotFoundError:
+        graph_drain_mod = None
 
     payload = core.run_watchdog(
         apply=bool(apply),
@@ -83,6 +87,7 @@ def run_watchdog(
         pm_dispatch_module=pm_mod,
         quota_refresh_module=quota_mod,
         prune_module=prune_mod,
+        graph_drain_module=graph_drain_mod,
         lock_path=LOCK_PATH,
         latest_path=LATEST_REPORT_PATH,
         history_path=HISTORY_PATH,

@@ -281,6 +281,85 @@ def _run_safe_drain_phase(pm_mod: Any, *, apply: bool, capacity: dict[str, Any])
     )
 
 
+def _run_graph_drain_phase(controller_mod: Any, *, apply: bool, capacity: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    if controller_mod is None or not hasattr(controller_mod, "run_graph_drain"):
+        return (
+            _phase_entry(
+                "graph_drain_controller",
+                "skipped",
+                skipped=[{"reason": "graph_drain_controller_unavailable"}],
+            ),
+            0,
+        )
+    if not bool(capacity.get("ok", True)):
+        return (
+            _phase_entry(
+                "graph_drain_controller",
+                "skipped",
+                skipped=[{"reason": "capacity_unavailable", "capacity": capacity}],
+            ),
+            0,
+        )
+
+    max_graphs = _coerce_int(os.environ.get("SOLAR_OHW_GRAPH_DRAIN_MAX_GRAPHS", "30"), 30, min_value=0)
+    max_evals = _coerce_int(os.environ.get("SOLAR_OHW_GRAPH_DRAIN_MAX_EVALS", "2"), 2, min_value=0)
+    max_builders = _coerce_int(os.environ.get("SOLAR_OHW_GRAPH_DRAIN_MAX_BUILDERS", "1"), 1, min_value=0)
+    ttl = _coerce_int(os.environ.get("SOLAR_OHW_GRAPH_DRAIN_TTL", "900"), 900, min_value=60)
+    try:
+        payload = controller_mod.run_graph_drain(
+            apply=apply,
+            max_graphs=max_graphs,
+            max_evals=max_evals,
+            max_builders=max_builders,
+            ttl=ttl,
+        )
+    except Exception as exc:
+        return (
+            _phase_entry(
+                "graph_drain_controller",
+                "error",
+                blockers=[str(exc)],
+                details={"error_type": type(exc).__name__},
+            ),
+            0,
+        )
+    if not isinstance(payload, dict):
+        payload = {"ok": False, "reason": "invalid_graph_drain_response"}
+    drain_counters = payload.get("counters") if isinstance(payload.get("counters"), dict) else {}
+    submitted_count = _coerce_int(drain_counters.get("drain_submitted"), 0, min_value=0)
+    dry_run = bool(payload.get("dry_run", not apply))
+    actions = [
+        item
+        for item in payload.get("actions", [])
+        if isinstance(item, dict)
+    ]
+    skipped = [
+        item
+        for item in payload.get("skipped", [])
+        if isinstance(item, dict)
+    ]
+    status = "ok" if bool(payload.get("ok", True)) else "warn"
+    return (
+        _phase_entry(
+            "graph_drain_controller",
+            status,
+            actions=actions,
+            skipped=skipped,
+            counters={
+                "submitted": submitted_count,
+                "evals_dispatched": _coerce_int(drain_counters.get("evals_dispatched"), 0, min_value=0),
+                "builders_dispatched": _coerce_int(drain_counters.get("builders_dispatched"), 0, min_value=0),
+                "eval_attempts": _coerce_int(drain_counters.get("eval_attempts"), 0, min_value=0),
+                "builder_attempts": _coerce_int(drain_counters.get("builder_attempts"), 0, min_value=0),
+                "reconciled": _coerce_int(drain_counters.get("reconciled"), 0, min_value=0),
+                "dry_run": int(dry_run),
+            },
+            details=payload,
+        ),
+        submitted_count,
+    )
+
+
 def _iter_pm_records(pm_mod: Any) -> Iterable[tuple[Path, dict[str, Any]]]:
     inbox_dir = getattr(pm_mod, "PM_INBOX_DIR", HARNESS_DIR / "run" / "pm-inbox")
     if not inbox_dir.exists():
@@ -342,6 +421,7 @@ def run_watchdog(
     pm_dispatch_module: Any | None = None,
     quota_refresh_module: Any | None = None,
     prune_module: Any | None = None,
+    graph_drain_module: Any | None = None,
 ) -> dict[str, Any]:
     started_at = _iso_now()
     run_id = run_id or f"ohw-{_iso_now().replace(':', '').replace('-', '')}-{os.getpid()}"
@@ -381,6 +461,12 @@ def run_watchdog(
         lease_adapter_mod = _load_tool("operator_health_watchdog_lease_adapters")
     except Exception:
         lease_adapter_mod = None
+    graph_drain_mod = graph_drain_module
+    if graph_drain_mod is None:
+        try:
+            graph_drain_mod = _load_tool("graph_drain_controller")
+        except Exception:
+            graph_drain_mod = None
 
     phases: list[dict[str, Any]] = []
     actions: list[dict[str, Any]] = []
@@ -751,9 +837,20 @@ def run_watchdog(
             )
         else:
             phases.append(_phase_entry("repair_status_projection", "skipped", skipped=[{"reason": "adapter_missing"}]))
+
+        graph_drain_phase, graph_drain_submitted = _run_graph_drain_phase(
+            graph_drain_mod,
+            apply=apply,
+            capacity=capacity,
+        )
+        counters["drain_submitted"] += graph_drain_submitted
+        summary["graph_drain_submitted"] = graph_drain_submitted
+        phases.append(graph_drain_phase)
+
         drain_phase, drain_submitted = _run_safe_drain_phase(pm_mod, apply=apply, capacity=capacity)
         counters["drain_submitted"] += drain_submitted
-        summary["drain_submitted"] = drain_submitted
+        summary["pm_drain_submitted"] = drain_submitted
+        summary["drain_submitted"] = counters["drain_submitted"]
         phases.append(drain_phase)
         backlog_after = _read_pm_backlog(pm_mod)
     finally:
