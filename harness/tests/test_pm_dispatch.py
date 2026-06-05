@@ -634,6 +634,50 @@ def test_cmd_fail_requeues_transient_operator_failure_graph_node(monkeypatch, tm
     assert record["graph_requeue"]["released"] is True
 
 
+def test_transient_builder_release_reads_operator_log_tail(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+
+    task_id = "pm-sprint-logtail-B1-test"
+    graph_path = sprints / "sprint-logtail.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-logtail",
+                "nodes": [
+                    {
+                        "id": "B1",
+                        "status": "dispatched",
+                        "dispatch_id": task_id,
+                        "pm_task_id": task_id,
+                        "operator_id": "mini-codex-gpt53-spark-builder-1",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = pm_dispatch.release_builder_assignment_on_transient_failure(
+        {
+            "task_id": task_id,
+            "sprint_id": "sprint-logtail",
+            "node_id": "B1",
+            "operator_id": "mini-codex-gpt53-spark-builder-1",
+            "status": "failed",
+            "log_tail": "[flow-control] runtime_state=cooldown",
+        }
+    )
+
+    assert result["released"] is True
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert node["status"] == "pending"
+    assert node["requeue_reason"] == "transient_operator_failure"
+
+
 def test_cmd_complete_marks_builder_graph_node_reviewing(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     sprints = tmp_path / "sprints"
@@ -798,3 +842,47 @@ def test_transient_evaluator_failure_releases_graph_assignment(monkeypatch, tmp_
     assert "eval_assignments" not in node
     assert node["eval_requeue_history"][0]["task_id"] == task_id
     assert "eval_dispatch_id" not in graph["node_results"]["E1"]
+
+
+def test_transient_evaluator_release_reads_operator_stderr(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    sprints = tmp_path / "sprints"
+    sprints.mkdir(parents=True)
+    monkeypatch.setattr(pm_dispatch, "SPRINTS_DIR", sprints)
+
+    task_id = "pm-sprint-eval-stderr-E1-test"
+    graph_path = sprints / "sprint-eval-stderr.task_graph.json"
+    graph_path.write_text(
+        json.dumps(
+            {
+                "sprint_id": "sprint-eval-stderr",
+                "nodes": [
+                    {
+                        "id": "E1",
+                        "status": "reviewing",
+                        "eval_dispatch_id": task_id,
+                        "eval_assignments": [{"task_id": task_id, "operator_id": "mini-claude-opus-evaluator"}],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = pm_dispatch.release_evaluator_assignment_on_transient_failure(
+        {
+            "task_id": task_id,
+            "sprint_id": "sprint-eval-stderr",
+            "node_id": "E1",
+            "operator_id": "mini-claude-opus-evaluator",
+            "requested_role": "evaluator",
+            "status": "failed",
+            "stderr": "quota exhausted by provider",
+        }
+    )
+
+    assert result["released"] is True
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    node = graph["nodes"][0]
+    assert "eval_dispatch_id" not in node
+    assert "eval_assignments" not in node
