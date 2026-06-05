@@ -459,6 +459,100 @@ def test_hf_build_grouped_report_figure_specs_generates_grounded_specs():
     assert any(spec.placement == "section_inline" for spec in specs)
 
 
+def test_hf_grouped_report_flow_batches_section_writer_calls():
+    ns = _load_namespace()
+    public_records = [
+        {"paper_id": "p1", "title": "Paper 1"},
+        {"paper_id": "p2", "title": "Paper 2"},
+        {"paper_id": "p3", "title": "Paper 3"},
+    ]
+    plan = {
+        "headline": "HF Weekly",
+        "executive_summary": "summary",
+        "sections": [
+            {"section_id": "s1", "title": "Section 1", "paper_ids": ["p1"]},
+            {"section_id": "s2", "title": "Section 2", "paper_ids": ["p2"]},
+            {"section_id": "s3", "title": "Section 3", "paper_ids": ["p3"]},
+        ],
+    }
+    calls: list[str] = []
+
+    ns["hf_paper_high_reasoning_config"] = lambda config, requested_mode: ({"model": "chatgpt-5.5"}, "browser_agent")
+    ns["hf_build_report_planner_prompt"] = lambda *args, **kwargs: "planner"
+    ns["hf_normalize_report_plan"] = lambda raw_plan, public_records, date_str, report_context=None: plan
+
+    def _fake_call(prompt, config, *, purpose, model_name, chapter_id, required_keys, max_attempts=2):
+        calls.append(purpose)
+        if purpose.startswith("hf-paper-report-plan-"):
+            return {
+                "headline": "HF Weekly",
+                "executive_summary": "summary",
+                "sections": plan["sections"],
+            }
+        if purpose.endswith("batch-01"):
+            return {
+                "sections": [
+                    {
+                        "section_id": "s1",
+                        "title": "Section 1",
+                        "trend_type": "real_trend",
+                        "section_summary": "summary 1",
+                        "trend_description": "desc 1",
+                        "insight_analysis": "analysis 1",
+                        "planning_recommendations": ["next 1"],
+                        "paper_commentary": [{"paper_id": "p1", "title": "Paper 1", "role": "role", "takeaway": "take", "evidence_ids": ["p1"]}],
+                        "evidence_ids": ["p1"],
+                        "evidence_gap": [],
+                    },
+                    {
+                        "section_id": "s2",
+                        "title": "Section 2",
+                        "trend_type": "real_trend",
+                        "section_summary": "summary 2",
+                        "trend_description": "desc 2",
+                        "insight_analysis": "analysis 2",
+                        "planning_recommendations": ["next 2"],
+                        "paper_commentary": [{"paper_id": "p2", "title": "Paper 2", "role": "role", "takeaway": "take", "evidence_ids": ["p2"]}],
+                        "evidence_ids": ["p2"],
+                        "evidence_gap": [],
+                    },
+                ]
+            }
+        return {
+            "sections": [
+                {
+                    "section_id": "s3",
+                    "title": "Section 3",
+                    "trend_type": "watchlist",
+                    "section_summary": "summary 3",
+                    "trend_description": "desc 3",
+                    "insight_analysis": "analysis 3",
+                    "planning_recommendations": ["next 3"],
+                    "paper_commentary": [{"paper_id": "p3", "title": "Paper 3", "role": "role", "takeaway": "take", "evidence_ids": ["p3"]}],
+                    "evidence_ids": ["p3"],
+                    "evidence_gap": [],
+                }
+            ]
+        }
+
+    ns["hf_call_report_json_with_repair"] = _fake_call
+
+    result = ns["hf_call_grouped_report_flow"](
+        public_records,
+        {"hf_paper_insight": {"reporting": {"grouped_report_section_batch_size": 2}}},
+        date_str="2026-06-05",
+        report_context={"window_label": "2026-05-29 ~ 2026-06-05"},
+    )
+
+    assert result["ok"] is True
+    assert [item["section_id"] for item in result["sections"]] == ["s1", "s2", "s3"]
+    assert calls == [
+        "hf-paper-report-plan-2026-06-05",
+        "hf-paper-report-sections-2026-06-05-batch-01",
+        "hf-paper-report-sections-2026-06-05-batch-02",
+    ]
+
+
 def test_hf_weekly_priority_score_prefers_persistent_high_rank_signals():
     ns = _load_namespace()
     end_date = ns["dt"].date(2026, 6, 1)

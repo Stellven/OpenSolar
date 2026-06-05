@@ -571,6 +571,7 @@ def browser_agent_report_config(config: dict[str, Any]) -> dict[str, Any]:
     report_cfg.setdefault("title_prefix", "AI Influence YouTube Report")
     report_cfg.setdefault("lineage_prefix", "ai-influence-youtube-report")
     report_cfg.setdefault("project_name", "杂项")
+    report_cfg.setdefault("phase2_batch_size", 2)
     return report_cfg
 
 
@@ -662,6 +663,7 @@ def maybe_write_browser_agent_report(
         sprint_id=f"youtube-influence-{run_id}",
         provider_options=provider_options,
         figure_operator_options=figure_operator_options,
+        phase2_batch_size=int(report_cfg.get("phase2_batch_size") or 2),
     )
     status_path = run_dir / "browser-agent-report-status.json"
     status_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

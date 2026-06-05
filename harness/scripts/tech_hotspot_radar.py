@@ -9545,6 +9545,156 @@ def hf_build_section_writer_prompt(
 """
 
 
+def hf_grouped_report_section_batch_size(config: dict[str, Any]) -> int:
+    hf_cfg = dict(config.get("hf_paper_insight") or {})
+    reporting_cfg = dict(hf_cfg.get("reporting") or {})
+    raw_value = reporting_cfg.get("grouped_report_section_batch_size")
+    if raw_value is None:
+        raw_value = hf_cfg.get("grouped_report_section_batch_size")
+    try:
+        return max(int(raw_value or 2), 1)
+    except Exception:
+        return 2
+
+
+def hf_build_section_batch_writer_prompt(
+    sections: list[dict[str, Any]],
+    section_records_map: dict[str, list[dict[str, Any]]],
+    *,
+    date_str: str,
+    model_name: str,
+    report_context: dict[str, Any] | None = None,
+) -> str:
+    context = report_context or hf_report_context(date_str, {})
+    sections_payload: list[dict[str, Any]] = []
+    for section in sections:
+        section_id = str(section.get("section_id") or "").strip()
+        section_payload = []
+        for record in section_records_map.get(section_id) or []:
+            section_payload.append({
+                "paper_id": record.get("paper_id"),
+                "packet_id": record.get("packet_id"),
+                "title": record.get("title"),
+                "summary": record.get("summary"),
+                "taxonomy": record.get("taxonomy"),
+                "scores": record.get("scores"),
+                "github": record.get("github"),
+                "assets": record.get("assets"),
+                "judgment": record.get("judgment"),
+                "why_matters": record.get("why_matters"),
+                "recommended_action": record.get("recommended_action"),
+                "reasoning": record.get("reasoning"),
+            })
+        sections_payload.append(
+            {
+                "section": section,
+                "paper_materials": section_payload,
+            }
+        )
+    return f"""你是 AI Influence 的 HF Paper 批量章节主笔。
+
+你这次要一次写多个趋势部分。请基于每个部分分到的论文，分别写出该部分的趋势描述、洞察分析和规划建议。
+
+硬规则：
+- 只能基于输入的论文材料与已有判断，不要引入外部事实。
+- 不是逐篇复述摘要，而是提炼“这一组论文共同说明了什么变化”。
+- 必须给出每个部分内部每篇论文的角色定位。
+- 每个核心判断都要带 evidence_ids。
+- 输出必须是合法 JSON object，不要 Markdown，不要代码块，不要解释系统行为。
+
+输出 JSON schema：
+{{
+  "sections": [
+    {{
+      "section_id": "部分ID",
+      "title": "部分标题",
+      "trend_type": "real_trend|weak_signal|hype|watchlist",
+      "section_summary": "一段100-180字的部分摘要",
+      "trend_description": "该部分趋势描述",
+      "insight_analysis": "该部分洞察分析",
+      "planning_recommendations": ["规划建议1", "规划建议2"],
+      "paper_commentary": [
+        {{
+          "paper_id": "论文ID",
+          "title": "论文标题",
+          "role": "这篇论文在该部分里的角色",
+          "takeaway": "这篇论文最值得看的点",
+          "evidence_ids": ["paper_id", "packet_id"]
+        }}
+      ],
+      "evidence_ids": ["paper_id 或 packet_id"],
+      "evidence_gap": []
+    }}
+  ]
+}}
+
+报告周期：{context.get('window_label') or date_str}
+报告日期：{date_str}
+模型：{model_name}
+
+批量部分规划与论文材料：
+{json.dumps(sections_payload, ensure_ascii=False, indent=2)}
+"""
+
+
+def hf_call_grouped_report_section_batch(
+    sections: list[dict[str, Any]],
+    section_records_map: dict[str, list[dict[str, Any]]],
+    config: dict[str, Any],
+    *,
+    date_str: str,
+    model_name: str,
+    report_context: dict[str, Any] | None = None,
+    batch_index: int = 1,
+) -> list[dict[str, Any]]:
+    payload = hf_call_report_json_with_repair(
+        hf_build_section_batch_writer_prompt(
+            sections,
+            section_records_map,
+            date_str=date_str,
+            model_name=model_name,
+            report_context=report_context,
+        ),
+        config,
+        purpose=f"hf-paper-report-sections-{date_str}-batch-{batch_index:02d}",
+        model_name=model_name,
+        chapter_id=f"hf-report-sections-batch-{batch_index:02d}",
+        required_keys=["sections"],
+    )
+    items = payload.get("sections") or []
+    if not isinstance(items, list) or not items:
+        raise ValueError(f"hf_grouped_report_section_batch_missing_sections:{batch_index}")
+    by_id = {
+        str(item.get("section_id") or "").strip(): item
+        for item in items
+        if isinstance(item, dict) and str(item.get("section_id") or "").strip()
+    }
+    required_keys = [
+        "title",
+        "section_summary",
+        "trend_description",
+        "insight_analysis",
+        "planning_recommendations",
+        "paper_commentary",
+    ]
+    normalized: list[dict[str, Any]] = []
+    missing_sections: list[str] = []
+    for section in sections:
+        section_id = str(section.get("section_id") or "").strip()
+        item = by_id.get(section_id)
+        if not isinstance(item, dict):
+            missing_sections.append(section_id or "unknown")
+            continue
+        missing = [key for key in required_keys if _hf_missing_value(item.get(key))]
+        if missing:
+            raise ValueError(f"hf_grouped_report_section_batch_missing_keys:{section_id}:{missing}")
+        item["paper_ids"] = list(section.get("paper_ids") or [])
+        normalized.append(item)
+    if missing_sections:
+        raise ValueError(f"hf_grouped_report_section_batch_missing_section_ids:{','.join(missing_sections)}")
+    return normalized
+
+
 def hf_call_report_json_with_repair(prompt: str, config: dict[str, Any], *, purpose: str, model_name: str, chapter_id: str, required_keys: list[str], max_attempts: int = 2) -> dict[str, Any]:
     high_cfg, _mode = hf_paper_high_reasoning_config(config, "browser_agent")
     errors: list[str] = []
@@ -9626,20 +9776,52 @@ def hf_call_grouped_report_flow(
     plan = hf_normalize_report_plan(raw_plan, public_records, date_str=date_str, report_context=context)
     record_map = {str(item.get("paper_id") or "").strip(): item for item in public_records}
     sections: list[dict[str, Any]] = []
+    section_jobs: list[dict[str, Any]] = []
     for idx, section in enumerate(plan.get("sections") or [], 1):
         section_records = [record_map[pid] for pid in section.get("paper_ids") or [] if pid in record_map]
         if not section_records:
             continue
-        section_payload = hf_call_report_json_with_repair(
-            hf_build_section_writer_prompt(section, section_records, date_str=date_str, model_name=model_name, report_context=context),
-            config,
-            purpose=f"hf-paper-report-section-{date_str}-{section.get('section_id') or idx}",
-            model_name=model_name,
-            chapter_id=str(section.get("section_id") or f"section-{idx}"),
-            required_keys=["title", "section_summary", "trend_description", "insight_analysis", "planning_recommendations", "paper_commentary"],
+        section_jobs.append(
+            {
+                "section": section,
+                "records": section_records,
+                "index": idx,
+            }
         )
-        section_payload["paper_ids"] = list(section.get("paper_ids") or [])
-        sections.append(section_payload)
+    batch_size = hf_grouped_report_section_batch_size(config)
+    for batch_index, offset in enumerate(range(0, len(section_jobs), batch_size), start=1):
+        batch = section_jobs[offset:offset + batch_size]
+        if batch_size <= 1:
+            for item in batch:
+                section = item["section"]
+                section_payload = hf_call_report_json_with_repair(
+                    hf_build_section_writer_prompt(
+                        section,
+                        item["records"],
+                        date_str=date_str,
+                        model_name=model_name,
+                        report_context=context,
+                    ),
+                    config,
+                    purpose=f"hf-paper-report-section-{date_str}-{section.get('section_id') or item['index']}",
+                    model_name=model_name,
+                    chapter_id=str(section.get("section_id") or f"section-{item['index']}"),
+                    required_keys=["title", "section_summary", "trend_description", "insight_analysis", "planning_recommendations", "paper_commentary"],
+                )
+                section_payload["paper_ids"] = list(section.get("paper_ids") or [])
+                sections.append(section_payload)
+            continue
+        sections.extend(
+            hf_call_grouped_report_section_batch(
+                [item["section"] for item in batch],
+                {str(item["section"].get("section_id") or ""): item["records"] for item in batch},
+                config,
+                date_str=date_str,
+                model_name=model_name,
+                report_context=context,
+                batch_index=batch_index,
+            )
+        )
     if not sections:
         raise ValueError("hf_grouped_report_no_sections")
     return {

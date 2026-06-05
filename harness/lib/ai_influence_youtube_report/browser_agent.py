@@ -19,7 +19,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from .ledger import append_model_call_ledger
-from .prompts import PHASE1_PLAN_PROMPT, PHASE2_CHAPTER_PROMPT, PHASE3_SYNTHESIS_PROMPT
+from .prompts import PHASE1_PLAN_PROMPT, PHASE2_BATCH_PROMPT, PHASE2_CHAPTER_PROMPT, PHASE3_SYNTHESIS_PROMPT
 
 
 class BrowserAgentProvider(Protocol):
@@ -63,6 +63,8 @@ def _phase_instruction(stage: str) -> str:
         return PHASE1_PLAN_PROMPT
     if stage == "phase2":
         return PHASE2_CHAPTER_PROMPT
+    if stage == "phase2_batch":
+        return PHASE2_BATCH_PROMPT
     if stage == "phase3":
         return PHASE3_SYNTHESIS_PROMPT
     raise RuntimeError(f"unsupported_browser_agent_stage:{stage}")
@@ -75,7 +77,7 @@ def _stage_kind(stage: str) -> str:
 
 
 def _stage_expected_output(stage: str) -> str:
-    if stage == "phase1":
+    if stage in {"phase1", "phase2_batch"}:
         return "json"
     return "markdown"
 
@@ -84,6 +86,7 @@ def _stage_purpose(stage: str) -> str:
     mapping = {
         "phase1": "ai-influence-youtube-report:phase1-plan",
         "phase2": "ai-influence-youtube-report:phase2-chapter",
+        "phase2_batch": "ai-influence-youtube-report:phase2-batch",
         "phase3": "ai-influence-youtube-report:phase3-synthesis",
     }
     return mapping.get(stage, f"ai-influence-youtube-report:{stage}")
@@ -365,6 +368,32 @@ class BrowserAgentClient:
             raise ValueError(f"duplicate phase2 chapter call: {chapter_id}")
         self._chapter_calls.add(chapter_id)
         return self._call("phase2", chapter_spec, requested_model=requested_model, run_id=run_id, chapter_id=chapter_id)
+
+    def write_chapter_batch(
+        self,
+        chapter_specs: list[dict[str, Any]],
+        *,
+        requested_model: str,
+        run_id: str,
+        batch_id: str,
+    ) -> dict[str, Any]:
+        chapter_ids: list[str] = []
+        for item in chapter_specs:
+            chapter = item.get("chapter") if isinstance(item, dict) else {}
+            chapter_id = str((chapter or {}).get("chapter_id") or "").strip()
+            if not chapter_id:
+                raise ValueError("phase2_batch_missing_chapter_id")
+            if chapter_id in self._chapter_calls:
+                raise ValueError(f"duplicate phase2 chapter call: {chapter_id}")
+            chapter_ids.append(chapter_id)
+        self._chapter_calls.update(chapter_ids)
+        return self._call(
+            "phase2_batch",
+            {"chapters": chapter_specs},
+            requested_model=requested_model,
+            run_id=run_id,
+            chapter_id=batch_id,
+        )
 
     def synthesize(self, chapter_outputs: list[dict[str, Any]], *, requested_model: str, run_id: str) -> dict[str, Any]:
         return self._call("phase3", {"chapters": chapter_outputs}, requested_model=requested_model, run_id=run_id)

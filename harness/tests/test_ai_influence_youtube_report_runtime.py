@@ -118,6 +118,26 @@ class _FakeBrowserProvider(BrowserAgentProvider):
                     ensure_ascii=False,
                 ),
             }
+        if stage == "phase2_batch":
+            chapters = []
+            for item in payload.get("chapters") or []:
+                chapter = item.get("chapter") or {}
+                chapter_id_value = str(chapter.get("chapter_id") or "")
+                chapters.append(
+                    {
+                        "chapter_id": chapter_id_value,
+                        "title": str(chapter.get("title") or chapter_id_value),
+                        "text": f"{chapter.get('title') or chapter_id_value} 正文章节。",
+                        "evidence_refs": list(chapter.get("evidence_refs") or []),
+                    }
+                )
+            return {
+                "model_call_id": f"batch-{chapter_id}",
+                "browser_session_id": f"session-{chapter_id}",
+                "chatgpt_url": f"https://chatgpt.com/c/{chapter_id}",
+                "resolved_model": requested_model,
+                "text": json.dumps({"chapters": chapters}, ensure_ascii=False),
+            }
         if stage == "phase2":
             return {
                 "model_call_id": f"chapter-{chapter_id}",
@@ -189,3 +209,75 @@ def test_generate_browser_agent_report_bundle_emits_runtime_artifacts(tmp_path: 
     assert result["painted_figure_count"] >= 1
     report_html = (runtime_dir / "report.html").read_text(encoding="utf-8")
     assert "<img src=" in report_html
+
+
+def test_generate_browser_agent_report_bundle_batches_phase2_calls(tmp_path: Path) -> None:
+    class _RecordingProvider(_FakeBrowserProvider):
+        def __init__(self) -> None:
+            self.stages: list[str] = []
+
+        def call(self, stage, payload, *, requested_model, run_id="", chapter_id="", sprint_id=""):
+            self.stages.append(stage)
+            if stage == "phase1":
+                return {
+                    "model_call_id": "plan-1",
+                    "browser_session_id": "session-plan",
+                    "chatgpt_url": "https://chatgpt.com/c/plan-1",
+                    "resolved_model": requested_model,
+                    "text": json.dumps(
+                        {
+                            "trends": [
+                                {
+                                    "title": "Agent Platforms",
+                                    "chapters": [
+                                        {
+                                            "chapter_id": "chapter-1",
+                                            "title": "平台化趋势",
+                                            "subsections": [{"subsection_id": "sub-1", "title": "核心证据", "evidence_refs": ["E001"]}],
+                                        },
+                                        {
+                                            "chapter_id": "chapter-2",
+                                            "title": "工作流含义",
+                                            "subsections": [{"subsection_id": "sub-2", "title": "关键推断", "evidence_refs": ["E001"]}],
+                                        },
+                                        {
+                                            "chapter_id": "chapter-3",
+                                            "title": "证据边界",
+                                            "subsections": [{"subsection_id": "sub-3", "title": "限制", "evidence_refs": ["E001"]}],
+                                        },
+                                    ],
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+            return super().call(stage, payload, requested_model=requested_model, run_id=run_id, chapter_id=chapter_id, sprint_id=sprint_id)
+
+    provider = _RecordingProvider()
+    result = generate_browser_agent_report_bundle(
+        [
+            {
+                "evidence_ref": "E001",
+                "channel": "AI Engineer",
+                "title": "Agent Platforms",
+                "published_at": "2026-05-25T00:00:00Z",
+                "transcript_grade": "T1",
+                "citation_span": "agent runtime",
+                "group_type": "conference",
+                "summary": "平台趋势总结",
+                "transcript": "agent runtime and workflow infrastructure",
+            }
+        ],
+        run_dir=tmp_path / "run",
+        run_id="run-2",
+        report_title="AI Influence 平台化报告",
+        provider=provider,
+        requested_model="chatgpt-5.5-thinking-high",
+        figure_operator_runner=_fake_figure_runner,
+        phase2_batch_size=2,
+    )
+
+    assert result["ok"] is True
+    assert provider.stages.count("phase2_batch") == 2
+    assert "phase2" not in provider.stages

@@ -24,6 +24,7 @@ output:
   browser_agent_report:
     enabled: false
     requested_model: chatgpt-5.5-thinking-high
+    phase2_batch_size: 2
     title_prefix: AI Influence YouTube Report
     lineage_prefix: ai-influence-youtube-report
     project_name: 杂项

@@ -37,6 +37,24 @@ def test_browser_agent_client_writes_ledger_for_each_phase(tmp_path: Path) -> No
     assert [row["stage"] for row in rows] == ["phase1", "phase2", "phase3"]
 
 
+def test_browser_agent_client_writes_ledger_for_batch_phase(tmp_path: Path) -> None:
+    ledger = tmp_path / "model_call_ledger.jsonl"
+    client = BrowserAgentClient(FakeProvider(), ledger_path=ledger, sprint_id="sprint-1")
+
+    client.write_chapter_batch(
+        [
+            {"chapter": {"chapter_id": "c1", "title": "第一章"}, "evidence_rows": []},
+            {"chapter": {"chapter_id": "c2", "title": "第二章"}, "evidence_rows": []},
+        ],
+        requested_model="chatgpt-5.5-thinking-high",
+        run_id="run-1",
+        batch_id="batch-01",
+    )
+
+    rows = [json.loads(line) for line in ledger.read_text().splitlines()]
+    assert [row["stage"] for row in rows] == ["phase2_batch"]
+
+
 def test_browser_agent_client_rejects_local_model_substitution(tmp_path: Path) -> None:
     client = BrowserAgentClient(FakeProvider(), ledger_path=tmp_path / "ledger.jsonl", sprint_id="sprint-1")
 
@@ -50,6 +68,19 @@ def test_phase2_duplicate_chapter_call_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="duplicate"):
         client.write_chapter({}, requested_model="chatgpt-5.5-thinking-high", run_id="run-1", chapter_id="c1")
+
+
+def test_phase2_batch_duplicate_chapter_call_is_rejected(tmp_path: Path) -> None:
+    client = BrowserAgentClient(FakeProvider(), ledger_path=tmp_path / "ledger.jsonl", sprint_id="sprint-1")
+    client.write_chapter({}, requested_model="chatgpt-5.5-thinking-high", run_id="run-1", chapter_id="c1")
+
+    with pytest.raises(ValueError, match="duplicate"):
+        client.write_chapter_batch(
+            [{"chapter": {"chapter_id": "c1", "title": "重复章"}, "evidence_rows": []}],
+            requested_model="chatgpt-5.5-thinking-high",
+            run_id="run-1",
+            batch_id="batch-01",
+        )
 
 
 def test_chatgpt_report_operator_provider_invokes_production_seam(tmp_path: Path) -> None:

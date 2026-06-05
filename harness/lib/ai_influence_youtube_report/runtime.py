@@ -117,6 +117,73 @@ def _chapter_payload(chapter: dict[str, Any], evidence_rows: list[dict[str, Any]
     }
 
 
+def _chapter_batch_payload(
+    batch: list[dict[str, Any]],
+    *,
+    report_title: str,
+    run_id: str,
+) -> list[dict[str, Any]]:
+    return [
+        _chapter_payload(item["chapter"], item["evidence_rows"], report_title=report_title, run_id=run_id)
+        for item in batch
+    ]
+
+
+def _chapter_batches(items: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
+    size = max(int(batch_size or 1), 1)
+    return [items[index:index + size] for index in range(0, len(items), size)]
+
+
+def _parse_chapter_batch_text(batch_result: dict[str, Any], requested_batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    text = str(batch_result.get("text") or "").strip()
+    if not text:
+        raise RuntimeError("browser_agent_phase2_batch_empty")
+    try:
+        payload = json.loads(text)
+    except Exception as exc:
+        raise RuntimeError(f"browser_agent_phase2_batch_invalid_json:{type(exc).__name__}:{exc}") from exc
+    if isinstance(payload, dict):
+        entries = payload.get("chapters") or payload.get("items") or payload.get("results") or []
+    elif isinstance(payload, list):
+        entries = payload
+    else:
+        entries = []
+    if not isinstance(entries, list) or not entries:
+        raise RuntimeError("browser_agent_phase2_batch_missing_chapters")
+    by_id = {
+        str(item.get("chapter_id") or "").strip(): item
+        for item in entries
+        if isinstance(item, dict) and str(item.get("chapter_id") or "").strip()
+    }
+    outputs: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for requested in requested_batch:
+        chapter = requested["chapter"]
+        chapter_id = str(chapter.get("chapter_id") or "").strip()
+        payload_item = by_id.get(chapter_id)
+        if not isinstance(payload_item, dict):
+            missing.append(chapter_id)
+            continue
+        chapter_text = str(payload_item.get("text") or payload_item.get("markdown") or "").strip()
+        if not chapter_text:
+            missing.append(chapter_id)
+            continue
+        outputs.append(
+            {
+                "chapter_id": chapter_id,
+                "title": str(payload_item.get("title") or chapter.get("title") or chapter_id),
+                "trend_title": str(chapter.get("trend_title") or ""),
+                "evidence_refs": list(chapter.get("evidence_refs") or []),
+                "text": chapter_text,
+                "chatgpt_url": str(batch_result.get("chatgpt_url") or ""),
+                "browser_session_id": str(batch_result.get("browser_session_id") or ""),
+            }
+        )
+    if missing:
+        raise RuntimeError(f"browser_agent_phase2_batch_missing_outputs:{','.join(missing)}")
+    return outputs
+
+
 def _synthesis_payload(chapter_outputs: list[dict[str, Any]], *, report_title: str, run_id: str) -> dict[str, Any]:
     return {
         "run_id": run_id,
@@ -137,6 +204,7 @@ def generate_browser_agent_report_bundle(
     provider_options: dict[str, Any] | None = None,
     figure_operator_runner: Any = None,
     figure_operator_options: dict[str, Any] | None = None,
+    phase2_batch_size: int = 2,
 ) -> dict[str, Any]:
     runtime_dir = _ensure_dir(Path(run_dir).expanduser() / "browser-agent-report")
     sources = _normalize_sources(source_items)
@@ -163,29 +231,41 @@ def generate_browser_agent_report_bundle(
     plan_json = _parse_plan_text(plan_result)
     chapters = _flatten_chapters(plan_json)
     evidence_by_ref = {str(item["evidence_ref"]): item for item in safe_sources}
-    chapter_outputs: list[dict[str, Any]] = []
-
+    chapter_jobs: list[dict[str, Any]] = []
     for chapter in chapters:
         evidence_rows = [evidence_by_ref[ref] for ref in chapter.get("evidence_refs") or [] if ref in evidence_by_ref]
         if not evidence_rows:
             continue
-        chapter_result = client.write_chapter(
-            _chapter_payload(chapter, evidence_rows, report_title=report_title, run_id=run_id),
+        chapter_jobs.append({"chapter": chapter, "evidence_rows": evidence_rows})
+    chapter_outputs: list[dict[str, Any]] = []
+    for batch_index, batch in enumerate(_chapter_batches(chapter_jobs, phase2_batch_size), start=1):
+        if len(batch) == 1 and max(int(phase2_batch_size or 1), 1) <= 1:
+            chapter = batch[0]["chapter"]
+            chapter_result = client.write_chapter(
+                _chapter_payload(chapter, batch[0]["evidence_rows"], report_title=report_title, run_id=run_id),
+                requested_model=requested_model,
+                run_id=run_id,
+                chapter_id=str(chapter["chapter_id"]),
+            )
+            chapter_outputs.append(
+                {
+                    "chapter_id": str(chapter["chapter_id"]),
+                    "title": str(chapter.get("title") or chapter["chapter_id"]),
+                    "trend_title": str(chapter.get("trend_title") or ""),
+                    "evidence_refs": list(chapter.get("evidence_refs") or []),
+                    "text": str(chapter_result.get("text") or "").strip(),
+                    "chatgpt_url": str(chapter_result.get("chatgpt_url") or ""),
+                    "browser_session_id": str(chapter_result.get("browser_session_id") or ""),
+                }
+            )
+            continue
+        batch_result = client.write_chapter_batch(
+            _chapter_batch_payload(batch, report_title=report_title, run_id=run_id),
             requested_model=requested_model,
             run_id=run_id,
-            chapter_id=str(chapter["chapter_id"]),
+            batch_id=f"batch-{batch_index:02d}",
         )
-        chapter_outputs.append(
-            {
-                "chapter_id": str(chapter["chapter_id"]),
-                "title": str(chapter.get("title") or chapter["chapter_id"]),
-                "trend_title": str(chapter.get("trend_title") or ""),
-                "evidence_refs": list(chapter.get("evidence_refs") or []),
-                "text": str(chapter_result.get("text") or "").strip(),
-                "chatgpt_url": str(chapter_result.get("chatgpt_url") or ""),
-                "browser_session_id": str(chapter_result.get("browser_session_id") or ""),
-            }
-        )
+        chapter_outputs.extend(_parse_chapter_batch_text(batch_result, batch))
     if not chapter_outputs:
         raise RuntimeError("browser_agent_report_no_chapter_outputs")
 

@@ -1226,6 +1226,7 @@ hf_paper_insight:
     merge_daily_hotspots: true
     core_paper_limit: 12
     supporting_paper_limit: 24
+    grouped_report_section_batch_size: 2
   figure_bundle:
     enabled: true
     max_figures: 3
