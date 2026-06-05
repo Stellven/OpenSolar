@@ -1329,6 +1329,19 @@ def _legacy_handoff_aliases(node_id: str) -> list[str]:
     return aliases
 
 
+def _strict_dependencies_passed(graph: dict[str, Any], node: dict[str, Any]) -> bool:
+    ids = {str(item.get("id") or ""): item for item in graph.get("nodes", []) if isinstance(item, dict)}
+    for dep in node.get("depends_on") or []:
+        dep_id = str(dep or "")
+        if dep_id.startswith("external:"):
+            continue
+        if dep_id not in ids:
+            return False
+        if node_status(graph, dep_id) != "passed":
+            return False
+    return True
+
+
 def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, Any]) -> list[Path]:
     node_id = str(node.get("id") or "")
     candidates = [_handoff_file(sid, node_id)]
@@ -1337,7 +1350,8 @@ def _node_handoff_candidates(sid: str, node: dict[str, Any], graph: dict[str, An
     parent_handoff = f"sprints/{sid}.handoff.md"
     for scope in node.get("write_scope") or []:
         if str(scope).endswith(parent_handoff) or str(scope).endswith(f"{sid}.handoff.md"):
-            candidates.append(SPRINTS_DIR / f"{sid}.handoff.md")
+            if _strict_dependencies_passed(graph, node):
+                candidates.append(SPRINTS_DIR / f"{sid}.handoff.md")
             break
     return candidates
 

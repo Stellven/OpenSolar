@@ -282,7 +282,18 @@ def main() -> int:
 
     if args.command == "run":
         if args.loop and int(args.interval) <= 0:
-            print("degraded: --loop requires --interval > 0", file=sys.stderr)
+            payload = {
+                "ok": False,
+                "degraded_reason": "--loop requires --interval > 0",
+                "run_once": {
+                    "interval": int(args.interval),
+                    "mode": "loop",
+                },
+            }
+            if args.json:
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+            else:
+                print("degraded: --loop requires --interval > 0", file=sys.stderr)
             return 1
 
         if args.once:

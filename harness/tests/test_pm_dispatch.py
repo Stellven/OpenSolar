@@ -445,6 +445,44 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
     }
 
 
+def test_operator_health_watchdog_status_projects_latest_and_legacy_pruner(monkeypatch, tmp_path):
+    pm_dispatch = _load_pm_dispatch()
+    root = tmp_path / "harness"
+    latest = root / "run" / "operator-health-watchdog" / "latest.json"
+    latest.parent.mkdir(parents=True)
+    (latest.parent / "com.solar.harness.operator-health-watchdog.plist").write_text("<plist/>", encoding="utf-8")
+    latest.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "finished_at": "2026-06-05T02:00:00Z",
+                "last_exit_code": 0,
+                "counters": {
+                    "expired_blocks_pruned": 1,
+                    "pm_failures_reconciled": 2,
+                    "graph_nodes_released": 3,
+                    "stale_leases_released": 4,
+                    "drain_submitted": 5,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pm_dispatch, "HARNESS_DIR", root)
+    monkeypatch.setattr(pm_dispatch, "HOME", tmp_path)
+    monkeypatch.setattr(pm_dispatch.shutil, "which", lambda name: None)
+
+    status = pm_dispatch._operator_health_watchdog_status()
+
+    assert status["last_run_at"] == "2026-06-05T02:00:00Z"
+    assert status["last_exit_code"] == 0
+    assert status["installed"] is True
+    assert status["plist_path"].endswith("/run/operator-health-watchdog/com.solar.harness.operator-health-watchdog.plist")
+    assert status["last_actions"]["graph_nodes_released"] == 3
+    assert status["legacy_pruner"]["label"] == "com.solar.harness-rate-limit-pruner"
+    assert status["legacy_pruner"]["launchd_loaded"] is False
+
+
 def test_drain_builder_ready_submits_and_marks_graph(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
     sprints = tmp_path / "sprints"

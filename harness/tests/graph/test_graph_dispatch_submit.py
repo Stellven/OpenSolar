@@ -112,6 +112,15 @@ class TestSendToPaneLiteral:
         graph["required_gates"] = ["gate-shared"]
         graph["nodes"] = [
             {
+                "id": "N8",
+                "goal": "Upstream dependency",
+                "depends_on": [],
+                "write_scope": [],
+                "acceptance": [],
+                "status": "passed",
+                "gate": "gate-shared",
+            },
+            {
                 "id": "N9",
                 "goal": "Render planning.html",
                 "depends_on": ["N8"],
@@ -142,8 +151,39 @@ class TestSendToPaneLiteral:
                 "handoff": str(sprints / f"{sid}.handoff.md"),
             }
         ]
-        assert graph["nodes"][0]["status"] == "pending"
-        assert graph["nodes"][1]["status"] == "reviewing"
+        assert graph["nodes"][0]["status"] == "passed"
+        assert graph["nodes"][1]["status"] == "pending"
+        assert graph["nodes"][2]["status"] == "reviewing"
+
+    def test_sprint_level_handoff_waits_for_owner_dependencies(self, tmp_harness):
+        """A final sprint handoff must not make a join node reviewing before deps pass."""
+        tmp_path, sprints, sid, graph = tmp_harness
+        import graph_node_dispatcher as gnd
+
+        graph["nodes"] = [
+            {
+                "id": "N2",
+                "goal": "LaunchAgent work",
+                "depends_on": [],
+                "write_scope": [],
+                "acceptance": [],
+                "status": "pending",
+            },
+            {
+                "id": "N5",
+                "goal": "Write sprint handoff",
+                "depends_on": ["N2"],
+                "write_scope": [f"sprints/{sid}.handoff.md"],
+                "acceptance": ["handoff exists"],
+                "status": "pending",
+            },
+        ]
+        (sprints / f"{sid}.handoff.md").write_text("# Sprint handoff\n", encoding="utf-8")
+
+        repaired = gnd._reconcile_existing_dispatches(graph, sprints / f"{sid}.task_graph.json")
+
+        assert repaired == []
+        assert graph["nodes"][1]["status"] == "pending"
 
     def test_stale_submit_ack_without_live_lease_does_not_resurrect_dispatch(self, tmp_harness, monkeypatch):
         """Old ack files are not proof of a current dispatch after the lease expired."""

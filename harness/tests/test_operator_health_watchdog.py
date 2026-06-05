@@ -219,3 +219,61 @@ def test_watchdog_prefers_operator_and_lease_adapters(monkeypatch, tmp_path):
     assert ("projection_repair", "pm-task") in calls
     assert phases["repair_status_projection"]["status"] == "ok"
     assert payload["counters"]["stale_leases_released"] == 1
+
+
+def test_watchdog_safe_drain_uses_pm_drain_dry_run_by_default(monkeypatch, tmp_path):
+    watchdog = _load_core_watchdog()
+    monkeypatch.setattr(watchdog, "LOCK_PATH", tmp_path / "lock")
+    monkeypatch.setattr(watchdog, "LATEST_REPORT_PATH", tmp_path / "latest.json")
+    monkeypatch.setattr(watchdog, "HISTORY_PATH", tmp_path / "history.jsonl")
+    calls: list[tuple[str, object]] = []
+
+    class FakePM:
+        PM_INBOX_DIR = tmp_path / "pm-inbox"
+
+        def __init__(self):
+            self.PM_INBOX_DIR.mkdir(parents=True, exist_ok=True)
+
+        def cmd_reconcile(self, args):
+            print('{"ok": true, "summary": {}}')
+            return 0
+
+        def cmd_drain_builder_ready(self, args):
+            calls.append(("drain", {"dry_run": args.dry_run, "max_items": args.max_items, "json": args.json}))
+            print(
+                '{"ok": false, "dry_run": true, "latent_builder_ready": 1, '
+                '"submitted": [], "marked": [], "skipped": [{"reason": "dry_run"}]}'
+            )
+            return 1
+
+    class FakeQuota:
+        def refresh_snapshot(self, *, apply=False):
+            return {
+                "ok": True,
+                "operators_total": 2,
+                "operators_usable": 1,
+                "operators_hard_blocked": 0,
+                "recommended_level": "normal",
+                "backlog": 1,
+                "groups": {},
+            }
+
+    def fake_load_tool(name):
+        if name == "pm_dispatch":
+            return FakePM()
+        if name == "operator_runtime":
+            return SimpleNamespace()
+        if name == "quota_refresh":
+            return FakeQuota()
+        raise FileNotFoundError(name)
+
+    monkeypatch.setattr(watchdog, "_load_tool", fake_load_tool)
+    monkeypatch.delenv("SOLAR_OHW_ENABLE_DRAIN_APPLY", raising=False)
+
+    payload = watchdog.run_watchdog(apply=True, max_age_minutes=15)
+    phases = {phase["phase"]: phase for phase in payload["phases"]}
+
+    assert calls == [("drain", {"dry_run": True, "max_items": 3, "json": True})]
+    assert phases["drain_if_capacity_available"]["status"] == "ok"
+    assert phases["drain_if_capacity_available"]["counters"]["dry_run"] == 1
+    assert payload["counters"]["drain_submitted"] == 0
