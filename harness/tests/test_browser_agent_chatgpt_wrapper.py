@@ -252,12 +252,16 @@ def test_chatgpt_wrapper_reuses_existing_conversation_page_for_collect():
     source = SCRIPT.read_text(encoding="utf-8")
     assert "async def _find_existing_conversation_page(browser, *, target_url: str):" in source
     assert "page = await _find_existing_conversation_page(browser, target_url=target_url)" in source
+    assert 'state = await _capture_state(page, timeout_s=5.0, default={}, label="find_existing_conversation_page")' in source
     assert "if str((current_state or {}).get(\"conversation_id\") or \"\").strip() == collect_target_id:" in source
+    assert 'current_state = await _capture_state(page, timeout_s=8.0, default={}, label="collect_current_state")' in source
     assert "should_navigate = False" in source
     assert "action == \"collect\"" in source
     assert "and not final_data.get(\"is_generating\")" in source
     assert "and int(final_data.get(\"assistant_count\") or 0) > 0" in source
     assert "final_data = await _wait_for_answer(" in source
+    assert 'baseline = await _capture_state(page, timeout_s=8.0, default={}, label="submit_prompt_baseline")' in source
+    assert 'pre_submit_ready = await _capture_state(page, timeout_s=8.0, default={}, label="pre_submit_isolation")' in source
 
 
 def test_capture_state_times_out_to_default():

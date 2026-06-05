@@ -61,8 +61,10 @@ def _load_namespace():
 
 def test_painter_wrapper_waits_for_chat_ready_before_submit() -> None:
     assert "async def _wait_for_chat_ready" in SOURCE
+    assert "async def _capture_state(" in SOURCE
     assert "await _wait_for_chat_ready(playwright_page, timeout_s=60)" in SOURCE
     assert "await _wait_for_chat_ready(playwright_page, timeout_s=45)" in SOURCE
+    assert 'state = await _capture_state(page, timeout_s=8.0, default=last_state, label="wait_for_chat_ready")' in SOURCE
     assert 'raise RuntimeError("chatgpt_cloudflare_challenge_detected")' in SOURCE
     assert "await page.reload()" in SOURCE
 

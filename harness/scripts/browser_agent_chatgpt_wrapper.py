@@ -328,7 +328,7 @@ async def _find_existing_conversation_page(browser, *, target_url: str):
         return None
     for page in pages:
         try:
-            state = json.loads(await page.evaluate(CAPTURE_JS))
+            state = await _capture_state(page, timeout_s=5.0, default={}, label="find_existing_conversation_page")
         except Exception:
             continue
         conversation_id = str((state or {}).get("conversation_id") or "").strip()
@@ -1082,7 +1082,7 @@ async def _wait_for_ready(page, *, timeout_s: int = 60) -> dict:
     challenge_since: float | None = None
     challenge_grace_s = _challenge_grace_seconds()
     while time.time() < deadline:
-        data = json.loads(await page.evaluate(CAPTURE_JS))
+        data = await _capture_state(page, timeout_s=8.0, default=last_data, label="wait_for_ready")
         last_data = data
         if data.get("login_wall"):
             raise RuntimeError("chatgpt_login_wall_detected")
@@ -1143,9 +1143,9 @@ async def _ensure_prompt_visible(page, prompt: str) -> dict:
 
 async def _wait_for_prompt_submission(page, baseline_message_count: int, *, timeout_s: float = 12.0) -> dict:
     deadline = time.time() + timeout_s
-    last_data = json.loads(await page.evaluate(CAPTURE_JS))
+    last_data = await _capture_state(page, timeout_s=8.0, default={}, label="wait_for_prompt_submission_initial")
     while time.time() < deadline:
-        data = json.loads(await page.evaluate(CAPTURE_JS))
+        data = await _capture_state(page, timeout_s=8.0, default=last_data, label="wait_for_prompt_submission")
         last_data = data
         if int(data.get("message_count") or 0) > baseline_message_count or data.get("is_generating"):
             return data
@@ -1154,7 +1154,7 @@ async def _wait_for_prompt_submission(page, baseline_message_count: int, *, time
 
 
 async def _submit_prompt(page, prompt: str) -> dict:
-    baseline = json.loads(await page.evaluate(CAPTURE_JS))
+    baseline = await _capture_state(page, timeout_s=8.0, default={}, label="submit_prompt_baseline")
     baseline_message_count = int(baseline.get("message_count") or 0)
     if len(prompt) > 1000 or "\n" in prompt:
         try:
@@ -1465,7 +1465,7 @@ async def _move_current_conversation_to_project(page, project_name: str, *, time
             if step.get("ok"):
                 result["steps"].append(step)
                 await asyncio.sleep(1.5)
-                final_state = json.loads(await page.evaluate(CAPTURE_JS))
+                final_state = await _capture_state(page, timeout_s=8.0, default={}, label="move_current_conversation_to_project")
                 result.update({
                     "ok": True,
                     "finished_at": bjrt._now(),
@@ -1504,7 +1504,7 @@ async def _open_project_new_chat(page, project_name: str) -> dict:
         await asyncio.sleep(1.5)
         step = json.loads(await page.evaluate(NEW_CHAT_JS))
         result["steps"].append(step)
-        ready = json.loads(await page.evaluate(CAPTURE_JS))
+        ready = await _capture_state(page, timeout_s=8.0, default={}, label="open_project_new_chat")
         message_count = int(ready.get("message_count") or 0)
         # Some project pages already open a blank composer; failure to find a
         # New Chat button is only safe when there are no existing messages.
@@ -1863,7 +1863,7 @@ async def _run(prompt: str) -> int:
                 page = await asyncio.wait_for(browser.new_page(), timeout=15)
         should_navigate = True
         if action in {"poll", "collect"} and collect_target_id:
-            current_state = json.loads(await page.evaluate(CAPTURE_JS))
+            current_state = await _capture_state(page, timeout_s=8.0, default={}, label="collect_current_state")
             if str((current_state or {}).get("conversation_id") or "").strip() == collect_target_id:
                 should_navigate = False
         if action in {"poll", "collect"} and _is_generic_chatgpt_root(target_url):
@@ -1955,7 +1955,7 @@ async def _run(prompt: str) -> int:
                         timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_COLLECT_TIMEOUT") or "45"),
                     )
                 except TimeoutError:
-                    final_data = json.loads(await page.evaluate(CAPTURE_JS))
+                    final_data = await _capture_state(page, timeout_s=8.0, default=final_data, label="collect_after_timeout")
             if final_data.get("is_generating") or not str(final_data.get("latest_assistant_text") or "").strip():
                 if expected_conversation_id and int(final_data.get("message_count") or 0) == 0:
                     try:
@@ -2002,7 +2002,7 @@ async def _run(prompt: str) -> int:
                         timeout_s=int(os.environ.get("BROWSER_AGENT_CHATGPT_COLLECT_TIMEOUT") or "45"),
                     )
                 except TimeoutError:
-                    final_data = json.loads(await page.evaluate(CAPTURE_JS))
+                    final_data = await _capture_state(page, timeout_s=8.0, default=final_data, label="collect_finalize_after_timeout")
             latest = await _write_conversation_artifacts(
                 page,
                 request_dir,
@@ -2081,7 +2081,7 @@ async def _run(prompt: str) -> int:
         )
         _write_json(request_dir / "chatgpt-ui-configure-result.json", configure_result)
         if require_isolated_conversation:
-            pre_submit_ready = json.loads(await page.evaluate(CAPTURE_JS))
+            pre_submit_ready = await _capture_state(page, timeout_s=8.0, default={}, label="pre_submit_isolation")
             _write_json(request_dir / "pre-submit-isolation-state.json", {
                 "url": pre_submit_ready.get("url"),
                 "conversation_id": pre_submit_ready.get("conversation_id"),
