@@ -11151,8 +11151,12 @@ def _hf_render_public_report_html(
       gap: 18px;
       margin-top: 18px;
     }}
-    .hf-heat-block {{ min-width: 0; }}
-    .hf-heat-daily table {{ min-width: 760px; }}
+    .hf-heat-block {{ width: 100%; min-width: 0; }}
+    .hf-heat-daily table {{ width: 100%; min-width: 980px; table-layout: fixed; }}
+    .hf-daily-table .hf-date-col {{ width: 132px; }}
+    .hf-daily-table .hf-count-col {{ width: 96px; }}
+    .hf-daily-table .hf-top5-col {{ width: auto; }}
+    .hf-daily-table th:nth-child(3), .hf-daily-table td:nth-child(3) {{ padding-left: 18px; }}
     .hf-heat-baseline table {{ min-width: 720px; }}
     table {{ width: 100%; border-collapse: collapse; }}
     th, td {{ padding: 12px 0; text-align: left; border-bottom: 1px solid var(--line); }}
