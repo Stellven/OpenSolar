@@ -494,7 +494,11 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
         "INSERT INTO hf_daily_papers (paper_date, paper_id, title, hf_url, rank) VALUES (?, ?, ?, ?, ?)",
         [
             ("2026-06-01", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 1),
+            ("2026-06-01", "p4", "Top Two Paper", "https://huggingface.co/papers/p4", 2),
+            ("2026-06-01", "p5", "Top Three Paper", "https://huggingface.co/papers/p5", 3),
             ("2026-06-01", "p2", "Vision Reasoning Paper", "https://huggingface.co/papers/p2", 4),
+            ("2026-06-01", "p6", "Top Five Paper", "https://huggingface.co/papers/p6", 5),
+            ("2026-06-01", "p7", "Top Six Paper", "https://huggingface.co/papers/p7", 6),
             ("2026-06-02", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 2),
             ("2026-06-03", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 3),
             ("2026-06-03", "p3", "New Breakout Paper", "https://huggingface.co/papers/p3", 2),
@@ -527,6 +531,7 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     assert overview["ok"] is True
     assert len(overview["daily_heat"]) == 3
     assert overview["daily_heat"][0]["top_title"] == "Agent Runtime Paper"
+    assert [item["paper_id"] for item in overview["daily_heat"][0]["top_papers"]] == ["p1", "p4", "p5", "p2", "p6"]
     assert overview["weekly_hotspots"][0]["paper_id"] == "p1"
     assert overview["weekly_hotspots"][0]["days_seen"] == 3
     assert overview["monthly_hotspots"][0]["paper_id"] == "p1"
@@ -534,10 +539,13 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     markdown = "\n".join(ns["_hf_render_heat_overview_markdown"](overview))
     html = ns["_hf_render_heat_overview_html"](overview)
     assert "每日热度基线" in markdown
+    assert "当日 Top 5" in markdown
+    assert "Top Six Paper" not in markdown
     assert "本周持续热点" in markdown
     assert "本月持续热点" in markdown
     assert "新晋爆发候选" in markdown
     assert "hf-heat-grid" in html
+    assert "hf-top-list" in html
 
 
 def test_hf_missing_value_handles_lists_without_typeerror():

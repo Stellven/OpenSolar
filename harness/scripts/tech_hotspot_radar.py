@@ -9110,6 +9110,21 @@ def hf_report_heat_overview(
             """,
             (start, end),
         )
+        daily_top_papers = _hf_fetchall_dicts(
+            conn,
+            """
+            SELECT paper_date,
+                   paper_id,
+                   title,
+                   hf_url,
+                   rank
+            FROM hf_daily_papers
+            WHERE paper_date BETWEEN ? AND ?
+              AND rank BETWEEN 1 AND 5
+            ORDER BY paper_date ASC, rank ASC, title ASC
+            """,
+            (start, end),
+        )
         weekly_hotspots = _hf_fetchall_dicts(
             conn,
             """
@@ -9187,6 +9202,20 @@ def hf_report_heat_overview(
         return {"ok": False, "reason": f"sqlite_error:{type(exc).__name__}", "window_start": start, "window_end": end}
     finally:
         conn.close()
+    top_by_date: dict[str, list[dict[str, Any]]] = {}
+    for item in daily_top_papers:
+        day = str(item.get("paper_date") or "")
+        if not day:
+            continue
+        top_by_date.setdefault(day, []).append({
+            "paper_id": item.get("paper_id"),
+            "title": item.get("title"),
+            "hf_url": item.get("hf_url"),
+            "rank": item.get("rank"),
+        })
+    for row in daily_rows:
+        day = str(row.get("paper_date") or "")
+        row["top_papers"] = top_by_date.get(day, [])[:5]
     notes: list[str] = []
     if daily_rows:
         total_daily = sum(int(row.get("paper_count") or 0) for row in daily_rows)
@@ -9654,6 +9683,45 @@ def _hf_heat_title_link(row: dict[str, Any], *, title_key: str = "title", url_ke
     return _hf_markdown_link(title, url) if url else title
 
 
+def _hf_daily_top_papers_markdown(row: dict[str, Any]) -> str:
+    top_papers = row.get("top_papers") if isinstance(row.get("top_papers"), list) else []
+    items = []
+    for item in top_papers[:5]:
+        if not isinstance(item, dict):
+            continue
+        rank = int(item.get("rank") or 0)
+        prefix = f"{rank}. " if rank else ""
+        items.append(prefix + _hf_heat_title_link(item))
+    if items:
+        return "<br>".join(items)
+    return _hf_heat_title_link(row, title_key="top_title", url_key="top_url")
+
+
+def _hf_daily_top_papers_html(row: dict[str, Any]) -> str:
+    top_papers = row.get("top_papers") if isinstance(row.get("top_papers"), list) else []
+    items = []
+    for item in top_papers[:5]:
+        if not isinstance(item, dict):
+            continue
+        title = html.escape(_hf_short_title(item.get("title") or item.get("paper_id")))
+        url = str(item.get("hf_url") or "").strip()
+        label = (
+            f'<a href="{html.escape(url)}" target="_blank" rel="noreferrer noopener">{title}</a>'
+            if url
+            else title
+        )
+        items.append(f"<li>{label}</li>")
+    if items:
+        return f'<ol class="hf-top-list">{"".join(items)}</ol>'
+    top_url = str(row.get("top_url") or "").strip()
+    top_title = html.escape(_hf_short_title(row.get("top_title")))
+    return (
+        f'<a href="{html.escape(top_url)}" target="_blank" rel="noreferrer noopener">{top_title}</a>'
+        if top_url
+        else top_title
+    )
+
+
 def _hf_render_heat_overview_markdown(heat_overview: dict[str, Any] | None) -> list[str]:
     overview = heat_overview or {}
     if not overview.get("ok"):
@@ -9673,14 +9741,14 @@ def _hf_render_heat_overview_markdown(heat_overview: dict[str, Any] | None) -> l
         "",
         "### 每日热度基线",
         "",
-        "| 日期 | 日榜论文数 | 当日 Top 1 |",
+        "| 日期 | 日榜论文数 | 当日 Top 5 |",
         "| --- | ---: | --- |",
     ])
     for row in overview.get("daily_heat") or []:
         if not isinstance(row, dict):
             continue
         lines.append(
-            f"| {_hf_text(row.get('paper_date'))} | {int(row.get('paper_count') or 0)} | {_hf_heat_title_link(row, title_key='top_title', url_key='top_url')} |"
+            f"| {_hf_text(row.get('paper_date'))} | {int(row.get('paper_count') or 0)} | {_hf_daily_top_papers_markdown(row)} |"
         )
     if not (overview.get("daily_heat") or []):
         lines.append("| N/A | 0 | N/A |")
@@ -9774,11 +9842,7 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
         lambda row: [
             html.escape(_hf_text(row.get("paper_date"))),
             str(int(row.get("paper_count") or 0)),
-            (
-                f'<a href="{html.escape(str(row.get("top_url") or ""))}" target="_blank" rel="noreferrer noopener">{html.escape(_hf_short_title(row.get("top_title")))}</a>'
-                if str(row.get("top_url") or "").strip()
-                else html.escape(_hf_short_title(row.get("top_title")))
-            ),
+            _hf_daily_top_papers_html(row),
         ],
     ) or "<tr><td>N/A</td><td>0</td><td>N/A</td></tr>"
     week_rows = _hf_html_rows(
@@ -9826,7 +9890,7 @@ def _hf_render_heat_overview_html(heat_overview: dict[str, Any] | None) -> str:
       <div class="hf-heat-grid">
         <div>
           <h3>每日热度基线</h3>
-          <table><thead><tr><th>日期</th><th>论文数</th><th>当日 Top 1</th></tr></thead><tbody>{daily_rows}</tbody></table>
+          <table><thead><tr><th>日期</th><th>论文数</th><th>当日 Top 5</th></tr></thead><tbody>{daily_rows}</tbody></table>
         </div>
         <div>
           <h3>本周持续热点</h3>
@@ -10602,6 +10666,8 @@ def _hf_render_grouped_report_html(
     th, td {{ padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
     th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }}
     a {{ color: var(--accent); text-decoration: none; }}
+    .hf-top-list {{ margin: 0; padding-left: 18px; }}
+    .hf-top-list li + li {{ margin-top: 6px; }}
     ul {{ padding-left: 20px; }}
   </style>
 </head>
@@ -10996,6 +11062,8 @@ def _hf_render_public_report_html(
       text-transform: uppercase;
     }}
     a {{ color: var(--accent); text-decoration: none; }}
+    .hf-top-list {{ margin: 0; padding-left: 18px; }}
+    .hf-top-list li + li {{ margin-top: 6px; }}
     @media (max-width: 820px) {{
       .hf-panels {{ grid-template-columns: 1fr; }}
       .hf-card-head {{ grid-template-columns: 1fr; }}
