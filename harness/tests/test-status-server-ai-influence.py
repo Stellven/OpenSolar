@@ -108,10 +108,10 @@ def main() -> None:
         )
         hf_item = status._huggingface_papers_item(hf_dir)
         assert hf_item["status"] == "ok"
-        assert hf_item["title"] == "Hugging Face 论文周报 — 2026-W23 · 2026-06-01 ~ 2026-06-07"
+        assert hf_item["title"] == "Hugging Face 论文周报 — 2026-W23"
         assert hf_item["subtitle"] == "论文热点周报"
         assert hf_item["metrics"]["报告形态"] == "高级洞察报告"
-        assert hf_item["metrics"]["报告周期"] == "2026-W23 · 2026-06-01 ~ 2026-06-07"
+        assert hf_item["metrics"]["报告周期"] == "2026-W23"
         assert hf_item["metrics"]["窗口去重"] == 24
         assert hf_item["metrics"]["分组章节"] == 5
         assert hf_item["primary"]["artifact"] == "report_html"

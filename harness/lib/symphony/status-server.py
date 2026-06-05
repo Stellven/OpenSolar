@@ -1171,6 +1171,14 @@ def _legacy_huggingface_papers_count(json_path: Path) -> int:
     return 0
 
 
+def _huggingface_display_period(report_context: dict, fallback: str) -> str:
+    cadence = str(report_context.get("cadence") or "").strip().lower()
+    week_id = str(report_context.get("week_id") or "").strip()
+    if cadence == "weekly" and week_id:
+        return week_id
+    return str(report_context.get("window_label") or fallback).strip() or fallback
+
+
 def _huggingface_papers_item(run_dir: Path) -> dict:
     report_id = _ai_influence_report_id("huggingface_papers", run_dir)
     report_html_path = run_dir / "hf-paper-report.html"
@@ -1192,6 +1200,7 @@ def _huggingface_papers_item(run_dir: Path) -> dict:
         start = str(report_context.get("window_start") or "").strip()
         end = str(report_context.get("window_end") or "").strip()
         window_label = f"{week_id} · {start} ~ {end}" if start and end else week_id
+    display_period = _huggingface_display_period(report_context, date_str)
     grouped_sections = len(pack_meta.get("grouped_report_sections") or []) if isinstance(pack_meta.get("grouped_report_sections"), list) else 0
     report_variant = str(pack_meta.get("report_variant") or ("premium_insight_report" if report_md_path.exists() and papers_count else "fallback_report"))
     premium_count = int(pack_meta.get("premium_insight_count") or 0)
@@ -1199,14 +1208,14 @@ def _huggingface_papers_item(run_dir: Path) -> dict:
     primary_label = "report_html" if report_html_path.exists() else ("report_md" if report_md_path.exists() else "trending_papers_md")
     item_status = "ok" if report_md.exists() and report_variant == "premium_insight_report" else ("warn" if report_md.exists() else "warn")
     report_label = _ai_influence_display_value(report_variant)
-    title = f"Hugging Face 论文周报 — {window_label}" if cadence == "weekly" else f"Hugging Face 论文热点 — {date_str}"
+    title = f"Hugging Face 论文周报 — {display_period}" if cadence == "weekly" else f"Hugging Face 论文热点 — {date_str}"
     subtitle = "论文热点周报" if cadence == "weekly" else ("论文热点深度洞察" if report_variant == "premium_insight_report" else "论文热点基础快报")
     metrics = {
         "收录论文": papers_count,
         "报告形态": report_label,
     }
     if cadence == "weekly":
-        metrics["报告周期"] = window_label
+        metrics["报告周期"] = display_period
         metrics["窗口去重"] = int(collection_summary.get("daily_unique_papers") or papers_count)
         if grouped_sections:
             metrics["分组章节"] = grouped_sections
@@ -1429,8 +1438,9 @@ def _ai_influence_group_summary(key: str, items: list[dict]) -> dict:
             total_papers += papers_count
             total_unique += int(collection_summary.get("daily_unique_papers") or papers_count)
             top_titles = "、".join(str(p.get("title") or p.get("paper_id") or "N/A") for p in papers[:3]) if papers else "N/A"
+            display_period = _huggingface_display_period(report_context, str(item.get("date") or "N/A"))
             rows.append({
-                "date": str(report_context.get("window_label") or item.get("date") or "N/A"),
+                "date": display_period,
                 "papers": str(papers_count),
                 "variant": _ai_influence_display_value(pack_meta.get("report_variant") or item.get("_report_variant") or "fallback_report"),
                 "window_unique": str(collection_summary.get("daily_unique_papers") or papers_count),
