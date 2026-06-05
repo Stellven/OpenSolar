@@ -6194,6 +6194,8 @@ def node_verdict(graph_path: str, node_id: str, verdict: str, reason: str = "",
     node.pop("assigned_to", None)
     node.pop("dispatch_id", None)
     node.pop("eval_dispatch_group_id", None)
+    node.pop("eval_retry_reason", None)
+    node.pop("eval_retry_detail", None)
     _clear_eval_assignments(node)
     state_sync = _sync_state_node(
         sid,
