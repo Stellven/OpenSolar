@@ -502,6 +502,10 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
             ("2026-06-02", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 2),
             ("2026-06-03", "p1", "Agent Runtime Paper", "https://huggingface.co/papers/p1", 3),
             ("2026-06-03", "p3", "New Breakout Paper", "https://huggingface.co/papers/p3", 2),
+            ("2026-05-15", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 1),
+            ("2026-05-20", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 2),
+            ("2026-05-25", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 3),
+            ("2026-05-30", "p8", "Historical Hot Paper", "https://huggingface.co/papers/p8", 4),
         ],
     )
     conn.executemany(
@@ -534,6 +538,9 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     assert [item["paper_id"] for item in overview["daily_heat"][0]["top_papers"]] == ["p1", "p4", "p5", "p2", "p6"]
     assert overview["weekly_hotspots"][0]["paper_id"] == "p1"
     assert overview["weekly_hotspots"][0]["days_seen"] == 3
+    assert overview["baseline_days"] == 90
+    assert overview["baseline_hotspots"][0]["paper_id"] == "p8"
+    assert overview["baseline_hotspots"][0]["days_seen"] == 4
     assert overview["monthly_hotspots"][0]["paper_id"] == "p1"
     assert any(row["paper_id"] == "p3" for row in overview["breakout_hotspots"])
     markdown = "\n".join(ns["_hf_render_heat_overview_markdown"](overview))
@@ -542,9 +549,11 @@ def test_hf_report_heat_overview_summarizes_daily_weekly_monthly_data(tmp_path):
     assert "当日 Top 5" in markdown
     assert "Top Six Paper" not in markdown
     assert "本周持续热点" in markdown
+    assert "近 90 天基线热点" in markdown
     assert "本月持续热点" in markdown
     assert "新晋爆发候选" in markdown
     assert "hf-heat-daily" in html
+    assert "hf-heat-baseline" in html
     assert "hf-heat-secondary" in html
     assert "hf-top-list" in html
 
