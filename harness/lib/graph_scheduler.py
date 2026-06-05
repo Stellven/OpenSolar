@@ -309,21 +309,41 @@ def _runtime_state_from_graph(graph: dict[str, Any], *, graph_path: Path | None 
     base_state["node_results"] = deepcopy(_node_results(graph))
     gate_results = graph.get("gate_results") if isinstance(graph.get("gate_results"), dict) else {}
     base_state["gate_results"] = deepcopy(gate_results)
-    leases = base_state.get("leases")
-    if not isinstance(leases, dict):
-        leases = {}
-    dispatch_ids = base_state.get("dispatch_ids")
-    if not isinstance(dispatch_ids, dict):
-        dispatch_ids = {}
-    for node_id, result in base_state["node_results"].items():
-        if not isinstance(result, dict):
+    node_status_projection: dict[str, dict[str, Any]] = {}
+    active_statuses = {
+        "assigned",
+        "blocked",
+        "dispatched",
+        "in_progress",
+        "pending",
+        "queued",
+        "reviewing",
+        "running",
+        "worker_blocked",
+    }
+    leases: dict[str, Any] = {}
+    dispatch_ids: dict[str, str] = {}
+    node_results = base_state["node_results"]
+    for node in graph.get("nodes", []):
+        node_id = str(node.get("id") or "").strip()
+        if not node_id:
             continue
-        dispatch_id = str(result.get("dispatch_id") or "").strip()
-        assigned_to = str(result.get("assigned_to") or "").strip()
+        result = node_results.get(node_id) if isinstance(node_results.get(node_id), dict) else {}
+        status = str(result.get("status") or node.get("status") or "pending").strip().lower()
+        projection = {
+            "status": status,
+            "updated_at": str(result.get("updated_at") or node.get("updated_at") or _now()),
+        }
+        node_status_projection[node_id] = projection
+        if status not in active_statuses:
+            continue
+        dispatch_id = str(result.get("dispatch_id") or node.get("dispatch_id") or "").strip()
+        assigned_to = str(result.get("assigned_to") or node.get("assigned_to") or "").strip()
         if dispatch_id:
             dispatch_ids[node_id] = dispatch_id
         if assigned_to:
             leases[node_id] = {"pane": assigned_to, "dispatch_id": dispatch_id}
+    base_state["node_status"] = node_status_projection
     base_state["leases"] = leases
     base_state["dispatch_ids"] = dispatch_ids
     base_state["updated_at"] = _now()
