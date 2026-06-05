@@ -47,6 +47,10 @@ OPERATOR_RESULTS_DIR = HARNESS_DIR / "run" / "operator-results"
 OPERATOR_STATUS_DIR = HARNESS_DIR / "run" / "operator-status"
 SPRINTS_DIR = Path(os.environ.get("SOLAR_HARNESS_SPRINTS_DIR", HARNESS_DIR / "sprints"))
 REPO_HARNESS_DIR = Path(__file__).resolve().parents[1]
+PM_CAPACITY_PROBE_PREFIXES = (
+    "pm-graph-dispatch-capacity-probe-",
+    "pm-eval-capacity-probe-",
+)
 
 # ── 角色别名映射 ───────────────────────────────────────────────────────────────
 ROLE_ALIASES: dict[str, str] = {
@@ -1227,8 +1231,26 @@ def list_pm_tasks(limit: int = 20) -> list[dict[str, Any]]:
     return tasks
 
 
-def _pm_record_files() -> list[Path]:
-    return sorted(pm_inbox_dir().glob("pm-*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+def is_capacity_probe_record(record: dict[str, Any] | None = None, path: Path | None = None) -> bool:
+    """Return true for synthetic capacity-probe PM records.
+
+    These records are observability artifacts from dry-run/operator-pool probes;
+    reconcile/watchdog should not treat them as user work or emit one skipped row
+    per historical probe.
+    """
+    record = record or {}
+    task_id = str(record.get("task_id") or (path.stem if path is not None else "") or "")
+    sprint_id = str(record.get("sprint_id") or "")
+    if any(task_id.startswith(prefix) for prefix in PM_CAPACITY_PROBE_PREFIXES):
+        return True
+    return sprint_id in {"graph-dispatch-capacity-probe", "eval-capacity-probe"}
+
+
+def _pm_record_files(*, include_probe_records: bool = True) -> list[Path]:
+    paths = sorted(pm_inbox_dir().glob("pm-*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
+    if include_probe_records:
+        return paths
+    return [path for path in paths if not is_capacity_probe_record(path=path)]
 
 
 def _active_pm_task_ids() -> set[str]:
@@ -3189,7 +3211,7 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     actions: list[dict[str, Any]] = []
     now = _now()
 
-    for path in _pm_record_files():
+    for path in _pm_record_files(include_probe_records=False):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc:

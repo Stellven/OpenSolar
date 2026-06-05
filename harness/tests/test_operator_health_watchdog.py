@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -372,3 +373,57 @@ def test_watchdog_runs_graph_drain_controller_before_pm_drain(monkeypatch, tmp_p
     assert payload["counters"]["drain_submitted"] == 2
     assert payload["summary"]["graph_drain_submitted"] == 2
     assert payload["summary"]["drain_submitted"] == 2
+
+
+def test_command_status_reads_launchagent_runtime_state(monkeypatch, tmp_path):
+    watchdog = _load_core_watchdog()
+    latest = tmp_path / "latest.json"
+    latest.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "finished_at": "2026-06-05T14:10:00Z",
+                "last_exit_code": 0,
+                "summary": {"drain_submitted": 1},
+                "installed": False,
+                "launchd_loaded": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    run_plist = tmp_path / "com.solar.harness.operator-health-watchdog.plist"
+    run_plist.write_text("<plist/>", encoding="utf-8")
+    monkeypatch.setattr(watchdog, "RUN_LAUNCH_AGENT_PATH", run_plist)
+    monkeypatch.setattr(watchdog, "LIBRARY_LAUNCH_AGENT_PATH", tmp_path / "Library" / "LaunchAgents" / "missing.plist")
+    monkeypatch.setattr(watchdog.shutil, "which", lambda name: "/bin/launchctl")
+
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="state = waiting\nruns = 9\n", stderr="")
+
+    monkeypatch.setattr(watchdog.subprocess, "run", fake_run)
+
+    payload = watchdog.command_status(latest_path=latest)
+
+    assert payload["installed"] is True
+    assert payload["launchd_loaded"] is True
+    assert payload["launchd_state"] == "waiting"
+    assert payload["launchagent"]["plist_path"] == str(run_plist)
+    assert payload["last_actions"]["drain_submitted"] == 1
+
+
+def test_watchdog_indexes_large_skipped_lists(monkeypatch):
+    watchdog = _load_core_watchdog()
+    skipped = [
+        {"reason": "not_transient_operator_failure", "target": f"pm-{idx}"}
+        for idx in range(30)
+    ]
+    phase = watchdog._attach_skipped_index(
+        {"phase": "reconcile_pm_failures", "status": "ok", "actions": [], "skipped": skipped, "counters": {}},
+        skipped,
+    )
+
+    assert len(phase["skipped"]) == 25
+    assert phase["skipped_index"]["total"] == 30
+    assert phase["skipped_index"]["truncated"] is True
+    assert phase["skipped_index"]["by_reason"][0]["count"] == 30
+    assert phase["counters"]["skipped_total"] == 30
