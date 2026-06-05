@@ -333,6 +333,19 @@ def test_builder_pool_backlog_includes_latent_planning_complete(monkeypatch, tmp
         "total": 4,
     }
 
+    (inbox / "pm-planner.json").write_text(
+        json.dumps({"status": "submitted", "sprint_id": "sprint-planner", "node_id": "PLAN"}),
+        encoding="utf-8",
+    )
+    assert pm_dispatch._builder_pool_backlog_breakdown() == {
+        "pending_pm": 2,
+        "latent_builder_ready": 0,
+        "planner_prd_ready": 0,
+        "builder_planning_complete": 1,
+        "evaluator_handoff_ready": 1,
+        "total": 4,
+    }
+
 
 def test_drain_builder_ready_submits_and_marks_graph(monkeypatch, tmp_path):
     pm_dispatch = _load_pm_dispatch()
