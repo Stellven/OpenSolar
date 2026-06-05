@@ -18,8 +18,11 @@ def _load_watchdog():
     return mod
 
 
-def test_watchdog_dry_run_does_not_prune_or_apply_reconcile(monkeypatch):
+def test_watchdog_dry_run_does_not_prune_or_apply_reconcile(monkeypatch, tmp_path):
     watchdog = _load_watchdog()
+    monkeypatch.setattr(watchdog, "LOCK_PATH", tmp_path / "lock")
+    monkeypatch.setattr(watchdog, "LATEST_REPORT_PATH", tmp_path / "latest.json")
+    monkeypatch.setattr(watchdog, "HISTORY_PATH", tmp_path / "history.jsonl")
     calls: list[tuple[str, object]] = []
 
     class FakePM:
@@ -57,8 +60,11 @@ def test_watchdog_dry_run_does_not_prune_or_apply_reconcile(monkeypatch):
     assert payload["steps"][0]["result"]["reason"] == "dry_run"
 
 
-def test_watchdog_apply_prunes_and_applies_reconcile(monkeypatch):
+def test_watchdog_apply_prunes_and_applies_reconcile(monkeypatch, tmp_path):
     watchdog = _load_watchdog()
+    monkeypatch.setattr(watchdog, "LOCK_PATH", tmp_path / "lock")
+    monkeypatch.setattr(watchdog, "LATEST_REPORT_PATH", tmp_path / "latest.json")
+    monkeypatch.setattr(watchdog, "HISTORY_PATH", tmp_path / "history.jsonl")
     calls: list[tuple[str, object]] = []
 
     class FakePM:
