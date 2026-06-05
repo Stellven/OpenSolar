@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Operator Health Watchdog Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "started_at",
+    "finished_at",
+    "mode",
+    "lock_acquired",
+    "last_exit_code",
+    "phases",
+    "actions",
+    "skipped",
+    "blockers",
+    "counters",
+    "capacity",
+    "backlog_delta"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "operator_health_watchdog.v1"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "once",
+        "loop",
+        "status",
+        "test"
+      ]
+    },
+    "lock_acquired": {
+      "type": "boolean"
+    },
+    "last_exit_code": {
+      "type": "integer"
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "phase",
+          "status"
+        ],
+        "properties": {
+          "phase": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counters": {
+            "type": "object"
+          },
+          "details": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action_type",
+          "target",
+          "status",
+          "idempotency_key"
+        ]
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "counters": {
+      "type": "object"
+    },
+    "capacity": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "backlog_delta": {
+      "type": "object",
+      "required": [
+        "before",
+        "after",
+        "delta"
+      ],
+      "properties": {
+        "before": {
+          "type": "integer"
+        },
+        "after": {
+          "type": "integer"
+        },
+        "delta": {
+          "type": "integer"
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "applied": {
+      "type": "boolean"
+    },
+    "last_actions": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}
